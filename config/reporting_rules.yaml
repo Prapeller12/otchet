@@ -1,0 +1,11 @@
+schema_version: 1
+status: CONFIRMED_FROM_AGENTS
+cell_values:
+  empty: DATA_NOT_PROVIDED
+  numeric_zero: CONFIRMED_ZERO
+calculations:
+  loss_factor_default: "0"
+  zero_plan_completion_rate: NOT_APPLICABLE
+operations:
+  posted_record_deletion_allowed: false
+  correction_method: REVERSAL_AND_NEW_OPERATION

@@ -1,0 +1,5 @@
+# Скопируйте файл как app.local.toml только в локальном dev-контуре.
+# app.local.toml исключён из Git. Не помещайте сюда пароли и токены.
+
+[paths]
+# data = "D:/ReportingSystem/data"

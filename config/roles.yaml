@@ -1,0 +1,15 @@
+schema_version: 1
+status: ROLE_NAMES_CONFIRMED_PERMISSIONS_OPEN
+roles:
+  - name: наблюдатель
+    permissions: null
+  - name: оператор дочернего общества
+    permissions: null
+  - name: оператор головной площадки
+    permissions: null
+  - name: планировщик
+    permissions: null
+  - name: контролёр
+    permissions: null
+  - name: администратор
+    permissions: null

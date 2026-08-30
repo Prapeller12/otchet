@@ -1,0 +1,19 @@
+[app]
+mode = "local"
+telemetry_enabled = false
+external_network_access_enabled = false
+
+[paths]
+data = "data"
+attachments = "attachments"
+imports = "imports"
+exports = "exports"
+backups = "backups"
+temp = "temp"
+
+[database]
+engine = "sqlite"
+path = "data/reporting.sqlite3"
+
+[logging]
+technical_file_logs_enabled = false
