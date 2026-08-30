@@ -1,0 +1,8 @@
+version: 1
+technical_file_logs:
+  enabled: false
+telemetry:
+  enabled: false
+business_audit:
+  enabled: true
+  storage: database

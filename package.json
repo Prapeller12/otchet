@@ -1,0 +1,12 @@
+{
+  "name": "reporting-system-workspace",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "Development workspace for the production reporting system",
+  "scripts": {
+    "check:repository": "python scripts/verify_repository.py"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
