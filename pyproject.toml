@@ -8,6 +8,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
+  "jsonschema>=4.23,<5",
   "mypy>=1.11,<2",
   "pytest>=8.3,<9",
   "ruff>=0.6,<1",

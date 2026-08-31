@@ -20,9 +20,9 @@ Thumbs.db
 Desktop.ini
 
 # Build output and portable runtimes
-dist/
-build/
-runtime/
+/dist/
+/build/
+/runtime/
 *.zip
 
 # Local configuration and secrets
@@ -34,12 +34,12 @@ config/app.local.toml
 *.key
 
 # Runtime and user data: never commit
-data/
-attachments/
-imports/
-exports/
-backups/
-temp/
+/data/
+/attachments/
+/imports/
+/exports/
+/backups/
+/temp/
 *.sqlite
 *.sqlite3
 *.sqlite-shm

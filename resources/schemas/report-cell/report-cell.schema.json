@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:reporting-system:schema:report-cell:1",
+  "title": "Report matrix cell contract",
+  "description": "Transport-neutral application contract for one cell addressed by stable business coordinates.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["coordinate", "value", "state"],
+  "properties": {
+    "coordinate": {
+      "$ref": "#/$defs/ReportCellCoordinate"
+    },
+    "value": {
+      "$ref": "#/$defs/ReportCellValue"
+    },
+    "state": {
+      "$ref": "#/$defs/ReportCellState"
+    }
+  },
+  "$defs": {
+    "OpaqueId": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Opaque non-empty identifier. Consumers must not infer its storage type or parse business meaning from it."
+    },
+    "ContractCode": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "description": "Externally governed uppercase contract code. The schema deliberately does not invent or alias business codes."
+    },
+    "ReportType": {
+      "type": "string",
+      "enum": ["DAILY_MOVEMENT", "HEAD_SITE", "SUBSIDIARY"],
+      "description": "Canonical report type approved in DEV documentation v0.5, section 9.8."
+    },
+    "IsoDate": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "ISO 8601 calendar date in YYYY-MM-DD form."
+    },
+    "DecimalString": {
+      "type": "string",
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+      "description": "Exact base-10 value serialized as a string; JSON numbers and scientific notation are not accepted."
+    },
+    "ReportCellCoordinate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report_type", "organization_id"],
+      "properties": {
+        "report_type": {
+          "$ref": "#/$defs/ReportType"
+        },
+        "organization_id": {
+          "$ref": "#/$defs/OpaqueId"
+        },
+        "product_id": {
+          "$ref": "#/$defs/OpaqueId"
+        },
+        "component_id": {
+          "$ref": "#/$defs/OpaqueId"
+        },
+        "metric_code": {
+          "$ref": "#/$defs/ContractCode"
+        },
+        "operation_type": {
+          "$ref": "#/$defs/ContractCode"
+        },
+        "operation_date": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "period_start": {
+          "$ref": "#/$defs/IsoDate"
+        },
+        "bom_version_id": {
+          "$ref": "#/$defs/OpaqueId"
+        }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": ["product_id"],
+              "not": {
+                "required": ["component_id"]
+              }
+            },
+            {
+              "required": ["component_id"],
+              "not": {
+                "required": ["product_id"]
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "required": ["metric_code"],
+              "not": {
+                "required": ["operation_type"]
+              }
+            },
+            {
+              "required": ["operation_type"],
+              "not": {
+                "required": ["metric_code"]
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "required": ["operation_date"],
+              "not": {
+                "required": ["period_start"]
+              }
+            },
+            {
+              "required": ["period_start"],
+              "not": {
+                "required": ["operation_date"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "DataNotProvidedValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "const": "DATA_NOT_PROVIDED"
+        }
+      }
+    },
+    "QuantityValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "quantity"],
+      "properties": {
+        "kind": {
+          "const": "QUANTITY"
+        },
+        "quantity": {
+          "$ref": "#/$defs/DecimalString"
+        }
+      }
+    },
+    "ReportCellValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/DataNotProvidedValue"
+        },
+        {
+          "$ref": "#/$defs/QuantityValue"
+        }
+      ]
+    },
+    "ReportCellState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["access", "persistence"],
+      "properties": {
+        "access": {
+          "enum": ["editable", "calculated", "locked"]
+        },
+        "persistence": {
+          "enum": ["error", "dirty", "saving", "saved"]
+        }
+      },
+      "description": "Orthogonal access and persistence dimensions; no unapproved role or transition rules are encoded."
+    }
+  }
+}

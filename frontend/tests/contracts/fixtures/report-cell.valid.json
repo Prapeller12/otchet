@@ -1,0 +1,82 @@
+[
+  {
+    "name": "missing product metric value is not numeric zero",
+    "cell": {
+      "coordinate": {
+        "report_type": "DAILY_MOVEMENT",
+        "organization_id": "organization-test-only",
+        "product_id": "product-test-only",
+        "metric_code": "METRIC_TEST_ONLY",
+        "operation_date": "2026-08-30"
+      },
+      "value": {
+        "kind": "DATA_NOT_PROVIDED"
+      },
+      "state": {
+        "access": "editable",
+        "persistence": "saved"
+      }
+    }
+  },
+  {
+    "name": "confirmed component operation zero stays a decimal string",
+    "cell": {
+      "coordinate": {
+        "report_type": "DAILY_MOVEMENT",
+        "organization_id": "organization-test-only",
+        "component_id": "component-test-only",
+        "operation_type": "OPERATION_TEST_ONLY",
+        "operation_date": "2026-08-30"
+      },
+      "value": {
+        "kind": "QUANTITY",
+        "quantity": "0"
+      },
+      "state": {
+        "access": "editable",
+        "persistence": "dirty"
+      }
+    }
+  },
+  {
+    "name": "period metric can carry an applicable BOM version",
+    "cell": {
+      "coordinate": {
+        "report_type": "HEAD_SITE",
+        "organization_id": "organization-test-only",
+        "product_id": "product-test-only",
+        "metric_code": "METRIC_TEST_ONLY",
+        "period_start": "2026-08-01",
+        "bom_version_id": "bom-version-test-only"
+      },
+      "value": {
+        "kind": "QUANTITY",
+        "quantity": "18.250"
+      },
+      "state": {
+        "access": "calculated",
+        "persistence": "saving"
+      }
+    }
+  },
+  {
+    "name": "signed calculated decimal remains exact",
+    "cell": {
+      "coordinate": {
+        "report_type": "SUBSIDIARY",
+        "organization_id": "organization-test-only",
+        "component_id": "component-test-only",
+        "metric_code": "METRIC_TEST_ONLY",
+        "period_start": "2026-08-01"
+      },
+      "value": {
+        "kind": "QUANTITY",
+        "quantity": "-7.5"
+      },
+      "state": {
+        "access": "locked",
+        "persistence": "error"
+      }
+    }
+  }
+]
