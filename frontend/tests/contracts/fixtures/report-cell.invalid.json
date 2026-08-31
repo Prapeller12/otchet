@@ -1,0 +1,115 @@
+[
+  {
+    "name": "subject coordinate cannot contain product and component together",
+    "cell": {
+      "coordinate": {
+        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "organization_id": "organization-test-only",
+        "product_id": "product-test-only",
+        "component_id": "component-test-only",
+        "metric_code": "METRIC_TEST_ONLY",
+        "operation_date": "2026-08-30"
+      },
+      "value": { "kind": "QUANTITY", "quantity": "1" },
+      "state": { "access": "editable", "persistence": "saved" }
+    }
+  },
+  {
+    "name": "indicator coordinate must be present",
+    "cell": {
+      "coordinate": {
+        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "organization_id": "organization-test-only",
+        "product_id": "product-test-only",
+        "operation_date": "2026-08-30"
+      },
+      "value": { "kind": "QUANTITY", "quantity": "1" },
+      "state": { "access": "editable", "persistence": "saved" }
+    }
+  },
+  {
+    "name": "time coordinate cannot contain date and period together",
+    "cell": {
+      "coordinate": {
+        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "organization_id": "organization-test-only",
+        "component_id": "component-test-only",
+        "operation_type": "OPERATION_TEST_ONLY",
+        "operation_date": "2026-08-30",
+        "period_start": "2026-08-01"
+      },
+      "value": { "kind": "QUANTITY", "quantity": "1" },
+      "state": { "access": "editable", "persistence": "saved" }
+    }
+  },
+  {
+    "name": "calendar-invalid ISO date is rejected",
+    "cell": {
+      "coordinate": {
+        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "organization_id": "organization-test-only",
+        "component_id": "component-test-only",
+        "operation_type": "OPERATION_TEST_ONLY",
+        "operation_date": "2026-02-30"
+      },
+      "value": { "kind": "QUANTITY", "quantity": "1" },
+      "state": { "access": "editable", "persistence": "saved" }
+    }
+  },
+  {
+    "name": "quantity cannot be a JSON number",
+    "cell": {
+      "coordinate": {
+        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "organization_id": "organization-test-only",
+        "component_id": "component-test-only",
+        "operation_type": "OPERATION_TEST_ONLY",
+        "operation_date": "2026-08-30"
+      },
+      "value": { "kind": "QUANTITY", "quantity": 0 },
+      "state": { "access": "editable", "persistence": "saved" }
+    }
+  },
+  {
+    "name": "quantity cannot use scientific notation",
+    "cell": {
+      "coordinate": {
+        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "organization_id": "organization-test-only",
+        "component_id": "component-test-only",
+        "operation_type": "OPERATION_TEST_ONLY",
+        "operation_date": "2026-08-30"
+      },
+      "value": { "kind": "QUANTITY", "quantity": "1e3" },
+      "state": { "access": "editable", "persistence": "saved" }
+    }
+  },
+  {
+    "name": "missing data cannot also carry quantity",
+    "cell": {
+      "coordinate": {
+        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "organization_id": "organization-test-only",
+        "product_id": "product-test-only",
+        "metric_code": "METRIC_TEST_ONLY",
+        "period_start": "2026-08-01"
+      },
+      "value": { "kind": "DATA_NOT_PROVIDED", "quantity": "0" },
+      "state": { "access": "editable", "persistence": "saved" }
+    }
+  },
+  {
+    "name": "unknown state is rejected",
+    "cell": {
+      "coordinate": {
+        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "organization_id": "organization-test-only",
+        "product_id": "product-test-only",
+        "metric_code": "METRIC_TEST_ONLY",
+        "period_start": "2026-08-01"
+      },
+      "value": { "kind": "DATA_NOT_PROVIDED" },
+      "state": { "access": "hidden", "persistence": "saved" }
+    }
+  }
+]
