@@ -126,13 +126,24 @@ def apply_migrations(
     applied_rows = connection.execute(
         "SELECT version, checksum FROM schema_migrations ORDER BY version"
     ).fetchall()
+    applied_versions = tuple(str(version) for version, _ in applied_rows)
     applied = {str(version): str(checksum) for version, checksum in applied_rows}
     discovered = {migration.version: migration for migration in migrations}
+    discovered_versions = tuple(migration.version for migration in migrations)
 
     unknown_versions = sorted(set(applied) - set(discovered))
     if unknown_versions:
         joined = ", ".join(unknown_versions)
         raise MigrationError(f"Database contains unknown migration versions: {joined}")
+
+    expected_prefix = discovered_versions[: len(applied_versions)]
+    if applied_versions != expected_prefix:
+        expected = ", ".join(expected_prefix) or "<empty>"
+        actual = ", ".join(applied_versions) or "<empty>"
+        raise MigrationError(
+            "Applied migration history is not a contiguous prefix "
+            f"(expected: {expected}; found: {actual})"
+        )
 
     for version, checksum in applied.items():
         if discovered[version].checksum != checksum:

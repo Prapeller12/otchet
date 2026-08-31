@@ -26,6 +26,10 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "20"
+          cache: "npm"
+
+      - name: Install frontend quality tools
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Install Python quality tools
         run: >-
@@ -48,6 +52,9 @@ jobs:
 
       - name: Run backend tests
         run: python -m pytest
+
+      - name: Check frontend types
+        run: npm run typecheck
 
       - name: Check report-cell contract
         run: node frontend/tests/contracts/report-cell-contract.test.mjs

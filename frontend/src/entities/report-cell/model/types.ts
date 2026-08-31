@@ -7,6 +7,7 @@ import type {
   ReportCellPersistenceState,
   ReportCellState,
   ReportCellValue,
+  ReportType,
 } from "../../../shared/api/report-cell-contract";
 
 /**
@@ -23,4 +24,5 @@ export type {
   ReportCellPersistenceState,
   ReportCellState,
   ReportCellValue,
+  ReportType,
 };

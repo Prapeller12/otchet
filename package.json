@@ -4,7 +4,11 @@
   "private": true,
   "description": "Development workspace for the production reporting system",
   "scripts": {
-    "check:repository": "python scripts/verify_repository.py"
+    "check:repository": "python scripts/verify_repository.py",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
   },
   "engines": {
     "node": ">=20"

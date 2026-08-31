@@ -11,6 +11,14 @@ export type ContractCode = string;
 export type IsoDate = string;
 export type DecimalString = string;
 
+export const REPORT_TYPES = [
+  "DAILY_MOVEMENT",
+  "HEAD_SITE",
+  "SUBSIDIARY",
+] as const;
+
+export type ReportType = (typeof REPORT_TYPES)[number];
+
 export type ReportCellSubjectCoordinate =
   | { product_id: OpaqueId; component_id?: never }
   | { component_id: OpaqueId; product_id?: never };
@@ -24,7 +32,7 @@ export type ReportCellTimeCoordinate =
   | { period_start: IsoDate; operation_date?: never };
 
 export type ReportCellCoordinate = {
-  report_type: ContractCode;
+  report_type: ReportType;
   organization_id: OpaqueId;
   bom_version_id?: OpaqueId;
 } &

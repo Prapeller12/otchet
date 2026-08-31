@@ -7,4 +7,5 @@ export type {
   ReportCellPersistenceState,
   ReportCellState,
   ReportCellValue,
+  ReportType,
 } from "./model/types";

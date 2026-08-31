@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, Inexact, Rounded, localcontext
 
 import pytest
 
@@ -78,6 +78,17 @@ class TestStock:
 
     def test_empty_operations_leave_opening_balance_unchanged(self) -> None:
         assert calculate_stock(D("12.340"), []) == D("12.340")
+
+    def test_large_stock_total_is_exact_under_a_low_precision_context(self) -> None:
+        operations = [StockOperation(StockOperationType.RECEIPT, D("0.2"))]
+
+        with localcontext() as context:
+            context.prec = 2
+            context.traps[Inexact] = True
+            context.traps[Rounded] = True
+            result = calculate_stock(D("12345678901234567890123456789.1"), operations)
+
+        assert result == D("12345678901234567890123456789.3")
 
     def test_reversal_is_a_separate_inverse_operation(self) -> None:
         operations = [
@@ -160,6 +171,19 @@ class TestRequiredQuantity:
         result = calculate_required_quantity(D("12.5"), D("2.4"), D("0.05"))
 
         assert result == D("31.5000")
+
+    def test_large_requirement_is_exact_under_a_low_precision_context(self) -> None:
+        with localcontext() as context:
+            context.prec = 2
+            context.traps[Inexact] = True
+            context.traps[Rounded] = True
+            result = calculate_required_quantity(
+                D("10000000000000000000000000001"),
+                D("2"),
+                D("0.5"),
+            )
+
+        assert result == D("30000000000000000000000000003.0")
 
     @pytest.mark.parametrize(
         ("plan", "per_product", "loss_factor", "message"),
@@ -252,6 +276,17 @@ class TestReadiness:
         assert [item.available_sets for item in result.components] == [23, 23]
         assert result.ready_sets == 23
 
+    def test_floor_is_exact_for_more_than_28_digits(self) -> None:
+        with localcontext() as context:
+            context.prec = 2
+            context.traps[Inexact] = True
+            context.traps[Rounded] = True
+            result = calculate_readiness(
+                [availability("large", "99999999999999999999999999999", "3")]
+            )
+
+        assert result.ready_sets == 33333333333333333333333333333
+
     def test_missing_mandatory_component_yields_zero_and_is_bottleneck(self) -> None:
         components = [
             availability("missing", None, "2"),
@@ -303,6 +338,19 @@ class TestShortageAndContractVariance:
     def test_calculates_shortage_to_target(self) -> None:
         assert calculate_shortage_to_target(D("36"), D("3"), D("71")) == D("37")
 
+    def test_large_shortage_is_exact_under_a_low_precision_context(self) -> None:
+        with localcontext() as context:
+            context.prec = 2
+            context.traps[Inexact] = True
+            context.traps[Rounded] = True
+            result = calculate_shortage_to_target(
+                D("10000000000000000000000000001"),
+                D("3"),
+                D("1"),
+            )
+
+        assert result == D("30000000000000000000000000002")
+
     @pytest.mark.parametrize("available", ["108", "109", "1000"])
     def test_shortage_never_goes_below_zero(self, available: str) -> None:
         assert calculate_shortage_to_target(D("36"), D("3"), D(available)) == D("0")
@@ -319,6 +367,18 @@ class TestShortageAndContractVariance:
         self, supplied: str, planned: str, expected: str
     ) -> None:
         assert calculate_contract_variance(D(supplied), D(planned)) == D(expected)
+
+    def test_large_contract_variance_preserves_low_order_digits(self) -> None:
+        with localcontext() as context:
+            context.prec = 2
+            context.traps[Inexact] = True
+            context.traps[Rounded] = True
+            result = calculate_contract_variance(
+                D("10000000000000000000000000001"),
+                D("9999999999999999999999999999"),
+            )
+
+        assert result == D("2")
 
     @pytest.mark.parametrize(
         ("target", "per_product", "available", "message"),
@@ -345,6 +405,20 @@ class TestCompletionRate:
 
         assert result.percentage == D("75.00")
         assert result.status is CompletionRateStatus.CALCULATED
+
+    def test_finite_percentage_is_exact_under_a_low_precision_context(self) -> None:
+        with localcontext() as context:
+            context.prec = 1
+            context.traps[Inexact] = True
+            context.traps[Rounded] = True
+            result = calculate_completion_rate(D("1"), D("8"))
+
+        assert result.percentage == D("12.5")
+        assert result.status is CompletionRateStatus.CALCULATED
+
+    def test_repeating_percentage_requires_an_explicit_rounding_rule(self) -> None:
+        with pytest.raises(ArithmeticError, match="explicit rounding rule"):
+            calculate_completion_rate(D("1"), D("3"))
 
     def test_zero_fact_is_a_calculated_zero_percent(self) -> None:
         result = calculate_completion_rate(D("0"), D("10"))

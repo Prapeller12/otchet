@@ -9,10 +9,14 @@
 
 | Идентификатор | Назначение | Рабочий источник | Статус | Детализация |
 |---|---|---|---|---|
-| `DAILY-MATRIX` | Ежедневное движение, выпуск, отправка, прибытие и остатки | предоставленный рабочий пример | `WORKING_REFERENCE` | [daily-working-reference.md](daily-working-reference.md) |
+| `DAILY_MOVEMENT` | Ежедневное движение, выпуск, отправка, прибытие и остатки | предоставленный рабочий пример | `WORKING_REFERENCE` | [daily-working-reference.md](daily-working-reference.md) |
 | `DAILY-READINESS-CONTROL` | Контроль расчёта готовых комплектов | предоставленный расчётный пример | `CALCULATION_REFERENCE` | [daily-working-reference.md](daily-working-reference.md) |
-| `HEAD-SITE-MATRIX` | Отчёт головной площадки | предоставленный рабочий пример | `WORKING_REFERENCE` | [head-site-working-reference.md](head-site-working-reference.md) |
-| `SUBSIDIARY-MATRIX` | Отчёт дочернего общества | предоставленный рабочий пример | `WORKING_REFERENCE` | [subsidiary-working-reference.md](subsidiary-working-reference.md) |
+| `HEAD_SITE` | Отчёт головной площадки | предоставленный рабочий пример | `WORKING_REFERENCE` | [head-site-working-reference.md](head-site-working-reference.md) |
+| `SUBSIDIARY` | Отчёт дочернего общества | предоставленный рабочий пример | `WORKING_REFERENCE` | [subsidiary-working-reference.md](subsidiary-working-reference.md) |
+
+`DAILY-READINESS-CONTROL` обозначает только контрольный расчёт и не входит в enum
+`ReportType`. Утверждённые значения `ReportType`: `DAILY_MOVEMENT`, `HEAD_SITE`,
+`SUBSIDIARY`.
 
 ## Что ещё требуется для статуса `APPROVED`
 

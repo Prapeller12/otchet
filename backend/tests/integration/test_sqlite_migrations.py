@@ -52,10 +52,10 @@ def _seed_scope(connection: sqlite3.Connection) -> None:
     connection.commit()
 
 
-def test_initial_migration_applies_to_empty_database_and_is_idempotent(tmp_path: Path) -> None:
+def test_migrations_apply_to_empty_database_and_are_idempotent(tmp_path: Path) -> None:
     connection = connect_sqlite(tmp_path / "empty.db")
     try:
-        assert apply_migrations(connection, MIGRATIONS) == ("0001",)
+        assert apply_migrations(connection, MIGRATIONS) == ("0001", "0002")
         assert apply_migrations(connection, MIGRATIONS) == ()
 
         tables = {
@@ -425,6 +425,124 @@ def test_approved_bom_periods_cannot_overlap(database: sqlite3.Connection) -> No
     )
 
 
+def test_approved_bom_items_are_historically_immutable(
+    database: sqlite3.Connection,
+) -> None:
+    _seed_scope(database)
+    database.execute(
+        """
+        INSERT INTO components (id, organization_id, code, name, kind)
+        VALUES (22, 1, 'COMPONENT-2', 'Component 2', 'UNSPECIFIED')
+        """
+    )
+    database.execute(
+        """
+        INSERT INTO bom_versions (
+            id, organization_id, product_id, version, valid_from, status
+        ) VALUES (30, 1, 10, 'v1', '2026-01-01', 'DRAFT')
+        """
+    )
+    database.execute(
+        """
+        INSERT INTO bom_items (
+            organization_id, bom_version_id, component_id, qty_per_product
+        ) VALUES (1, 30, 20, '3')
+        """
+    )
+    database.execute(
+        """
+        UPDATE bom_items
+        SET qty_per_product = '3.5'
+        WHERE organization_id = 1 AND bom_version_id = 30 AND component_id = 20
+        """
+    )
+    database.execute("UPDATE bom_versions SET status = 'APPROVED' WHERE id = 30")
+
+    with pytest.raises(sqlite3.IntegrityError, match="BOM items are immutable"):
+        database.execute(
+            """
+            INSERT INTO bom_items (
+                organization_id, bom_version_id, component_id, qty_per_product
+            ) VALUES (1, 30, 22, '1')
+            """
+        )
+
+    with pytest.raises(sqlite3.IntegrityError, match="BOM items are immutable"):
+        database.execute(
+            """
+            UPDATE bom_items
+            SET qty_per_product = '4'
+            WHERE organization_id = 1 AND bom_version_id = 30 AND component_id = 20
+            """
+        )
+
+    with pytest.raises(sqlite3.IntegrityError, match="BOM items are immutable"):
+        database.execute(
+            """
+            DELETE FROM bom_items
+            WHERE organization_id = 1 AND bom_version_id = 30 AND component_id = 20
+            """
+        )
+
+    assert database.execute(
+        """
+        SELECT component_id, qty_per_product
+        FROM bom_items
+        WHERE organization_id = 1 AND bom_version_id = 30
+        """
+    ).fetchall() == [(20, "3.5")]
+
+    database.execute("UPDATE bom_versions SET status = 'RETIRED' WHERE id = 30")
+    with pytest.raises(sqlite3.IntegrityError, match="BOM items are immutable"):
+        database.execute(
+            """
+            UPDATE bom_items
+            SET loss_factor = '0.1'
+            WHERE organization_id = 1 AND bom_version_id = 30 AND component_id = 20
+            """
+        )
+
+
+def test_approved_bom_version_identity_cannot_be_rewritten_or_deleted(
+    database: sqlite3.Connection,
+) -> None:
+    _seed_scope(database)
+    database.execute(
+        """
+        INSERT INTO products (id, organization_id, code, name)
+        VALUES (11, 1, 'PRODUCT-2', 'Product 2')
+        """
+    )
+    database.execute(
+        """
+        INSERT INTO bom_versions (
+            id, organization_id, product_id, version, valid_from, valid_to, status
+        ) VALUES (30, 1, 10, 'v1', '2026-01-01', '2026-12-31', 'APPROVED')
+        """
+    )
+
+    key_rewrites = (
+        "UPDATE bom_versions SET id = 31 WHERE id = 30",
+        "UPDATE bom_versions SET product_id = 11 WHERE id = 30",
+        "UPDATE bom_versions SET version = 'v2' WHERE id = 30",
+        "UPDATE bom_versions SET valid_from = '2026-02-01' WHERE id = 30",
+        "UPDATE bom_versions SET valid_to = NULL WHERE id = 30",
+        "UPDATE bom_versions SET created_at = '2026-01-01T00:00:00Z' WHERE id = 30",
+    )
+    for statement in key_rewrites:
+        with pytest.raises(sqlite3.IntegrityError, match="version identity is immutable"):
+            database.execute(statement)
+
+    with pytest.raises(sqlite3.IntegrityError, match="version cannot be deleted"):
+        database.execute("DELETE FROM bom_versions WHERE id = 30")
+
+    database.execute("UPDATE bom_versions SET status = 'RETIRED' WHERE id = 30")
+    with pytest.raises(sqlite3.IntegrityError, match="version cannot be reopened"):
+        database.execute("UPDATE bom_versions SET status = 'DRAFT' WHERE id = 30")
+    with pytest.raises(sqlite3.IntegrityError, match="version identity is immutable"):
+        database.execute("UPDATE bom_versions SET version = 'v2' WHERE id = 30")
+
+
 def test_failed_unit_of_work_rolls_back_all_business_changes(
     database: sqlite3.Connection,
 ) -> None:
@@ -483,5 +601,18 @@ def test_modified_applied_migration_is_rejected(tmp_path: Path) -> None:
         )
         with pytest.raises(MigrationError, match="has been modified"):
             apply_migrations(connection, migrations)
+    finally:
+        connection.close()
+
+
+def test_non_prefix_migration_history_is_rejected(tmp_path: Path) -> None:
+    connection = connect_sqlite(tmp_path / "non-prefix.db")
+    try:
+        assert apply_migrations(connection, MIGRATIONS) == ("0001", "0002")
+        connection.execute("DELETE FROM schema_migrations WHERE version = '0001'")
+        connection.commit()
+
+        with pytest.raises(MigrationError, match="not a contiguous prefix"):
+            apply_migrations(connection, MIGRATIONS)
     finally:
         connection.close()

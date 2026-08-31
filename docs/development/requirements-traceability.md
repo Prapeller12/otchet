@@ -16,15 +16,16 @@
 | При нулевом плане процент не рассчитывается | `AGENTS.md` 6.5 | `calculate_completion_rate` | `TestCompletionRate` | `VERIFIED` |
 | Количества без binary float | `AGENTS.md` 11; DEV v0.5 | `Decimal`; десятичные строки в SQLite и JSON | unit, integration и contract-тесты | `VERIFIED` |
 | Дата/время операции отделены от времени создания записи | `AGENTS.md` 11; DEV v0.5, `op_at` и пример API | `operation_at` с timezone; отдельный `created_at` | integration-тесты валидных и невалидных ISO timestamps | `VERIFIED` |
-| BOM версионируется и не имеет пересекающихся утверждённых периодов | `AGENTS.md` 4.3 и 11 | `bom_versions`; SQLite triggers | `test_approved_bom_periods_cannot_overlap` | `VERIFIED` |
+| BOM версионируется; утверждённые версии неизменяемы и не пересекаются по периоду | `AGENTS.md` 4.3 и 11; DEV v0.5 | `bom_versions`, `bom_items`; SQLite triggers | тесты пересечения, изменения и удаления утверждённой версии | `VERIFIED` |
 | Проведённая операция неизменяема; исправление — сторно с причиной | `AGENTS.md` 4.3 и 11 | таблицы и triggers `stock_operations` / `product_operations` | integration-тесты изменения, удаления, повторного и цепочного сторно | `VERIFIED` |
-| Миграции последовательны, атомарны и не редактируются после применения | `AGENTS.md` 11 | `backend/infrastructure/database/migrator.py` | тесты пустой БД, rollback и SHA-256 | `VERIFIED` |
-| Ячейка адресуется бизнес-координатой, а не Excel-адресом | DEV v0.5, 9.8; `AGENTS.md` 12 | JSON Schema и TypeScript union | Node contract-test | `VERIFIED` |
+| Миграции последовательны, атомарны и не редактируются после применения | `AGENTS.md` 11 | `backend/infrastructure/database/migrator.py` | тесты пустой БД, rollback, SHA-256 и непрерывного префикса | `VERIFIED` |
+| Ячейка адресуется бизнес-координатой, а не Excel-адресом | DEV v0.5, 9.8; `AGENTS.md` 7 | JSON Schema и TypeScript union | Node contract-test | `VERIFIED` |
+| Тип отчёта ограничен утверждёнными кодами `DAILY_MOVEMENT`, `HEAD_SITE`, `SUBSIDIARY` | DEV v0.5, 9.8 | JSON Schema enum и TypeScript literal union | valid/invalid contract fixtures | `VERIFIED` |
 | Технические логи, телеметрия и внешняя сеть выключены по умолчанию | `AGENTS.md` 4.4 | `config/app.defaults.toml`; repository verifier | `scripts/verify_repository.py` | `VERIFIED_DEFAULTS_ONLY` |
 | Даты в матрицах расположены горизонтально | `AGENTS.md` 4.2 и 5 | карточки форм | автоматизированного UI ещё нет | `DOCUMENTED / OPEN` |
 | Роли, периоды, импорт, API и полный аудит | `AGENTS.md` 11–15 | не реализовано без утверждённых контрактов | отсутствует | `OPEN` |
 | Portable ZIP на чистой Windows 10/11 | `AGENTS.md` 4.1 и 18 | не реализовано в этом инкременте | не проверено | `OPEN` |
 
 `VERIFIED` означает прохождение доступной автоматической проверки в этом репозитории, а не
-приёмку владельцем программы. Рабочие формы и DEV v0.5 требуют отдельного подтверждения
-статуса.
+приёмку владельцем программы. DEV v0.5 утверждена владельцем 31.08.2026; рабочие формы
+требуют отдельного подтверждения статуса.

@@ -170,6 +170,11 @@ assert.equal(schema.additionalProperties, false);
 assert.equal(schema.$defs.ReportCellCoordinate.additionalProperties, false);
 assert.equal(schema.$defs.ReportCellCoordinate.allOf.length, 3);
 assert.equal(schema.$defs.ReportCellValue.oneOf.length, 2);
+assert.deepEqual(schema.$defs.ReportType.enum, [
+  "DAILY_MOVEMENT",
+  "HEAD_SITE",
+  "SUBSIDIARY",
+]);
 assert.deepEqual(schema.$defs.ReportCellState.properties.access.enum, [
   "editable",
   "calculated",
@@ -204,6 +209,10 @@ for (const fixture of invalidFixtures) {
 const typesSource = readFileSync(typesPath, "utf8");
 for (const requiredToken of [
   "report_type",
+  "REPORT_TYPES",
+  "DAILY_MOVEMENT",
+  "HEAD_SITE",
+  "SUBSIDIARY",
   "organization_id",
   "product_id",
   "component_id",

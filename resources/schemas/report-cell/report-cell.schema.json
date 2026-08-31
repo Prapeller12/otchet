@@ -29,6 +29,11 @@
       "pattern": "^[A-Z][A-Z0-9_]*$",
       "description": "Externally governed uppercase contract code. The schema deliberately does not invent or alias business codes."
     },
+    "ReportType": {
+      "type": "string",
+      "enum": ["DAILY_MOVEMENT", "HEAD_SITE", "SUBSIDIARY"],
+      "description": "Canonical report type approved in DEV documentation v0.5, section 9.8."
+    },
     "IsoDate": {
       "type": "string",
       "format": "date",
@@ -46,7 +51,7 @@
       "required": ["report_type", "organization_id"],
       "properties": {
         "report_type": {
-          "$ref": "#/$defs/ContractCode"
+          "$ref": "#/$defs/ReportType"
         },
         "organization_id": {
           "$ref": "#/$defs/OpaqueId"

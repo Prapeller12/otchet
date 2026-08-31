@@ -7,8 +7,9 @@ implicit loss of precision.
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from decimal import ROUND_FLOOR, Decimal
+from decimal import Decimal
 from enum import StrEnum
+from math import gcd
 
 
 class QuantityState(StrEnum):
@@ -99,9 +100,11 @@ class StockOperation:
     def stock_effect(self) -> Decimal:
         if self.operation_type is StockOperationType.SIGNED_ADJUSTMENT:
             effect = self.quantity
+        elif _STOCK_OPERATION_SIGNS[self.operation_type] == Decimal("-1"):
+            effect = self.quantity.copy_negate()
         else:
-            effect = self.quantity * _STOCK_OPERATION_SIGNS[self.operation_type]
-        return -effect if self.is_reversal else effect
+            effect = self.quantity
+        return effect.copy_negate() if self.is_reversal else effect
 
 
 def calculate_stock(
@@ -115,7 +118,7 @@ def calculate_stock(
     for operation in operations:
         if not isinstance(operation, StockOperation):
             raise TypeError("operations must contain StockOperation values")
-        balance += operation.stock_effect
+        balance = _add_exact(balance, operation.stock_effect)
     return balance
 
 
@@ -129,7 +132,9 @@ def calculate_required_quantity(
     _require_non_negative_decimal("product_plan_quantity", product_plan_quantity)
     _require_positive_decimal("quantity_per_product", quantity_per_product)
     _require_non_negative_decimal("loss_factor", loss_factor)
-    return product_plan_quantity * quantity_per_product * (Decimal("1") + loss_factor)
+    base_requirement = _multiply_exact(product_plan_quantity, quantity_per_product)
+    loss_multiplier = _add_exact(Decimal("1"), loss_factor)
+    return _multiply_exact(base_requirement, loss_multiplier)
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,7 +223,8 @@ def calculate_shortage_to_target(
     _require_non_negative_decimal("target_sets", target_sets)
     _require_positive_decimal("quantity_per_product", quantity_per_product)
     _require_non_negative_decimal("available_quantity", available_quantity)
-    shortage = target_sets * quantity_per_product - available_quantity
+    target_quantity = _multiply_exact(target_sets, quantity_per_product)
+    shortage = _subtract_exact(target_quantity, available_quantity)
     return max(Decimal("0"), shortage)
 
 
@@ -232,7 +238,7 @@ def calculate_contract_variance(
     _require_non_negative_decimal(
         "contract_planned_quantity_to_date", contract_planned_quantity_to_date
     )
-    return supplied_quantity_to_date - contract_planned_quantity_to_date
+    return _subtract_exact(supplied_quantity_to_date, contract_planned_quantity_to_date)
 
 
 class CompletionRateStatus(StrEnum):
@@ -250,7 +256,13 @@ def calculate_completion_rate(
     fact_quantity: Decimal,
     plan_quantity: Decimal,
 ) -> CompletionRate:
-    """Calculate fact/plan as a percentage, unless the plan is zero."""
+    """Calculate fact/plan as an exact percentage, unless the plan is zero.
+
+    A repeating decimal cannot be represented exactly by :class:`Decimal`.
+    Until the project approves an explicit percentage rounding rule, such a
+    result raises :class:`ArithmeticError` instead of silently using the
+    process-wide decimal context.
+    """
 
     _require_non_negative_decimal("fact_quantity", fact_quantity)
     _require_non_negative_decimal("plan_quantity", plan_quantity)
@@ -259,18 +271,127 @@ def calculate_completion_rate(
             percentage=None,
             status=CompletionRateStatus.NOT_APPLICABLE,
         )
-    return CompletionRate(
-        percentage=fact_quantity / plan_quantity * Decimal("100"),
-        status=CompletionRateStatus.CALCULATED,
-    )
+    percentage_numerator = _multiply_exact(fact_quantity, Decimal("100"))
+    percentage = _divide_exact(percentage_numerator, plan_quantity)
+    return CompletionRate(percentage=percentage, status=CompletionRateStatus.CALCULATED)
 
 
 def _available_sets(component: ComponentAvailability) -> int:
     available = component.available_quantity.value
     if available is None:
         return 0
-    quotient = available / component.quantity_per_product
-    return int(quotient.to_integral_value(rounding=ROUND_FLOOR))
+    return _floor_divide_exact(available, component.quantity_per_product)
+
+
+def _add_exact(left: Decimal, right: Decimal) -> Decimal:
+    """Add finite decimals without consulting the process-wide context."""
+
+    left_coefficient, left_exponent = _decimal_parts(left)
+    right_coefficient, right_exponent = _decimal_parts(right)
+    result_exponent = min(left_exponent, right_exponent)
+    left_scale = left_exponent - result_exponent
+    right_scale = right_exponent - result_exponent
+    result_coefficient = left_coefficient * 10**left_scale + right_coefficient * 10**right_scale
+    return _decimal_from_parts(result_coefficient, result_exponent)
+
+
+def _subtract_exact(left: Decimal, right: Decimal) -> Decimal:
+    """Subtract finite decimals without consulting the process-wide context."""
+
+    return _add_exact(left, right.copy_negate())
+
+
+def _multiply_exact(left: Decimal, right: Decimal) -> Decimal:
+    """Multiply finite decimals without consulting the process-wide context."""
+
+    left_coefficient, left_exponent = _decimal_parts(left)
+    right_coefficient, right_exponent = _decimal_parts(right)
+    return _decimal_from_parts(
+        left_coefficient * right_coefficient,
+        left_exponent + right_exponent,
+    )
+
+
+def _floor_divide_exact(dividend: Decimal, divisor: Decimal) -> int:
+    """Return ``floor(dividend / divisor)`` using integer arithmetic."""
+
+    dividend_coefficient, dividend_exponent = _decimal_parts(dividend)
+    divisor_coefficient, divisor_exponent = _decimal_parts(divisor)
+    exponent_difference = dividend_exponent - divisor_exponent
+    if exponent_difference >= 0:
+        return int(dividend_coefficient * 10**exponent_difference // divisor_coefficient)
+
+    decimal_places = -exponent_difference
+    dividend_digits = len(dividend.as_tuple().digits)
+    if dividend_coefficient == 0 or decimal_places >= dividend_digits:
+        return 0
+    return int(dividend_coefficient // (divisor_coefficient * 10**decimal_places))
+
+
+def _divide_exact(dividend: Decimal, divisor: Decimal) -> Decimal:
+    """Divide when the mathematical result has a finite decimal expansion."""
+
+    dividend_coefficient, dividend_exponent = _decimal_parts(dividend)
+    divisor_coefficient, divisor_exponent = _decimal_parts(divisor)
+    if dividend_coefficient == 0:
+        return Decimal("0")
+
+    common_divisor = gcd(abs(dividend_coefficient), divisor_coefficient)
+    numerator = dividend_coefficient // common_divisor
+    denominator = divisor_coefficient // common_divisor
+
+    factors_of_two = 0
+    while denominator % 2 == 0:
+        denominator //= 2
+        factors_of_two += 1
+
+    factors_of_five = 0
+    while denominator % 5 == 0:
+        denominator //= 5
+        factors_of_five += 1
+
+    if denominator != 1:
+        raise ArithmeticError(
+            "completion rate is a repeating decimal; an explicit rounding rule is required"
+        )
+
+    scale = max(factors_of_two, factors_of_five)
+    numerator *= 2 ** (scale - factors_of_two)
+    numerator *= 5 ** (scale - factors_of_five)
+    exponent = dividend_exponent - divisor_exponent - scale
+    return _decimal_from_parts(numerator, exponent)
+
+
+def _decimal_parts(value: Decimal) -> tuple[int, int]:
+    """Return a signed integer coefficient and base-ten exponent."""
+
+    decimal_tuple = value.as_tuple()
+    if not isinstance(decimal_tuple.exponent, int):
+        raise ValueError("value must be finite")
+
+    coefficient = 0
+    for digit in decimal_tuple.digits:
+        coefficient = coefficient * 10 + digit
+    if decimal_tuple.sign:
+        coefficient = -coefficient
+    return coefficient, decimal_tuple.exponent
+
+
+def _decimal_from_parts(coefficient: int, exponent: int) -> Decimal:
+    """Build a decimal from exact integer parts without applying a context."""
+
+    sign = int(coefficient < 0)
+    magnitude = abs(coefficient)
+    digits: tuple[int, ...]
+    if magnitude == 0:
+        digits = (0,)
+    else:
+        reversed_digits: list[int] = []
+        while magnitude:
+            magnitude, digit = divmod(magnitude, 10)
+            reversed_digits.append(digit)
+        digits = tuple(reversed(reversed_digits))
+    return Decimal((sign, digits, exponent))
 
 
 def _require_decimal(name: str, value: object) -> Decimal:

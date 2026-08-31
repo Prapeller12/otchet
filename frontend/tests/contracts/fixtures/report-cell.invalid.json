@@ -3,7 +3,7 @@
     "name": "subject coordinate cannot contain product and component together",
     "cell": {
       "coordinate": {
-        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "report_type": "DAILY_MOVEMENT",
         "organization_id": "organization-test-only",
         "product_id": "product-test-only",
         "component_id": "component-test-only",
@@ -18,7 +18,7 @@
     "name": "indicator coordinate must be present",
     "cell": {
       "coordinate": {
-        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "report_type": "DAILY_MOVEMENT",
         "organization_id": "organization-test-only",
         "product_id": "product-test-only",
         "operation_date": "2026-08-30"
@@ -31,7 +31,7 @@
     "name": "time coordinate cannot contain date and period together",
     "cell": {
       "coordinate": {
-        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "report_type": "DAILY_MOVEMENT",
         "organization_id": "organization-test-only",
         "component_id": "component-test-only",
         "operation_type": "OPERATION_TEST_ONLY",
@@ -46,7 +46,7 @@
     "name": "calendar-invalid ISO date is rejected",
     "cell": {
       "coordinate": {
-        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "report_type": "DAILY_MOVEMENT",
         "organization_id": "organization-test-only",
         "component_id": "component-test-only",
         "operation_type": "OPERATION_TEST_ONLY",
@@ -60,7 +60,7 @@
     "name": "quantity cannot be a JSON number",
     "cell": {
       "coordinate": {
-        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "report_type": "HEAD_SITE",
         "organization_id": "organization-test-only",
         "component_id": "component-test-only",
         "operation_type": "OPERATION_TEST_ONLY",
@@ -74,7 +74,7 @@
     "name": "quantity cannot use scientific notation",
     "cell": {
       "coordinate": {
-        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "report_type": "HEAD_SITE",
         "organization_id": "organization-test-only",
         "component_id": "component-test-only",
         "operation_type": "OPERATION_TEST_ONLY",
@@ -88,7 +88,7 @@
     "name": "missing data cannot also carry quantity",
     "cell": {
       "coordinate": {
-        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "report_type": "SUBSIDIARY",
         "organization_id": "organization-test-only",
         "product_id": "product-test-only",
         "metric_code": "METRIC_TEST_ONLY",
@@ -102,7 +102,7 @@
     "name": "unknown state is rejected",
     "cell": {
       "coordinate": {
-        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "report_type": "SUBSIDIARY",
         "organization_id": "organization-test-only",
         "product_id": "product-test-only",
         "metric_code": "METRIC_TEST_ONLY",
@@ -110,6 +110,20 @@
       },
       "value": { "kind": "DATA_NOT_PROVIDED" },
       "state": { "access": "hidden", "persistence": "saved" }
+    }
+  },
+  {
+    "name": "unknown report type is rejected",
+    "cell": {
+      "coordinate": {
+        "report_type": "REPORT_TYPE_TEST_ONLY",
+        "organization_id": "organization-test-only",
+        "product_id": "product-test-only",
+        "metric_code": "METRIC_TEST_ONLY",
+        "period_start": "2026-08-01"
+      },
+      "value": { "kind": "DATA_NOT_PROVIDED" },
+      "state": { "access": "editable", "persistence": "saved" }
     }
   }
 ]
