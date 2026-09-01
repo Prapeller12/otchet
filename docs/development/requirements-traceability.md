@@ -1,7 +1,7 @@
 # Трассировка требований первого инкремента
 
-Дата проверки: 31.08.2026.
-Область: только реализованный доменный, SQLite- и cell-contract фундамент.
+Дата проверки: 01.09.2026.
+Область: доменный фундамент и сквозной технический preview.
 
 | Требование | Источник | Реализация | Проверка | Статус |
 |---|---|---|---|---|
@@ -22,9 +22,11 @@
 | Ячейка адресуется бизнес-координатой, а не Excel-адресом | DEV v0.5, 9.8; `AGENTS.md` 7 | JSON Schema и TypeScript union | Node contract-test | `VERIFIED` |
 | Тип отчёта ограничен утверждёнными кодами `DAILY_MOVEMENT`, `HEAD_SITE`, `SUBSIDIARY` | DEV v0.5, 9.8 | JSON Schema enum и TypeScript literal union | valid/invalid contract fixtures | `VERIFIED` |
 | Технические логи, телеметрия и внешняя сеть выключены по умолчанию | `AGENTS.md` 4.4 | `config/app.defaults.toml`; repository verifier | `scripts/verify_repository.py` | `VERIFIED_DEFAULTS_ONLY` |
-| Даты в матрицах расположены горизонтально | `AGENTS.md` 4.2 и 5 | карточки форм | автоматизированного UI ещё нет | `DOCUMENTED / OPEN` |
-| Роли, периоды, импорт, API и полный аудит | `AGENTS.md` 11–15 | не реализовано без утверждённых контрактов | отсутствует | `OPEN` |
-| Portable ZIP на чистой Windows 10/11 | `AGENTS.md` 4.1 и 18 | не реализовано в этом инкременте | не проверено | `OPEN` |
+| Даты в матрицах расположены горизонтально | `AGENTS.md` 4.2 и 5 | React/Vite matrix + versioned descriptors | frontend unit tests и production build | `VERIFIED_PREVIEW` |
+| Пусто и подтверждённый ноль переживают перезапуск | `AGENTS.md` 4.2 | PyWebView bridge → application-service → SQLite | integration round-trip `empty → 0 → reload → empty` | `VERIFIED_PREVIEW` |
+| Неподтверждённый Excel import/export не может быть запущен | правила `OPEN` | capabilities + bridge fail closed | integration test кода `TEMPLATE_CONTRACT_NOT_APPROVED` | `VERIFIED_PREVIEW` |
+| Роли, закрытие периода и производственные справочники | `AGENTS.md` 11–15 | не реализуются без утверждённых контрактов | отсутствует | `OPEN` |
+| Portable ZIP на чистой Windows 10/11 | `AGENTS.md` 4.1 и 18 | launcher и fail-closed build/package/verify scripts | unit tests на Linux; Windows acceptance отсутствует | `PARTIAL / OPEN` |
 
 `VERIFIED` означает прохождение доступной автоматической проверки в этом репозитории, а не
 приёмку владельцем программы. DEV v0.5 утверждена владельцем 31.08.2026; рабочие формы

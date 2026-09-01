@@ -17,5 +17,8 @@
     "noEmit": true,
     "types": []
   },
-  "include": ["frontend/src/**/*.ts"]
+  "include": [
+    "frontend/src/shared/api/report-cell-contract.ts",
+    "frontend/src/entities/report-cell/**/*.ts"
+  ]
 }

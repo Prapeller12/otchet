@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:reporting-system:schema:report-cell-batch:1",
+  "title": "Versioned report fact batch command",
+  "description": "WORKING_REFERENCE command envelope for atomic local bridge saves.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["changes", "idempotency_key", "actor_ref"],
+  "properties": {
+    "changes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["coordinate", "value", "expected_revision"],
+        "properties": {
+          "coordinate": {
+            "$ref": "report-cell.schema.json#/$defs/ReportCellCoordinate"
+          },
+          "value": {
+            "$ref": "report-cell.schema.json#/$defs/ReportCellValue"
+          },
+          "expected_revision": {
+            "oneOf": [
+              {"type": "null"},
+              {"type": "integer", "minimum": 1}
+            ]
+          }
+        }
+      }
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "actor_ref": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Explicit local actor reference. This does not invent a role or permission policy."
+    }
+  }
+}

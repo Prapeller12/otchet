@@ -1,0 +1,231 @@
+{
+  "$schema": "../schemas/report-definition/matrix-definition.schema.json",
+  "schema_version": "1.0.0",
+  "definition_id": "wrk-daily-movement",
+  "definition_version": "0.1.0",
+  "status": "WORKING_REFERENCE",
+  "report_type": "DAILY_MOVEMENT",
+  "production_use": false,
+  "identity_policy": {
+    "kind": "SYNTHETIC_OPAQUE",
+    "real_business_keys_included": false
+  },
+  "source_basis": [
+    "AGENTS.md 4.2, 5.1 and 5.4",
+    "DEV v0.5 9.4, 9.5.1 and 9.6",
+    "docs/ui-contracts/daily-working-reference.md"
+  ],
+  "matrix_rules": {
+    "dates_or_periods_horizontal": true,
+    "groups_vertical": true,
+    "direct_matrix_input": true,
+    "required_rows_visible": true,
+    "blank_and_zero_distinct": true,
+    "calculated_values_read_only": true
+  },
+  "layout": {
+    "freeze": {
+      "top_date_header": true,
+      "left_identifiers": true
+    },
+    "identifier_columns": [
+      {
+        "column_id": "wrk-daily-party",
+        "label": "Изготовитель/поставщик",
+        "binding": { "status": "OPEN" }
+      },
+      {
+        "column_id": "wrk-daily-position",
+        "label": "Позиция",
+        "binding": { "status": "OPEN" }
+      },
+      {
+        "column_id": "wrk-daily-indicator",
+        "label": "Показатель",
+        "binding": { "status": "OPEN" }
+      }
+    ],
+    "horizontal_axis": {
+      "axis_id": "wrk-daily-days",
+      "kind": "DAY_OF_MONTH",
+      "columns": [
+        { "column_id": "wrk-day-01", "day_of_month": 1, "label": "01" },
+        { "column_id": "wrk-day-02", "day_of_month": 2, "label": "02" },
+        { "column_id": "wrk-day-03", "day_of_month": 3, "label": "03" },
+        { "column_id": "wrk-day-04", "day_of_month": 4, "label": "04" },
+        { "column_id": "wrk-day-05", "day_of_month": 5, "label": "05" },
+        { "column_id": "wrk-day-06", "day_of_month": 6, "label": "06" },
+        { "column_id": "wrk-day-07", "day_of_month": 7, "label": "07" },
+        { "column_id": "wrk-day-08", "day_of_month": 8, "label": "08" },
+        { "column_id": "wrk-day-09", "day_of_month": 9, "label": "09" },
+        { "column_id": "wrk-day-10", "day_of_month": 10, "label": "10" },
+        { "column_id": "wrk-day-11", "day_of_month": 11, "label": "11" },
+        { "column_id": "wrk-day-12", "day_of_month": 12, "label": "12" },
+        { "column_id": "wrk-day-13", "day_of_month": 13, "label": "13" },
+        { "column_id": "wrk-day-14", "day_of_month": 14, "label": "14" },
+        { "column_id": "wrk-day-15", "day_of_month": 15, "label": "15" },
+        { "column_id": "wrk-day-16", "day_of_month": 16, "label": "16" },
+        { "column_id": "wrk-day-17", "day_of_month": 17, "label": "17" },
+        { "column_id": "wrk-day-18", "day_of_month": 18, "label": "18" },
+        { "column_id": "wrk-day-19", "day_of_month": 19, "label": "19" },
+        { "column_id": "wrk-day-20", "day_of_month": 20, "label": "20" },
+        { "column_id": "wrk-day-21", "day_of_month": 21, "label": "21" },
+        { "column_id": "wrk-day-22", "day_of_month": 22, "label": "22" },
+        { "column_id": "wrk-day-23", "day_of_month": 23, "label": "23" },
+        { "column_id": "wrk-day-24", "day_of_month": 24, "label": "24" },
+        { "column_id": "wrk-day-25", "day_of_month": 25, "label": "25" },
+        { "column_id": "wrk-day-26", "day_of_month": 26, "label": "26" },
+        { "column_id": "wrk-day-27", "day_of_month": 27, "label": "27" },
+        { "column_id": "wrk-day-28", "day_of_month": 28, "label": "28" },
+        { "column_id": "wrk-day-29", "day_of_month": 29, "label": "29" },
+        { "column_id": "wrk-day-30", "day_of_month": 30, "label": "30" },
+        { "column_id": "wrk-day-31", "day_of_month": 31, "label": "31" }
+      ]
+    },
+    "summary_columns": [
+      {
+        "column_id": "wrk-daily-total-received",
+        "label": "Всего получено",
+        "value_role": "CALCULATED",
+        "binding": { "status": "OPEN" }
+      },
+      {
+        "column_id": "wrk-daily-total-used",
+        "label": "Всего использовано",
+        "value_role": "CALCULATED",
+        "binding": { "status": "OPEN" }
+      },
+      {
+        "column_id": "wrk-daily-current-balance",
+        "label": "Текущий остаток",
+        "value_role": "CALCULATED",
+        "binding": { "status": "OPEN" }
+      }
+    ],
+    "row_groups": [
+      {
+        "group_id": "wrk-daily-component-group",
+        "group_kind": "COMPONENT_POSITION",
+        "label": "Позиция 1",
+        "repeatable": true,
+        "rows": [
+          {
+            "row_id": "wrk-daily-received",
+            "label": "Получено",
+            "value_role": "WORKING_INPUT",
+            "binding": { "status": "OPEN" }
+          },
+          {
+            "row_id": "wrk-daily-used",
+            "label": "Использовано",
+            "value_role": "WORKING_INPUT",
+            "binding": { "status": "OPEN" }
+          },
+          {
+            "row_id": "wrk-daily-balance",
+            "label": "Остаток",
+            "value_role": "CALCULATED",
+            "binding": { "status": "OPEN" }
+          }
+        ]
+      },
+      {
+        "group_id": "wrk-daily-assembly-set-group",
+        "group_kind": "ASSEMBLY_SET",
+        "label": "Сборочный комплект 1",
+        "repeatable": true,
+        "rows": [
+          {
+            "row_id": "wrk-daily-assembly-plan",
+            "label": "План выпуска",
+            "value_role": "WORKING_INPUT",
+            "binding": { "status": "OPEN" },
+            "code_breakdown": true
+          },
+          {
+            "row_id": "wrk-daily-assembly-released",
+            "label": "Выпущено по кодам",
+            "value_role": "WORKING_INPUT",
+            "binding": { "status": "OPEN" },
+            "code_breakdown": true
+          },
+          {
+            "row_id": "wrk-daily-assembly-shipment",
+            "label": "Отправка",
+            "value_role": "WORKING_INPUT",
+            "binding": { "status": "OPEN" }
+          },
+          {
+            "row_id": "wrk-daily-assembly-arrival",
+            "label": "Прибытие",
+            "value_role": "WORKING_INPUT",
+            "binding": { "status": "OPEN" }
+          }
+        ]
+      },
+      {
+        "group_id": "wrk-daily-finished-product-group",
+        "group_kind": "FINISHED_PRODUCT",
+        "label": "Готовое изделие 1",
+        "repeatable": true,
+        "rows": [
+          {
+            "row_id": "wrk-daily-product-plan",
+            "label": "План выпуска",
+            "value_role": "WORKING_INPUT",
+            "binding": { "status": "OPEN" },
+            "code_breakdown": true
+          },
+          {
+            "row_id": "wrk-daily-product-released",
+            "label": "Выпущено по кодам",
+            "value_role": "WORKING_INPUT",
+            "binding": { "status": "OPEN" },
+            "code_breakdown": true
+          },
+          {
+            "row_id": "wrk-daily-product-shipment",
+            "label": "Отправка",
+            "value_role": "WORKING_INPUT",
+            "binding": { "status": "OPEN" }
+          },
+          {
+            "row_id": "wrk-daily-product-arrival",
+            "label": "Прибытие",
+            "value_role": "WORKING_INPUT",
+            "binding": { "status": "OPEN" }
+          }
+        ]
+      },
+      {
+        "group_id": "wrk-daily-warehouse-group",
+        "group_kind": "WAREHOUSE_READINESS",
+        "label": "Склад и комплектность",
+        "repeatable": false,
+        "rows": [
+          {
+            "row_id": "wrk-daily-warehouse-by-code",
+            "label": "На складе по кодам/модификациям",
+            "value_role": "CALCULATED",
+            "binding": { "status": "OPEN" },
+            "code_breakdown": true
+          },
+          {
+            "row_id": "wrk-daily-ready-sets",
+            "label": "Готовые комплекты",
+            "value_role": "CALCULATED",
+            "binding": { "status": "OPEN" }
+          }
+        ]
+      }
+    ]
+  },
+  "open_items": [
+    "Устойчивые бизнес-ключи строк и кодов",
+    "Связь строк ввода с утверждёнными operation_type и metric_code",
+    "Правила обязательности данных по дню",
+    "Точность отображения и округление кроме готовых комплектов",
+    "Правила сохранения подтверждённого нуля без создания нулевой операции",
+    "Экспортное соответствие утверждённому эталону"
+  ]
+}
