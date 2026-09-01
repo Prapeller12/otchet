@@ -69,6 +69,18 @@ pwsh scripts/build_windows.ps1 `
 `python3*.dll`/`base_library.zip`, собранный frontend или распакованный x64 Fixed Runtime с
 `msedgewebview2.exe`. Скрипты не создают фиктивный Windows executable.
 
+## Скачиваемая тестовая сборка
+
+Workflow `Windows portable preview` собирает отдельный ZIP с суффиксом `-test`, запускает
+упакованный `ReportingSystem.exe --self-test` на Windows и публикует результат как GitHub
+prerelease `test-v0.1.0-dev.0`. В архив входят launcher, Python runtime, frontend, миграции,
+ресурсы и инструкция `TESTING.txt`.
+
+Тестовая сборка использует системный Evergreen WebView2 и предназначена для ручной оценки
+интерфейса и SQLite-сохранения. Она не изменяет ACL и не устанавливает компоненты. Полностью
+автономная принимаемая поставка по-прежнему должна включать Fixed Runtime после решения
+ADR-0001.
+
 ## Что проверяется в Linux
 
 - Python unit/integration tests, Ruff и mypy для доступных модулей;

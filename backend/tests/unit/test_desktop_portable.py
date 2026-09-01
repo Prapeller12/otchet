@@ -10,7 +10,7 @@ from backend.desktop.instance_lock import AlreadyRunningError, SingleInstanceLoc
 from backend.desktop.paths import PortableLayoutError, PortablePaths
 
 
-def _write_config(root: Path, *, network: bool = False) -> None:
+def _write_config(root: Path, *, network: bool = False, webview2_mode: str = "fixed") -> None:
     config = root / "config"
     config.mkdir(parents=True)
     (config / "app.defaults.toml").write_text(
@@ -21,6 +21,8 @@ def _write_config(root: Path, *, network: bool = False) -> None:
                 f"external_network_access_enabled = {str(network).lower()}",
                 "[database]",
                 'path = "data/reporting.sqlite3"',
+                "[webview2]",
+                f'runtime_mode = "{webview2_mode}"',
                 "[logging]",
                 "technical_file_logs_enabled = false",
             )
@@ -45,6 +47,19 @@ def test_portable_paths_reject_external_network_override(tmp_path: Path) -> None
 
     with pytest.raises(PortableLayoutError, match="External network"):
         PortablePaths.discover(tmp_path).validate_offline_defaults()
+
+
+def test_portable_paths_support_explicit_evergreen_preview_mode(tmp_path: Path) -> None:
+    _write_config(tmp_path, webview2_mode="evergreen")
+
+    assert PortablePaths.discover(tmp_path).webview2_runtime_mode == "evergreen"
+
+
+def test_portable_paths_reject_unknown_webview2_mode(tmp_path: Path) -> None:
+    _write_config(tmp_path, webview2_mode="unknown")
+
+    with pytest.raises(PortableLayoutError, match="runtime_mode"):
+        _ = PortablePaths.discover(tmp_path).webview2_runtime_mode
 
 
 def test_single_instance_lock_rejects_second_owner(tmp_path: Path) -> None:

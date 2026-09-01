@@ -24,7 +24,6 @@ REQUIRED_DIRECTORIES = (
     "app/frontend",
     "app/migrations",
     "runtime",
-    "runtime/webview2",
     "config",
     "resources",
     "data",
@@ -38,6 +37,7 @@ REQUIRED_DIRECTORIES = (
 REQUIRED_FILES = (
     "ReportingSystem.exe",
     "start.cmd",
+    "TESTING.txt",
     "VERSION",
     "release-manifest.json",
     "app/frontend/index.html",
@@ -45,7 +45,6 @@ REQUIRED_FILES = (
     "config/logging.yaml",
     "config/reporting_rules.yaml",
     "config/roles.yaml",
-    "runtime/webview2/msedgewebview2.exe",
 )
 NETWORK_REFERENCE = re.compile(rb"(?:https?|wss?)://[^\s\"'`<>]+", re.IGNORECASE)
 NETWORK_API = re.compile(
@@ -114,8 +113,29 @@ def verify_release(root: Path) -> None:
     root = root.resolve()
     if not root.is_dir():
         raise ReleaseVerificationError(f"Release directory does not exist: {root}")
-    missing_directories = [path for path in REQUIRED_DIRECTORIES if not (root / path).is_dir()]
-    missing_files = [path for path in REQUIRED_FILES if not (root / path).is_file()]
+    try:
+        with (root / "config" / "app.defaults.toml").open("rb") as stream:
+            defaults = tomllib.load(stream)
+        local_path = root / "config" / "app.local.toml"
+        local = {}
+        if local_path.is_file():
+            with local_path.open("rb") as stream:
+                local = tomllib.load(stream)
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise ReleaseVerificationError(f"Invalid app configuration: {exc}") from exc
+    runtime_mode = local.get("webview2", {}).get(
+        "runtime_mode", defaults.get("webview2", {}).get("runtime_mode", "fixed")
+    )
+    if runtime_mode not in {"fixed", "evergreen"}:
+        raise ReleaseVerificationError("Unknown WebView2 runtime mode")
+
+    required_directories = list(REQUIRED_DIRECTORIES)
+    required_files = list(REQUIRED_FILES)
+    if runtime_mode == "fixed":
+        required_directories.append("runtime/webview2")
+        required_files.append("runtime/webview2/msedgewebview2.exe")
+    missing_directories = [path for path in required_directories if not (root / path).is_dir()]
+    missing_files = [path for path in required_files if not (root / path).is_file()]
     if missing_directories or missing_files:
         raise ReleaseVerificationError(
             "Portable layout is incomplete "
@@ -130,14 +150,12 @@ def verify_release(root: Path) -> None:
         raise ReleaseVerificationError("PyInstaller embedded Python runtime is incomplete")
     if _pe_machine(root / "ReportingSystem.exe") != 0x8664:
         raise ReleaseVerificationError("ReportingSystem.exe is not Windows x64")
-    if _pe_machine(root / "runtime" / "webview2" / "msedgewebview2.exe") != 0x8664:
+    if (
+        runtime_mode == "fixed"
+        and _pe_machine(root / "runtime" / "webview2" / "msedgewebview2.exe") != 0x8664
+    ):
         raise ReleaseVerificationError("WebView2 Fixed Runtime is not Windows x64")
 
-    try:
-        with (root / "config" / "app.defaults.toml").open("rb") as stream:
-            defaults = tomllib.load(stream)
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise ReleaseVerificationError(f"Invalid app.defaults.toml: {exc}") from exc
     app = defaults.get("app", {})
     logging_settings = defaults.get("logging", {})
     if app.get("telemetry_enabled") is not False:

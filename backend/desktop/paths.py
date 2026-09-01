@@ -85,6 +85,13 @@ class PortablePaths:
         return self.runtime / "webview2"
 
     @property
+    def webview2_runtime_mode(self) -> str:
+        mode = self.settings().get("webview2", {}).get("runtime_mode", "fixed")
+        if mode not in {"fixed", "evergreen"}:
+            raise PortableLayoutError("webview2.runtime_mode must be fixed or evergreen")
+        return str(mode)
+
+    @property
     def config(self) -> Path:
         return self.root / "config"
 
@@ -175,7 +182,11 @@ class PortablePaths:
             self.migrations.glob("[0-9][0-9][0-9][0-9]_*.sql")
         ):
             raise PortableLayoutError("No sequential SQL migrations are available")
-        if require_frontend and not (self.webview2_runtime / "msedgewebview2.exe").is_file():
+        if (
+            require_frontend
+            and self.webview2_runtime_mode == "fixed"
+            and not (self.webview2_runtime / "msedgewebview2.exe").is_file()
+        ):
             raise PortableLayoutError("WebView2 Fixed Runtime is missing from runtime/webview2")
         self.validate_offline_defaults()
 

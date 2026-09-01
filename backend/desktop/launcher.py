@@ -73,7 +73,9 @@ def _run_window(paths: PortablePaths) -> None:
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = False
     webview.settings["OPEN_DEVTOOLS_IN_DEBUG"] = False
     webview.settings["REMOTE_DEBUGGING_PORT"] = None
-    webview.settings["WEBVIEW2_RUNTIME_PATH"] = str(paths.webview2_runtime)
+    webview.settings["WEBVIEW2_RUNTIME_PATH"] = (
+        str(paths.webview2_runtime) if paths.webview2_runtime_mode == "fixed" else None
+    )
 
     shutil.rmtree(paths.webview2_profile, ignore_errors=True)
     window = webview.create_window(

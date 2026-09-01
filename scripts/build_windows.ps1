@@ -1,8 +1,8 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
     [string]$WebView2RuntimePath,
 
+    [switch]$EvergreenTestBuild,
     [string]$PythonExe = "python",
     [string]$OutputPath
 )
@@ -51,6 +51,7 @@ try {
         -LauncherOnedirPath (Join-Path $repositoryRoot "dist\ReportingSystem") `
         -FrontendDistPath (Join-Path $repositoryRoot "dist\frontend") `
         -WebView2RuntimePath $WebView2RuntimePath `
+        -EvergreenTestBuild:$EvergreenTestBuild `
         -OutputPath $OutputPath `
         -PythonExe $PythonExe
 } finally {

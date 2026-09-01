@@ -15,5 +15,8 @@ temp = "temp"
 engine = "sqlite"
 path = "data/reporting.sqlite3"
 
+[webview2]
+runtime_mode = "fixed"
+
 [logging]
 technical_file_logs_enabled = false
