@@ -1,0 +1,270 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:reporting-system:schema:matrix-definition:1",
+  "title": "Versioned working-reference matrix definition",
+  "description": "Schema for non-production matrix previews. A valid document is not an approved import map or a source of permanent business identifiers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "definition_id",
+    "definition_version",
+    "status",
+    "report_type",
+    "production_use",
+    "identity_policy",
+    "source_basis",
+    "matrix_rules",
+    "layout",
+    "open_items"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "definition_id": {
+      "$ref": "#/$defs/OpaqueWorkingId"
+    },
+    "definition_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "status": {
+      "const": "WORKING_REFERENCE"
+    },
+    "report_type": {
+      "enum": ["DAILY_MOVEMENT", "HEAD_SITE", "SUBSIDIARY"]
+    },
+    "production_use": {
+      "const": false
+    },
+    "identity_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "real_business_keys_included"],
+      "properties": {
+        "kind": {
+          "const": "SYNTHETIC_OPAQUE"
+        },
+        "real_business_keys_included": {
+          "const": false
+        }
+      }
+    },
+    "source_basis": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "matrix_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dates_or_periods_horizontal",
+        "groups_vertical",
+        "direct_matrix_input",
+        "required_rows_visible",
+        "blank_and_zero_distinct",
+        "calculated_values_read_only"
+      ],
+      "properties": {
+        "dates_or_periods_horizontal": { "const": true },
+        "groups_vertical": { "const": true },
+        "direct_matrix_input": { "const": true },
+        "required_rows_visible": { "const": true },
+        "blank_and_zero_distinct": { "const": true },
+        "calculated_values_read_only": { "const": true }
+      }
+    },
+    "layout": {
+      "$ref": "#/$defs/Layout"
+    },
+    "open_items": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "OpaqueWorkingId": {
+      "type": "string",
+      "pattern": "^wrk-[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "description": "Synthetic preview identifier with no business meaning."
+    },
+    "Binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "const": "OPEN"
+        }
+      }
+    },
+    "WorkingValueRole": {
+      "enum": ["WORKING_INPUT", "CALCULATED", "LOCKED"]
+    },
+    "IdentifierColumn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["column_id", "label", "binding"],
+      "properties": {
+        "column_id": { "$ref": "#/$defs/OpaqueWorkingId" },
+        "label": { "type": "string", "minLength": 1 },
+        "binding": { "$ref": "#/$defs/Binding" }
+      }
+    },
+    "SummaryColumn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["column_id", "label", "value_role", "binding"],
+      "properties": {
+        "column_id": { "$ref": "#/$defs/OpaqueWorkingId" },
+        "label": { "type": "string", "minLength": 1 },
+        "value_role": { "$ref": "#/$defs/WorkingValueRole" },
+        "binding": { "$ref": "#/$defs/Binding" }
+      }
+    },
+    "StaticDayColumn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["column_id", "day_of_month", "label"],
+      "properties": {
+        "column_id": { "$ref": "#/$defs/OpaqueWorkingId" },
+        "day_of_month": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31
+        },
+        "label": {
+          "type": "string",
+          "pattern": "^(0[1-9]|[12][0-9]|3[01])$"
+        }
+      }
+    },
+    "HorizontalAxis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["axis_id", "kind"],
+      "properties": {
+        "axis_id": { "$ref": "#/$defs/OpaqueWorkingId" },
+        "kind": {
+          "enum": ["DAY_OF_MONTH", "RUNTIME_CALENDAR_DATE", "RUNTIME_PERIOD"]
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 31,
+          "maxItems": 31,
+          "items": { "$ref": "#/$defs/StaticDayColumn" }
+        },
+        "generation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "period_unit_status"],
+          "properties": {
+            "mode": { "const": "RUNTIME" },
+            "period_unit_status": {
+              "enum": ["CALENDAR_DATE", "OPEN"]
+            }
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["columns"],
+          "not": { "required": ["generation"] }
+        },
+        {
+          "required": ["generation"],
+          "not": { "required": ["columns"] }
+        }
+      ]
+    },
+    "MatrixRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["row_id", "label", "value_role", "binding"],
+      "properties": {
+        "row_id": { "$ref": "#/$defs/OpaqueWorkingId" },
+        "label": { "type": "string", "minLength": 1 },
+        "value_role": { "$ref": "#/$defs/WorkingValueRole" },
+        "binding": { "$ref": "#/$defs/Binding" },
+        "code_breakdown": { "type": "boolean" }
+      }
+    },
+    "RowGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["group_id", "group_kind", "label", "repeatable", "rows"],
+      "properties": {
+        "group_id": { "$ref": "#/$defs/OpaqueWorkingId" },
+        "group_kind": {
+          "enum": [
+            "COMPONENT_POSITION",
+            "ASSEMBLY_SET",
+            "FINISHED_PRODUCT",
+            "WAREHOUSE_READINESS",
+            "SUPPLIER_ITEM"
+          ]
+        },
+        "label": { "type": "string", "minLength": 1 },
+        "repeatable": { "type": "boolean" },
+        "rows": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/MatrixRow" }
+        }
+      }
+    },
+    "Freeze": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["top_date_header", "left_identifiers"],
+      "properties": {
+        "top_date_header": { "const": true },
+        "left_identifiers": { "const": true }
+      }
+    },
+    "Layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "freeze",
+        "identifier_columns",
+        "horizontal_axis",
+        "summary_columns",
+        "row_groups"
+      ],
+      "properties": {
+        "freeze": { "$ref": "#/$defs/Freeze" },
+        "identifier_columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/IdentifierColumn" }
+        },
+        "horizontal_axis": { "$ref": "#/$defs/HorizontalAxis" },
+        "summary_columns": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SummaryColumn" }
+        },
+        "row_groups": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/RowGroup" }
+        }
+      }
+    }
+  }
+}

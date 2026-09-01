@@ -1,0 +1,330 @@
+.report-workspace {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(20, 35, 60, 0.07);
+}
+
+.matrix-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 22px 17px;
+  border-bottom: 1px solid #e6ebf2;
+}
+
+.matrix-toolbar h2 {
+  margin: 0;
+  font-size: 21px;
+  letter-spacing: -0.02em;
+}
+
+.matrix-toolbar p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.title-line,
+.toolbar-actions,
+.matrix-legend {
+  display: flex;
+  align-items: center;
+}
+
+.title-line {
+  gap: 10px;
+}
+
+.reference-badge {
+  padding: 4px 7px;
+  color: #855c00;
+  background: #fff5d6;
+  border: 1px solid #ecd38a;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.toolbar-actions {
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.button {
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.button.secondary {
+  color: #34445f;
+  background: #fff;
+  border-color: #c8d2e1;
+}
+
+.button.primary {
+  color: #fff;
+  background: var(--blue-600);
+}
+
+.button:disabled {
+  color: #8b98aa;
+  background: #eef1f5;
+  border-color: #dde3eb;
+  cursor: not-allowed;
+}
+
+.source-notice,
+.save-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 22px;
+  font-size: 12px;
+}
+
+.source-notice {
+  color: #5e526f;
+  background: #f7f3fb;
+  border-bottom: 1px solid #e5ddec;
+}
+
+.source-notice strong {
+  color: #3f3152;
+}
+
+.save-error {
+  color: #8d1d2b;
+  background: #fff0f1;
+  border-bottom: 1px solid #f0c6cb;
+}
+
+.matrix-legend {
+  flex-wrap: wrap;
+  gap: 16px;
+  min-height: 42px;
+  padding: 9px 22px;
+  color: #52627b;
+  background: #fbfcfe;
+  border-bottom: 1px solid #dfe5ee;
+  font-size: 12px;
+}
+
+.matrix-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-swatch {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid #bec9d8;
+  border-radius: 4px;
+  font-style: normal;
+}
+
+.legend-swatch.input { background: #fff; }
+.legend-swatch.calculated { background: #edf1f6; }
+.legend-swatch.locked { background: #f4f1ed; }
+.legend-swatch.empty { background: #fbfcfd; }
+.legend-swatch.zero { background: #eaf2ff; }
+.legend-swatch.error { background: #ffecef; border-color: #d44c59; }
+
+.matrix-scroll {
+  max-height: calc(100vh - 330px);
+  min-height: 310px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.report-matrix {
+  width: max-content;
+  min-width: 100%;
+  table-layout: fixed;
+  border-spacing: 0;
+  border-collapse: separate;
+  color: #202c40;
+  font-size: 12px;
+}
+
+.report-matrix th,
+.report-matrix td {
+  height: 40px;
+  padding: 0;
+  background: #fff;
+  border-right: 1px solid #d8e0ea;
+  border-bottom: 1px solid #d8e0ea;
+}
+
+.report-matrix thead th {
+  position: sticky;
+  z-index: 5;
+  height: 34px;
+  padding: 5px 8px;
+  color: #31415b;
+  background: #e9eef6;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.matrix-header-group-row th {
+  top: 0;
+  height: 31px;
+  color: #fff;
+  background: #334c74;
+  border-color: #536b8e;
+}
+
+.matrix-header-leaf-row th {
+  top: 31px;
+}
+
+.report-matrix .sticky-left {
+  position: sticky;
+  z-index: 3;
+  background: #f7f9fc;
+}
+
+.report-matrix thead .sticky-left {
+  z-index: 8;
+  color: #fff;
+  background: #334c74;
+}
+
+.matrix-group-cell {
+  padding: 10px 12px !important;
+  color: #24334c;
+  background: #edf2f8 !important;
+  text-align: left;
+  vertical-align: top;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.matrix-indicator-cell {
+  padding: 0 11px !important;
+  color: #35445d;
+  text-align: left;
+  font-weight: 650;
+  box-shadow: 4px 0 8px rgba(26, 42, 67, 0.07);
+}
+
+.matrix-value-cell {
+  background: #fff;
+}
+
+.matrix-value-cell.is-editing {
+  box-shadow: inset 0 0 0 2px var(--blue-600);
+}
+
+.matrix-cell-button {
+  position: relative;
+  width: 100%;
+  height: 39px;
+  padding: 0 8px;
+  color: #1e2b40;
+  background: #fff;
+  border: 0;
+  cursor: default;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.matrix-cell-button.is-editable {
+  cursor: text;
+}
+
+.matrix-cell-button.is-calculated {
+  color: #3f4d62;
+  background: #edf1f6;
+}
+
+.matrix-cell-button.is-locked {
+  color: #6e655c;
+  background: repeating-linear-gradient(135deg, #f5f2ee, #f5f2ee 5px, #ece8e2 5px, #ece8e2 10px);
+}
+
+.matrix-cell-button.is-empty .cell-value {
+  color: #9aa6b6;
+}
+
+.matrix-cell-button.is-zero {
+  color: #174d9b;
+  background-color: #eef4ff;
+}
+
+.matrix-cell-button.is-dirty {
+  box-shadow: inset 0 -3px 0 #e7a62d;
+}
+
+.matrix-cell-button.is-saving {
+  background-color: #eef5ff;
+}
+
+.matrix-cell-button.is-error {
+  color: #a02130;
+  background: #ffeff1;
+  box-shadow: inset 0 0 0 2px #d65260;
+}
+
+.matrix-cell-button:focus-visible {
+  z-index: 2;
+  outline: 3px solid rgba(45, 98, 208, 0.45);
+  outline-offset: -3px;
+}
+
+.cell-markers {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: flex;
+  gap: 2px;
+}
+
+.cell-marker {
+  display: inline-grid;
+  place-items: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 2px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.marker-calculated { color: #3f5678; background: #d6dfeb; }
+.marker-locked { color: #6a5c4c; background: #ded7ce; }
+.marker-error { color: #fff; background: #c93444; }
+.marker-dirty { color: #8f5c00; background: #ffe2a2; }
+.marker-saving { color: #174d9b; background: #cfe0ff; }
+
+.matrix-cell-editor {
+  width: 100%;
+  height: 39px;
+  padding: 0 8px;
+  color: #12203a;
+  background: #fff;
+  border: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.keyboard-help {
+  margin: 0;
+  padding: 10px 22px;
+  color: #718097;
+  background: #fbfcfe;
+  border-top: 1px solid #e1e7ef;
+  font-size: 11px;
+}

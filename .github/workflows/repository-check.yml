@@ -48,7 +48,7 @@ jobs:
           python -m ruff check backend scripts
 
       - name: Check Python types
-        run: python -m mypy backend/domain backend/infrastructure/database
+        run: python -m mypy backend scripts
 
       - name: Run backend tests
         run: python -m pytest
@@ -58,3 +58,15 @@ jobs:
 
       - name: Check report-cell contract
         run: node frontend/tests/contracts/report-cell-contract.test.mjs
+
+      - name: Run frontend tests
+        run: npm run test:frontend
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Verify frontend offline policy
+        run: >-
+          python -c "from pathlib import Path;
+          from scripts.verify_release import verify_frontend_network_policy;
+          verify_frontend_network_policy(Path('dist/frontend'))"

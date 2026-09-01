@@ -1,0 +1,156 @@
+:root {
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  color: #172033;
+  background: #eef2f7;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --navy-950: #111c33;
+  --navy-800: #22365c;
+  --blue-600: #2d62d0;
+  --blue-100: #e8f0ff;
+  --line: #d6deea;
+  --muted: #64748b;
+  --surface: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 960px;
+  min-height: 100vh;
+  background: #eef2f7;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgba(45, 98, 208, 0.32);
+  outline-offset: 1px;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 84px;
+  padding: 14px 28px;
+  color: #fff;
+  background: linear-gradient(120deg, var(--navy-950), var(--navy-800));
+  border-bottom: 3px solid #4f7fe0;
+}
+
+.app-header h1 {
+  margin: 2px 0 0;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+}
+
+.app-eyebrow {
+  margin: 0;
+  color: #aebfe0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.connection-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: #dbe8ff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.connection-state span {
+  width: 8px;
+  height: 8px;
+  background: #55d49a;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(85, 212, 154, 0.18);
+}
+
+.report-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 28px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+}
+
+.report-tab {
+  position: relative;
+  padding: 15px 18px 13px;
+  color: #52627b;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.report-tab:hover {
+  color: var(--navy-950);
+  background: #f7f9fc;
+}
+
+.report-tab.is-active {
+  color: var(--blue-600);
+}
+
+.report-tab.is-active::after {
+  position: absolute;
+  right: 12px;
+  bottom: -1px;
+  left: 12px;
+  height: 3px;
+  content: "";
+  background: var(--blue-600);
+  border-radius: 3px 3px 0 0;
+}
+
+main {
+  padding: 22px 28px 30px;
+}
+
+.load-state {
+  padding: 40px;
+  color: var(--muted);
+  text-align: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.load-state-error {
+  display: grid;
+  gap: 6px;
+  color: #9f2833;
+}
+
+@media (max-width: 1100px) {
+  main {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .app-header,
+  .report-tabs {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+}

@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from jsonschema import Draft202012Validator, FormatChecker
+from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
 
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_PATH = ROOT / "resources/schemas/report-cell/report-cell.schema.json"

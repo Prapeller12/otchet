@@ -1,0 +1,111 @@
+{
+  "$schema": "../schemas/report-definition/matrix-definition.schema.json",
+  "schema_version": "1.0.0",
+  "definition_id": "wrk-subsidiary",
+  "definition_version": "0.1.0",
+  "status": "WORKING_REFERENCE",
+  "report_type": "SUBSIDIARY",
+  "production_use": false,
+  "identity_policy": {
+    "kind": "SYNTHETIC_OPAQUE",
+    "real_business_keys_included": false
+  },
+  "source_basis": [
+    "AGENTS.md 4.2, 5.3 and 5.4",
+    "DEV v0.5 9.4, 9.5.3 and 9.6",
+    "docs/ui-contracts/subsidiary-working-reference.md"
+  ],
+  "matrix_rules": {
+    "dates_or_periods_horizontal": true,
+    "groups_vertical": true,
+    "direct_matrix_input": true,
+    "required_rows_visible": true,
+    "blank_and_zero_distinct": true,
+    "calculated_values_read_only": true
+  },
+  "layout": {
+    "freeze": {
+      "top_date_header": true,
+      "left_identifiers": true
+    },
+    "identifier_columns": [
+      {
+        "column_id": "wrk-subsidiary-party",
+        "label": "Изготовитель/поставщик",
+        "binding": { "status": "OPEN" }
+      },
+      {
+        "column_id": "wrk-subsidiary-item",
+        "label": "Изделие/ДСЕ/ПКИ",
+        "binding": { "status": "OPEN" }
+      },
+      {
+        "column_id": "wrk-subsidiary-contract-volume",
+        "label": "Договорной/годовой объём",
+        "binding": { "status": "OPEN" }
+      },
+      {
+        "column_id": "wrk-subsidiary-approved-plan",
+        "label": "Утверждённый план",
+        "binding": { "status": "OPEN" }
+      },
+      {
+        "column_id": "wrk-subsidiary-indicator",
+        "label": "Показатель",
+        "binding": { "status": "OPEN" }
+      }
+    ],
+    "horizontal_axis": {
+      "axis_id": "wrk-subsidiary-periods",
+      "kind": "RUNTIME_PERIOD",
+      "generation": {
+        "mode": "RUNTIME",
+        "period_unit_status": "OPEN"
+      }
+    },
+    "summary_columns": [
+      {
+        "column_id": "wrk-subsidiary-cumulative-supplied",
+        "label": "Поставлено накопительно",
+        "value_role": "CALCULATED",
+        "binding": { "status": "OPEN" }
+      },
+      {
+        "column_id": "wrk-subsidiary-variance",
+        "label": "Отклонение",
+        "value_role": "CALCULATED",
+        "binding": { "status": "OPEN" }
+      },
+      {
+        "column_id": "wrk-subsidiary-surplus-shortage",
+        "label": "Профицит/дефицит",
+        "value_role": "CALCULATED",
+        "binding": { "status": "OPEN" }
+      }
+    ],
+    "row_groups": [
+      {
+        "group_id": "wrk-subsidiary-supplier-item-group",
+        "group_kind": "SUPPLIER_ITEM",
+        "label": "Изделие/ДСЕ/ПКИ 1",
+        "repeatable": true,
+        "rows": [
+          {
+            "row_id": "wrk-subsidiary-supply",
+            "label": "Поставка",
+            "value_role": "WORKING_INPUT",
+            "binding": { "status": "OPEN" }
+          }
+        ]
+      }
+    ]
+  },
+  "open_items": [
+    "Реальный перечень организаций и подчинённость",
+    "Устойчивые коды изделий, ДСЕ и ПКИ",
+    "Единица горизонтального периода для каждого блока: дата или неделя",
+    "Источник договорного или годового объёма и утверждённого плана",
+    "Карта вводимых, импортируемых и расчётных ячеек",
+    "Точные правила накопления, отклонения и закрытия периода"
+  ]
+}
