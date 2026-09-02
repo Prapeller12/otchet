@@ -65,6 +65,9 @@ def _run_window(paths: PortablePaths) -> None:
         paths.database,
         migrations_directory=paths.migrations,
         definitions_directory=paths.resources / "report-definitions",
+        inbox_directory=paths.imports_inbox,
+        backups_directory=paths.backups,
+        application_version=_version(paths),
     )
 
     webview.settings["ALLOW_DOWNLOADS"] = False
@@ -87,6 +90,37 @@ def _run_window(paths: PortablePaths) -> None:
         min_size=(1024, 700),
         text_select=True,
     )
+
+    def open_excel_file() -> Path | None:
+        selected = window.create_file_dialog(
+            webview.FileDialog.OPEN,
+            directory=str(paths.imports_inbox),
+            allow_multiple=False,
+            file_types=("Книга Excel (*.xlsx)",),
+        )
+        if selected is None:
+            return None
+        if isinstance(selected, (str, Path)):
+            return Path(selected)
+        return Path(selected[0]) if selected else None
+
+    def save_excel_file(suggested_name: str) -> Path | None:
+        selected = window.create_file_dialog(
+            webview.FileDialog.SAVE,
+            directory=str(paths.exports),
+            save_filename=suggested_name,
+            file_types=("Книга Excel (*.xlsx)",),
+        )
+        if selected is None:
+            return None
+        if isinstance(selected, (str, Path)):
+            return Path(selected)
+        return Path(selected[0]) if selected else None
+
+    bridge.configure_excel_dialogs(
+        open_file=open_excel_file,
+        save_file=save_excel_file,
+    )
     webview.start(
         gui="edgechromium",
         debug=False,
@@ -94,7 +128,6 @@ def _run_window(paths: PortablePaths) -> None:
         private_mode=True,
         storage_path=str(paths.webview2_profile),
     )
-    del window
     shutil.rmtree(paths.webview2_profile, ignore_errors=True)
 
 

@@ -7,6 +7,7 @@ import {
 
 import type {
   ApplicationGateway,
+  ImportPreview,
   MatrixCellContract,
   ReportMatrixContract,
 } from "../../shared/api/application-gateway";
@@ -122,6 +123,10 @@ export function ReportMatrix({
   const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(() => new Set());
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [excelBusy, setExcelBusy] = useState<"import" | "commit" | "export" | null>(null);
+  const [excelError, setExcelError] = useState<string | null>(null);
+  const [excelMessage, setExcelMessage] = useState<string | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
 
   const spans = useMemo(() => groupSpans(matrix), [matrix]);
   const groups = useMemo(() => headerGroups(matrix), [matrix]);
@@ -268,6 +273,67 @@ export function ReportMatrix({
     }
   }
 
+  async function startImport(): Promise<void> {
+    setExcelBusy("import");
+    setExcelError(null);
+    setExcelMessage(null);
+    try {
+      const preview = await gateway.validateImport({
+        report_type: matrix.report_type,
+        organization_id: matrix.organization_id,
+      });
+      if (!preview.cancelled) setImportPreview(preview);
+    } catch (reason: unknown) {
+      setExcelError(reason instanceof Error ? reason.message : "Excel-файл не проверен");
+    } finally {
+      setExcelBusy(null);
+    }
+  }
+
+  async function confirmImport(): Promise<void> {
+    if (importPreview?.batch_id === undefined) return;
+    setExcelBusy("commit");
+    setExcelError(null);
+    try {
+      const result = await gateway.commitImport({ batch_id: importPreview.batch_id });
+      const refreshed = await gateway.getReportMatrix({
+        report_type: matrix.report_type,
+        organization_id: matrix.organization_id,
+      });
+      onChange(refreshed);
+      setDirtyKeys(new Set());
+      setImportPreview(null);
+      setExcelMessage(
+        `Импорт завершён: записано ${result.imported_count}, без изменений ${result.same_count}.`,
+      );
+    } catch (reason: unknown) {
+      setExcelError(reason instanceof Error ? reason.message : "Импорт не завершён");
+    } finally {
+      setExcelBusy(null);
+    }
+  }
+
+  async function exportExcel(): Promise<void> {
+    setExcelBusy("export");
+    setExcelError(null);
+    setExcelMessage(null);
+    try {
+      const result = await gateway.exportReport({
+        report_type: matrix.report_type,
+        organization_id: matrix.organization_id,
+      });
+      if (!result.cancelled) {
+        setExcelMessage(
+          `Excel сохранён: ${result.file_name ?? "файл"} (${result.exported_cell_count ?? 0} полей ввода).`,
+        );
+      }
+    } catch (reason: unknown) {
+      setExcelError(reason instanceof Error ? reason.message : "Excel-файл не создан");
+    } finally {
+      setExcelBusy(null);
+    }
+  }
+
   const importReason = matrix.capabilities.import.enabled
     ? undefined
     : matrix.capabilities.import.reason;
@@ -289,18 +355,24 @@ export function ReportMatrix({
           <button
             type="button"
             className="button secondary"
-            disabled={!matrix.capabilities.import.enabled}
+            disabled={
+              !matrix.capabilities.import.enabled || excelBusy !== null || dirtyKeys.size > 0
+            }
             title={importReason}
+            onClick={() => void startImport()}
           >
-            Импорт Excel
+            {excelBusy === "import" ? "Проверка…" : "Импорт Excel"}
           </button>
           <button
             type="button"
             className="button secondary"
-            disabled={!matrix.capabilities.export.enabled}
+            disabled={
+              !matrix.capabilities.export.enabled || excelBusy !== null || dirtyKeys.size > 0
+            }
             title={exportReason}
+            onClick={() => void exportExcel()}
           >
-            Экспорт Excel
+            {excelBusy === "export" ? "Выгрузка…" : "Экспорт Excel"}
           </button>
           <button
             type="button"
@@ -315,13 +387,23 @@ export function ReportMatrix({
 
       <div className="source-notice" role="note">
         <strong>{matrix.source_notice}</strong>
-        <span>{importReason}</span>
+        <span>
+          {importReason ??
+            "Excel: выгрузите книгу, заполните жёлтые ячейки и импортируйте её обратно."}
+        </span>
       </div>
 
       {saveError !== null && (
         <div className="save-error" role="alert">
           Изменения сохранены локально в форме, но backend их не принял: {saveError}
         </div>
+      )}
+
+      {excelError !== null && (
+        <div className="save-error" role="alert">{excelError}</div>
+      )}
+      {excelMessage !== null && (
+        <div className="excel-success" role="status">{excelMessage}</div>
       )}
 
       <div className="matrix-scroll" data-testid="matrix-scroll">
@@ -437,6 +519,64 @@ export function ReportMatrix({
           </tbody>
         </table>
       </div>
+
+      {importPreview !== null && (
+        <div className="excel-dialog-backdrop" role="presentation">
+          <section
+            className="excel-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="excel-preview-title"
+          >
+            <h3 id="excel-preview-title">Проверка импорта Excel</h3>
+            <p className="excel-file-name">{importPreview.file_name}</p>
+            <div className="excel-preview-counts">
+              <span><strong>{importPreview.new_count ?? 0}</strong> новых</span>
+              <span><strong>{importPreview.changed_count ?? 0}</strong> изменённых</span>
+              <span><strong>{importPreview.same_count ?? 0}</strong> без изменений</span>
+              <span className={(importPreview.error_count ?? 0) > 0 ? "has-errors" : ""}>
+                <strong>{importPreview.error_count ?? 0}</strong> ошибок
+              </span>
+            </div>
+            {importPreview.already_imported && (
+              <p className="excel-preview-note">
+                Этот файл уже был импортирован. Повторная запись не требуется.
+              </p>
+            )}
+            {(importPreview.issues?.length ?? 0) > 0 && (
+              <ul className="excel-issues">
+                {importPreview.issues?.slice(0, 20).map((issue, index) => (
+                  <li key={`${issue.source_cell ?? "book"}-${issue.code}-${index}`}>
+                    <strong>{issue.source_cell ?? "Книга"}:</strong> {issue.message}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="excel-dialog-actions">
+              <button
+                className="button secondary"
+                type="button"
+                disabled={excelBusy === "commit"}
+                onClick={() => setImportPreview(null)}
+              >
+                Закрыть
+              </button>
+              <button
+                className="button primary"
+                type="button"
+                disabled={
+                  excelBusy === "commit" ||
+                  (importPreview.error_count ?? 0) > 0 ||
+                  importPreview.already_imported
+                }
+                onClick={() => void confirmImport()}
+              >
+                {excelBusy === "commit" ? "Импорт…" : "Подтвердить импорт"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </section>
   );
 }

@@ -1,6 +1,6 @@
 # Трассировка требований первого инкремента
 
-Дата проверки: 01.09.2026.
+Дата проверки: 02.09.2026.
 Область: доменный фундамент и сквозной технический preview.
 
 | Требование | Источник | Реализация | Проверка | Статус |
@@ -24,7 +24,7 @@
 | Технические логи, телеметрия и внешняя сеть выключены по умолчанию | `AGENTS.md` 4.4 | `config/app.defaults.toml`; repository verifier | `scripts/verify_repository.py` | `VERIFIED_DEFAULTS_ONLY` |
 | Даты в матрицах расположены горизонтально | `AGENTS.md` 4.2 и 5 | React/Vite matrix + versioned descriptors | frontend unit tests и production build | `VERIFIED_PREVIEW` |
 | Пусто и подтверждённый ноль переживают перезапуск | `AGENTS.md` 4.2 | PyWebView bridge → application-service → SQLite | integration round-trip `empty → 0 → reload → empty` | `VERIFIED_PREVIEW` |
-| Неподтверждённый Excel import/export не может быть запущен | правила `OPEN` | capabilities + bridge fail closed | integration test кода `TEMPLATE_CONTRACT_NOT_APPROVED` | `VERIFIED_PREVIEW` |
+| Excel round-trip не угадывает координаты | указание владельца 02.09.2026; правила `OPEN` | каноническая книга со скрытой картой; staging + preview + confirm + backup | integration round-trip для трёх форм, foreign workbook rejection; frontend action test | `VERIFIED_PREVIEW` |
 | Роли, закрытие периода и производственные справочники | `AGENTS.md` 11–15 | не реализуются без утверждённых контрактов | отсутствует | `OPEN` |
 | Portable ZIP на чистой Windows 10/11 | `AGENTS.md` 4.1 и 18 | launcher и fail-closed build/package/verify scripts | unit tests на Linux; Windows acceptance отсутствует | `PARTIAL / OPEN` |
 

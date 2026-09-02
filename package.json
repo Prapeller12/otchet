@@ -1,6 +1,6 @@
 {
   "name": "reporting-system-workspace",
-  "version": "0.1.0-dev.1",
+  "version": "0.1.0-dev.2",
   "type": "module",
   "private": true,
   "description": "Development workspace for the production reporting system",

@@ -95,5 +95,5 @@ jobs:
               --target $env:GITHUB_SHA `
               --prerelease `
               --title "Reporting System $version test build" `
-              --notes "Windows x64 preview for manual testing. Includes configurable report rows, multiple subsidiaries, indicator totals and an Excel-style status bar. Unzip the archive and run start.cmd. Uses the system WebView2 Runtime."
+              --notes "Windows x64 preview for manual testing. Includes configurable report rows, multiple subsidiaries, indicator totals, native Excel export/import with preview and SQLite backup, and an Excel-style status bar. Unzip the archive and run start.cmd. Uses the system WebView2 Runtime."
           }

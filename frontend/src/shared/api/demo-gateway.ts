@@ -1,5 +1,7 @@
 import type {
   ApplicationGateway,
+  CommitImportRequest,
+  CommitImportResult,
   ExportRequest,
   ExportResult,
   ImportPreview,
@@ -402,6 +404,10 @@ export class DemoGateway implements ApplicationGateway {
   }
 
   async validateImport(_request: ImportRequest): Promise<ImportPreview> {
+    throw new Error(WORKING_REFERENCE_REASON);
+  }
+
+  async commitImport(_request: CommitImportRequest): Promise<CommitImportResult> {
     throw new Error(WORKING_REFERENCE_REASON);
   }
 

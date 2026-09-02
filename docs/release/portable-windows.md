@@ -74,7 +74,7 @@ pwsh scripts/build_windows.ps1 `
 Workflow `Windows portable preview` собирает отдельный ZIP с суффиксом `-test`, запускает
 упакованный `ReportingSystem.exe --self-test` на Windows и публикует результат как GitHub
 prerelease, имя которого читается из `VERSION` (для текущей сборки —
-`test-v0.1.0-dev.1`). В архив входят launcher, Python runtime, frontend, миграции,
+`test-v0.1.0-dev.2`). В архив входят launcher, Python runtime, frontend, миграции,
 ресурсы и инструкция `TESTING.txt`.
 
 Тестовая сборка использует системный Evergreen WebView2 и предназначена для ручной оценки

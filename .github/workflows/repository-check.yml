@@ -36,8 +36,10 @@ jobs:
           python -m pip install --disable-pip-version-check
           "jsonschema==4.26.0"
           "mypy==1.20.2"
+          "openpyxl==3.1.5"
           "pytest==8.4.2"
           "ruff==0.16.5"
+          "types-openpyxl==3.1.5.20260827"
 
       - name: Verify repository
         run: python scripts/verify_repository.py

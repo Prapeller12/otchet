@@ -97,22 +97,53 @@ export type SaveReportCellsResponse = {
 
 export type ImportRequest = {
   report_type: ReportType;
+  organization_id: string;
+};
+
+export type ImportIssue = {
+  source_cell: string | null;
+  code: string;
+  message: string;
 };
 
 export type ImportPreview = {
+  cancelled: boolean;
+  batch_id?: string;
+  file_name?: string;
+  source_sha256?: string;
+  status?: "STAGED" | "INVALID" | "COMMITTED";
+  new_count?: number;
+  changed_count?: number;
+  same_count?: number;
+  error_count?: number;
+  already_imported?: boolean;
+  issues?: ImportIssue[];
+};
+
+export type CommitImportRequest = {
   batch_id: string;
-  new_count: number;
-  changed_count: number;
+};
+
+export type CommitImportResult = {
+  batch_id: string;
+  status: "COMMITTED";
+  imported_count: number;
   same_count: number;
-  error_count: number;
+  backup_file: string | null;
+  already_committed: boolean;
 };
 
 export type ExportRequest = {
   report_type: ReportType;
+  organization_id: string;
 };
 
 export type ExportResult = {
-  file_name: string;
+  cancelled: boolean;
+  file_name?: string;
+  file_path?: string;
+  sha256?: string;
+  exported_cell_count?: number;
 };
 
 export type OrganizationOption = {
@@ -176,6 +207,7 @@ export interface ApplicationGateway {
     request: SaveReportCellsRequest,
   ): Promise<SaveReportCellsResponse>;
   validateImport(request: ImportRequest): Promise<ImportPreview>;
+  commitImport(request: CommitImportRequest): Promise<CommitImportResult>;
   exportReport(request: ExportRequest): Promise<ExportResult>;
   listOrganizations(): Promise<OrganizationList>;
   createOrganization(name: string): Promise<OrganizationResult>;
