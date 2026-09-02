@@ -79,7 +79,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "test-v0.1.0-dev.0"
+          $version = (Get-Content ./VERSION -Raw).Trim()
+          $tag = "test-v$version"
           $assetPaths = @(
             Get-ChildItem ./dist/portable -File |
               Where-Object { $_.Extension -in ".zip", ".sha256" } |
@@ -93,6 +94,6 @@ jobs:
             gh release create $tag @assetPaths `
               --target $env:GITHUB_SHA `
               --prerelease `
-              --title "Reporting System 0.1.0 test build" `
-              --notes "Windows x64 preview for manual testing. Unzip the archive and run start.cmd. Uses the system WebView2 Runtime."
+              --title "Reporting System $version test build" `
+              --notes "Windows x64 preview for manual testing. Includes configurable report rows, multiple subsidiaries, indicator totals and an Excel-style status bar. Unzip the archive and run start.cmd. Uses the system WebView2 Runtime."
           }

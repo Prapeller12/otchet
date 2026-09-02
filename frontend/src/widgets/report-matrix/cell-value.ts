@@ -31,3 +31,28 @@ export function inputValue(value: ReportCellValue): string {
 export function displayValue(value: ReportCellValue): string {
   return value.kind === "QUANTITY" ? value.quantity : "—";
 }
+
+export function sumCellValues(
+  values: ReadonlyArray<ReportCellValue>,
+): string | null {
+  const quantities = values.flatMap((value) =>
+    value.kind === "QUANTITY" ? [value.quantity] : [],
+  );
+  if (quantities.length === 0) return null;
+  const scale = Math.max(
+    ...quantities.map((value) => value.split(".")[1]?.length ?? 0),
+  );
+  const total = quantities.reduce((sum, value) => {
+    const negative = value.startsWith("-");
+    const unsigned = negative ? value.slice(1) : value;
+    const [whole = "0", fraction = ""] = unsigned.split(".");
+    const scaled = BigInt(`${whole}${fraction.padEnd(scale, "0")}`);
+    return sum + (negative ? -scaled : scaled);
+  }, 0n);
+  if (scale === 0) return total.toString();
+  const negative = total < 0n;
+  const digits = (negative ? -total : total).toString().padStart(scale + 1, "0");
+  const whole = digits.slice(0, -scale);
+  const fraction = digits.slice(-scale).replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
+}

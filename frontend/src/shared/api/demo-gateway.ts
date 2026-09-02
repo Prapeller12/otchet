@@ -6,10 +6,16 @@ import type {
   ImportRequest,
   MatrixCellContract,
   MatrixRowContract,
+  OrganizationList,
+  OrganizationOption,
+  OrganizationResult,
+  ReportLayoutContract,
+  ReportLayoutQuery,
   ReportMatrixContract,
   ReportMatrixQuery,
   SaveReportCellsRequest,
   SaveReportCellsResponse,
+  SaveReportLayoutRequest,
 } from "./application-gateway";
 import type {
   ReportCellAccessState,
@@ -57,6 +63,7 @@ function quantity(value: string | null): ReportCellValue {
 
 function coordinate(
   reportType: ReportType,
+  organizationId: string,
   definition: DemoRowDefinition,
   date: string,
 ): ReportCellCoordinate {
@@ -75,7 +82,7 @@ function coordinate(
 
   return {
     report_type: reportType,
-    organization_id: "demo-organization",
+    organization_id: organizationId,
     ...subject,
     ...indicator,
     ...time,
@@ -253,6 +260,7 @@ function rowDefinitions(reportType: ReportType): DemoRowDefinition[] {
 
 function createRow(
   reportType: ReportType,
+  organizationId: string,
   definition: DemoRowDefinition,
 ): MatrixRowContract {
   const cells: MatrixCellContract[] = ISO_DATES.map((date, index) => {
@@ -260,7 +268,7 @@ function createRow(
     const value = definition.values[index] ?? null;
     const cell: MatrixCellContract = {
       column_id: `period-${index}`,
-      coordinate: coordinate(reportType, definition, date),
+      coordinate: coordinate(reportType, organizationId, definition, date),
       value: quantity(value),
       state: {
         access: definition.access,
@@ -288,12 +296,22 @@ function createRow(
       indicator: definition.indicatorLabel,
     },
     cells,
+    indicator_detail:
+      reportType === "DAILY_MOVEMENT" && definition.access === "editable"
+        ? { kind: "SUM", label: "Сумма" }
+        : definition.access === "calculated"
+          ? { kind: "CALCULATION", label: "Расчёт" }
+          : null,
   };
 }
 
-export function createDemoMatrix(reportType: ReportType): ReportMatrixContract {
+export function createDemoMatrix(
+  reportType: ReportType,
+  organizationId = "demo-organization",
+): ReportMatrixContract {
   return {
     report_type: reportType,
+    organization_id: organizationId,
     title: REPORT_TITLES[reportType],
     subtitle: "Обезличенный демонстрационный контур",
     form_status: "WORKING_REFERENCE",
@@ -311,7 +329,7 @@ export function createDemoMatrix(reportType: ReportType): ReportMatrixContract {
       width: 92,
     })),
     rows: rowDefinitions(reportType).map((definition) =>
-      createRow(reportType, definition),
+      createRow(reportType, organizationId, definition),
     ),
     capabilities: {
       save: { enabled: true },
@@ -328,23 +346,30 @@ function coordinateKey(value: ReportCellCoordinate): string {
 
 export class DemoGateway implements ApplicationGateway {
   readonly mode = "demo" as const;
-  readonly #matrices = new Map<ReportType, ReportMatrixContract>();
+  readonly #matrices = new Map<string, ReportMatrixContract>();
+  readonly #organizations: OrganizationOption[] = [
+    { id: "demo-organization", name: "Головная площадка", kind: "HEAD" },
+  ];
+  readonly #layouts = new Map<string, ReportLayoutContract>();
 
   async getReportMatrix(
     query: ReportMatrixQuery,
   ): Promise<ReportMatrixContract> {
-    const existing = this.#matrices.get(query.report_type);
+    const key = `${query.report_type}:${query.organization_id}`;
+    const existing = this.#matrices.get(key);
     if (existing !== undefined) return structuredClone(existing);
 
-    const matrix = createDemoMatrix(query.report_type);
-    this.#matrices.set(query.report_type, matrix);
+    const matrix = createDemoMatrix(query.report_type, query.organization_id);
+    this.#matrices.set(key, matrix);
     return structuredClone(matrix);
   }
 
   async saveReportCells(
     request: SaveReportCellsRequest,
   ): Promise<SaveReportCellsResponse> {
-    const matrix = this.#matrices.get(request.report_type);
+    const matrix = this.#matrices.get(
+      `${request.report_type}:${request.organization_id}`,
+    );
     if (matrix === undefined) throw new Error("Demo matrix is not loaded");
     if (matrix.matrix_revision !== request.base_revision) {
       throw new Error("REVISION_CONFLICT: матрица была обновлена");
@@ -382,5 +407,70 @@ export class DemoGateway implements ApplicationGateway {
 
   async exportReport(_request: ExportRequest): Promise<ExportResult> {
     throw new Error(WORKING_REFERENCE_REASON);
+  }
+
+  async listOrganizations(): Promise<OrganizationList> {
+    return { organizations: structuredClone(this.#organizations) };
+  }
+
+  async createOrganization(name: string): Promise<OrganizationResult> {
+    const organization: OrganizationOption = {
+      id: `demo-${Date.now()}`,
+      name: name.trim(),
+      kind: "SUBSIDIARY",
+    };
+    this.#organizations.push(organization);
+    return { organization: structuredClone(organization) };
+  }
+
+  async renameOrganization(
+    organizationId: string,
+    name: string,
+  ): Promise<OrganizationResult> {
+    const organization = this.#organizations.find((item) => item.id === organizationId);
+    if (organization === undefined) throw new Error("Организация не найдена");
+    organization.name = name.trim();
+    return { organization: structuredClone(organization) };
+  }
+
+  async archiveOrganization(organizationId: string): Promise<OrganizationList> {
+    const index = this.#organizations.findIndex((item) => item.id === organizationId);
+    if (index < 0 || this.#organizations[index]?.kind === "HEAD") {
+      throw new Error("Эту организацию нельзя архивировать");
+    }
+    this.#organizations.splice(index, 1);
+    return this.listOrganizations();
+  }
+
+  async getReportLayout(query: ReportLayoutQuery): Promise<ReportLayoutContract> {
+    const key = `${query.report_type}:${query.organization_id}`;
+    const existing = this.#layouts.get(key);
+    if (existing !== undefined) return structuredClone(existing);
+    const layout: ReportLayoutContract = {
+      ...query,
+      templates: [
+        { id: "demo-position", label: "Позиция", group_kind: "COMPONENT_POSITION" },
+      ],
+      rows: [
+        {
+          id: "demo-row",
+          template_group_id: "demo-position",
+          party_name: "Изготовитель/поставщик",
+          position_name: "Позиция 1",
+        },
+      ],
+    };
+    this.#layouts.set(key, layout);
+    return structuredClone(layout);
+  }
+
+  async saveReportLayout(
+    request: SaveReportLayoutRequest,
+  ): Promise<ReportLayoutContract> {
+    const current = await this.getReportLayout(request);
+    const saved = { ...current, rows: structuredClone(request.rows) };
+    this.#layouts.set(`${request.report_type}:${request.organization_id}`, saved);
+    this.#matrices.delete(`${request.report_type}:${request.organization_id}`);
+    return structuredClone(saved);
   }
 }

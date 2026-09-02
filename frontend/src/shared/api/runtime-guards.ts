@@ -58,6 +58,7 @@ export function parseReportMatrix(value: unknown): ReportMatrixContract {
   if (
     !hasString(value, "title") ||
     !hasString(value, "subtitle") ||
+    !hasString(value, "organization_id") ||
     !hasString(value, "matrix_revision") ||
     !Array.isArray(value.rows) ||
     !Array.isArray(value.left_columns) ||

@@ -67,9 +67,6 @@ export function ReportCellView({
     >
       <span className="cell-value">{displayValue(cell.value)}</span>
       <span className="cell-markers" aria-hidden="true">
-        {cell.state.access === "calculated" && (
-          <span className="cell-marker marker-calculated">Σ</span>
-        )}
         {cell.state.access === "locked" && (
           <span className="cell-marker marker-locked">Б</span>
         )}

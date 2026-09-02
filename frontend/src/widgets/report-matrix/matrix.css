@@ -28,8 +28,7 @@
 }
 
 .title-line,
-.toolbar-actions,
-.matrix-legend {
+.toolbar-actions {
   display: flex;
   align-items: center;
 }
@@ -107,42 +106,8 @@
   border-bottom: 1px solid #f0c6cb;
 }
 
-.matrix-legend {
-  flex-wrap: wrap;
-  gap: 16px;
-  min-height: 42px;
-  padding: 9px 22px;
-  color: #52627b;
-  background: #fbfcfe;
-  border-bottom: 1px solid #dfe5ee;
-  font-size: 12px;
-}
-
-.matrix-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.legend-swatch {
-  display: inline-grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border: 1px solid #bec9d8;
-  border-radius: 4px;
-  font-style: normal;
-}
-
-.legend-swatch.input { background: #fff; }
-.legend-swatch.calculated { background: #edf1f6; }
-.legend-swatch.locked { background: #f4f1ed; }
-.legend-swatch.empty { background: #fbfcfd; }
-.legend-swatch.zero { background: #eaf2ff; }
-.legend-swatch.error { background: #ffecef; border-color: #d44c59; }
-
 .matrix-scroll {
-  max-height: calc(100vh - 330px);
+  max-height: calc(100vh - 315px);
   min-height: 310px;
   overflow: auto;
   overscroll-behavior: contain;
@@ -218,6 +183,24 @@
   text-align: left;
   font-weight: 650;
   box-shadow: 4px 0 8px rgba(26, 42, 67, 0.07);
+}
+
+.indicator-detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 3px;
+  color: #74839a;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.indicator-detail strong {
+  color: #1e4f93;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .matrix-value-cell {
@@ -303,7 +286,6 @@
   font-weight: 800;
 }
 
-.marker-calculated { color: #3f5678; background: #d6dfeb; }
 .marker-locked { color: #6a5c4c; background: #ded7ce; }
 .marker-error { color: #fff; background: #c93444; }
 .marker-dirty { color: #8f5c00; background: #ffe2a2; }
@@ -318,13 +300,4 @@
   border: 0;
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-
-.keyboard-help {
-  margin: 0;
-  padding: 10px 22px;
-  color: #718097;
-  background: #fbfcfe;
-  border-top: 1px solid #e1e7ef;
-  font-size: 11px;
 }

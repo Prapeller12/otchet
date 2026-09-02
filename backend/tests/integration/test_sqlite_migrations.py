@@ -56,7 +56,7 @@ def _seed_scope(connection: sqlite3.Connection) -> None:
 def test_migrations_apply_to_empty_database_and_are_idempotent(tmp_path: Path) -> None:
     connection = connect_sqlite(tmp_path / "empty.db")
     try:
-        assert apply_migrations(connection, MIGRATIONS) == ("0001", "0002", "0003")
+        assert apply_migrations(connection, MIGRATIONS) == ("0001", "0002", "0003", "0004")
         assert apply_migrations(connection, MIGRATIONS) == ()
 
         tables = {
@@ -77,6 +77,8 @@ def test_migrations_apply_to_empty_database_and_are_idempotent(tmp_path: Path) -
             "report_fact_revisions",
             "idempotency_records",
             "audit_events",
+            "report_workspace_profiles",
+            "report_workspace_groups",
         } <= tables
         assert connection.execute("PRAGMA foreign_keys").fetchone() == (1,)
     finally:
@@ -612,7 +614,7 @@ def test_modified_applied_migration_is_rejected(tmp_path: Path) -> None:
 def test_non_prefix_migration_history_is_rejected(tmp_path: Path) -> None:
     connection = connect_sqlite(tmp_path / "non-prefix.db")
     try:
-        assert apply_migrations(connection, MIGRATIONS) == ("0001", "0002", "0003")
+        assert apply_migrations(connection, MIGRATIONS) == ("0001", "0002", "0003", "0004")
         connection.execute("DELETE FROM schema_migrations WHERE version = '0001'")
         connection.commit()
 

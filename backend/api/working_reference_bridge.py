@@ -30,6 +30,15 @@ from backend.infrastructure.database.migrator import connect_sqlite
 from backend.infrastructure.database.sqlite_report_cells import (
     SqliteReportCellUnitOfWorkFactory,
 )
+from backend.infrastructure.database.sqlite_report_workspace import (
+    SqliteReportWorkspaceRepository,
+)
+from backend.repositories.report_workspace import (
+    SubjectKind,
+    WorkspaceGroup,
+    WorkspaceGroupDraft,
+    WorkspaceGroupTemplate,
+)
 
 _DEFINITION_FILES = {
     "DAILY_MOVEMENT": "daily-movement.working-reference.v0.1.0.json",
@@ -41,7 +50,6 @@ _TITLES = {
     "HEAD_SITE": "Головная площадка",
     "SUBSIDIARY": "Дочерние общества",
 }
-_PREVIEW_ORGANIZATION_CODE = "WRK-REFERENCE-PREVIEW"
 _IMPORT_EXPORT_REASON = "Недоступно до утверждения версии формы и координатной карты."
 
 
@@ -62,7 +70,8 @@ class WorkingReferenceApplicationBridge:
             migrations_directory=migrations_directory,
         )
         self._service = ReportCellService(SqliteReportCellUnitOfWorkFactory(self._database_path))
-        self._catalog_ids = self._ensure_preview_catalogs()
+        self._workspace = SqliteReportWorkspaceRepository(str(self._database_path))
+        self._default_organization = self._workspace.ensure_default_organization()
 
     def health(self) -> dict[str, object]:
         return self._transport.health()
@@ -74,11 +83,12 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"report_type"})
+            _reject_unknown(request, {"report_type", "organization_id"})
             report_type = _required_string(request, "report_type")
-            matrix = self._build_matrix(report_type)
+            organization_id = self._organization_id(request.get("organization_id"))
+            matrix = self._build_matrix(report_type, organization_id)
             return {"ok": True, "data": matrix, "request_id": request_id}
-        except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+        except (OSError, ValueError, KeyError, json.JSONDecodeError, ReportCellError) as error:
             return _failure("WORKING_REFERENCE_ERROR", str(error), request_id)
 
     def save_report_cells(self, payload: object) -> dict[str, object]:
@@ -87,11 +97,18 @@ class WorkingReferenceApplicationBridge:
             request = _mapping(payload, "payload")
             _reject_unknown(
                 request,
-                {"report_type", "base_revision", "idempotency_key", "changes"},
+                {
+                    "report_type",
+                    "organization_id",
+                    "base_revision",
+                    "idempotency_key",
+                    "changes",
+                },
             )
             report_type = _required_string(request, "report_type")
+            organization_id = self._organization_id(request.get("organization_id"))
             expected_matrix_revision = _required_string(request, "base_revision")
-            if expected_matrix_revision != self._matrix_revision(report_type):
+            if expected_matrix_revision != self._matrix_revision(report_type, organization_id):
                 return _failure(
                     "REVISION_CONFLICT",
                     "Матрица была изменена другим сохранением; перезагрузите форму.",
@@ -103,12 +120,12 @@ class WorkingReferenceApplicationBridge:
             ):
                 raise ReportCellValidationError("changes must be an array")
 
-            allowed = self._editable_coordinate_keys(report_type)
+            allowed = self._editable_coordinate_keys(report_type, organization_id)
             current = {
                 _coordinate_key(cell.coordinate): cell
                 for cell in self._service.get_cells(
                     report_type=report_type,
-                    organization_id=str(self._catalog_ids["organization"]),
+                    organization_id=str(organization_id),
                 )
             }
             changes: list[ReportCellChange] = []
@@ -149,7 +166,7 @@ class WorkingReferenceApplicationBridge:
             return {
                 "ok": True,
                 "data": {
-                    "matrix_revision": self._matrix_revision(report_type),
+                    "matrix_revision": self._matrix_revision(report_type, organization_id),
                     "cells": cells,
                 },
                 "request_id": request_id,
@@ -183,7 +200,143 @@ class WorkingReferenceApplicationBridge:
             uuid4().hex,
         )
 
-    def _build_matrix(self, report_type: str) -> dict[str, object]:
+    def list_organizations(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, set())
+            return {
+                "ok": True,
+                "data": {"organizations": self._organizations_contract()},
+                "request_id": request_id,
+            }
+        except (ValueError, sqlite3.Error, ReportCellError) as error:
+            return _failure("WORKSPACE_SETTINGS_ERROR", str(error), request_id)
+
+    def create_organization(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"name"})
+            organization = self._workspace.create_organization(_required_string(request, "name"))
+            return {
+                "ok": True,
+                "data": {
+                    "organization": {
+                        "id": str(organization.id),
+                        "name": organization.name,
+                        "kind": organization.kind,
+                    }
+                },
+                "request_id": request_id,
+            }
+        except (ValueError, sqlite3.Error, ReportCellError) as error:
+            return _failure("WORKSPACE_SETTINGS_ERROR", str(error), request_id)
+
+    def rename_organization(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"organization_id", "name"})
+            organization = self._workspace.rename_organization(
+                _required_int_string(request, "organization_id"),
+                _required_string(request, "name"),
+            )
+            return {
+                "ok": True,
+                "data": {
+                    "organization": {
+                        "id": str(organization.id),
+                        "name": organization.name,
+                        "kind": organization.kind,
+                    }
+                },
+                "request_id": request_id,
+            }
+        except (ValueError, sqlite3.Error, ReportCellError) as error:
+            return _failure("WORKSPACE_SETTINGS_ERROR", str(error), request_id)
+
+    def archive_organization(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"organization_id"})
+            self._workspace.archive_organization(_required_int_string(request, "organization_id"))
+            return {
+                "ok": True,
+                "data": {"organizations": self._organizations_contract()},
+                "request_id": request_id,
+            }
+        except (ValueError, sqlite3.Error, ReportCellError) as error:
+            return _failure("WORKSPACE_SETTINGS_ERROR", str(error), request_id)
+
+    def get_report_layout(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"report_type", "organization_id"})
+            report_type = _required_string(request, "report_type")
+            organization_id = self._organization_id(request.get("organization_id"))
+            templates = self._group_templates(report_type)
+            groups = self._workspace.ensure_groups(organization_id, report_type, templates)
+            return {
+                "ok": True,
+                "data": self._layout_contract(report_type, organization_id, templates, groups),
+                "request_id": request_id,
+            }
+        except (
+            OSError,
+            ValueError,
+            json.JSONDecodeError,
+            sqlite3.Error,
+            ReportCellError,
+        ) as error:
+            return _failure("WORKSPACE_SETTINGS_ERROR", str(error), request_id)
+
+    def save_report_layout(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"report_type", "organization_id", "rows"})
+            report_type = _required_string(request, "report_type")
+            organization_id = self._organization_id(request.get("organization_id"))
+            raw_rows = _sequence(request.get("rows"), "rows")
+            drafts: list[WorkspaceGroupDraft] = []
+            for raw_row in raw_rows:
+                row = _mapping(raw_row, "row")
+                _reject_unknown(row, {"id", "template_group_id", "party_name", "position_name"})
+                raw_id = row.get("id")
+                row_id = None if raw_id is None else _int_string(raw_id, "row.id")
+                drafts.append(
+                    WorkspaceGroupDraft(
+                        id=row_id,
+                        template_group_id=_required_string(row, "template_group_id"),
+                        party_name=_required_string(row, "party_name"),
+                        position_name=_required_string(row, "position_name"),
+                    )
+                )
+            templates = self._group_templates(report_type)
+            groups = self._workspace.save_groups(
+                organization_id,
+                report_type,
+                templates,
+                tuple(drafts),
+            )
+            return {
+                "ok": True,
+                "data": self._layout_contract(report_type, organization_id, templates, groups),
+                "request_id": request_id,
+            }
+        except (
+            OSError,
+            ValueError,
+            json.JSONDecodeError,
+            sqlite3.Error,
+            ReportCellError,
+        ) as error:
+            return _failure("WORKSPACE_SETTINGS_ERROR", str(error), request_id)
+
+    def _build_matrix(self, report_type: str, organization_id: int) -> dict[str, object]:
         definition = self._definition(report_type)
         periods = self._periods(report_type)
         rows: list[dict[str, object]] = []
@@ -191,11 +344,10 @@ class WorkingReferenceApplicationBridge:
             _coordinate_key(cell.coordinate): cell
             for cell in self._service.get_cells(
                 report_type=report_type,
-                organization_id=str(self._catalog_ids["organization"]),
+                organization_id=str(organization_id),
             )
         }
         layout = _mapping(definition.get("layout"), "layout")
-        groups = _sequence(layout.get("row_groups"), "row_groups")
         identifier_columns = _sequence(layout.get("identifier_columns"), "identifier_columns")
         left_columns = [
             {
@@ -205,24 +357,36 @@ class WorkingReferenceApplicationBridge:
             }
             for index, column in enumerate(identifier_columns)
         ]
+        template_groups = {
+            _required_string(group_record, "group_id"): group_record
+            for group_record in (
+                _mapping(group, "row group")
+                for group in _sequence(layout.get("row_groups"), "row_groups")
+            )
+        }
+        configured_groups = self._workspace.ensure_groups(
+            organization_id,
+            report_type,
+            self._group_templates(report_type),
+        )
 
-        for group in groups:
-            group_record = _mapping(group, "row group")
-            group_id = _required_string(group_record, "group_id")
-            group_label = _required_string(group_record, "label")
-            subject_kind, subject_id = self._subject_for_group(group_id)
+        for configured_group in configured_groups:
+            group_record = template_groups.get(configured_group.template_group_id)
+            if group_record is None:
+                raise ValueError("Настройка строки ссылается на неизвестный шаблон")
             for row in _sequence(group_record.get("rows"), "rows"):
                 row_record = _mapping(row, "row")
-                row_id = _required_string(row_record, "row_id")
+                template_row_id = _required_string(row_record, "row_id")
                 row_label = _required_string(row_record, "label")
                 editable = row_record.get("value_role") == "WORKING_INPUT"
-                code = _contract_code(row_id)
+                code = _contract_code(template_row_id)
                 cells: list[dict[str, object]] = []
                 for column_id, period_start in periods:
                     coordinate = self._coordinate(
                         report_type=report_type,
-                        subject_kind=subject_kind,
-                        subject_id=subject_id,
+                        organization_id=organization_id,
+                        subject_kind=configured_group.subject_kind,
+                        subject_id=configured_group.subject_id,
                         metric_code=code,
                         period_start=period_start,
                     )
@@ -245,9 +409,9 @@ class WorkingReferenceApplicationBridge:
 
                 left_values = {
                     _required_string(_mapping(column, "identifier column"), "column_id"): (
-                        "Рабочий пример"
+                        configured_group.party_name
                         if index == 0
-                        else group_label
+                        else configured_group.position_name
                         if index == 1
                         else row_label
                         if index == len(identifier_columns) - 1
@@ -257,16 +421,24 @@ class WorkingReferenceApplicationBridge:
                 }
                 rows.append(
                     {
-                        "id": row_id,
-                        "group_id": group_id,
-                        "group_label": group_label,
+                        "id": f"{template_row_id}-{configured_group.id}",
+                        "group_id": f"workspace-group-{configured_group.id}",
+                        "group_label": configured_group.position_name,
                         "left_values": left_values,
                         "cells": cells,
+                        "indicator_detail": (
+                            {"kind": "SUM", "label": "Сумма"}
+                            if report_type == "DAILY_MOVEMENT" and editable
+                            else {"kind": "CALCULATION", "label": "Расчёт"}
+                            if not editable
+                            else None
+                        ),
                     }
                 )
 
         return {
             "report_type": report_type,
+            "organization_id": str(organization_id),
             "title": _TITLES[report_type],
             "subtitle": "Сквозной локальный контур на обезличенных данных",
             "form_status": "WORKING_REFERENCE",
@@ -274,7 +446,7 @@ class WorkingReferenceApplicationBridge:
                 "Значения сохраняются в SQLite как декларации рабочей формы; "
                 "они не проводятся как складские операции."
             ),
-            "matrix_revision": self._matrix_revision(report_type),
+            "matrix_revision": self._matrix_revision(report_type, organization_id),
             "left_columns": left_columns,
             "time_columns": [
                 {
@@ -294,8 +466,8 @@ class WorkingReferenceApplicationBridge:
             "navigation": {"enter_direction": "down"},
         }
 
-    def _editable_coordinate_keys(self, report_type: str) -> set[str]:
-        matrix = self._build_matrix(report_type)
+    def _editable_coordinate_keys(self, report_type: str, organization_id: int) -> set[str]:
+        matrix = self._build_matrix(report_type, organization_id)
         keys: set[str] = set()
         for row in cast(list[dict[str, object]], matrix["rows"]):
             for cell in cast(list[dict[str, object]], row["cells"]):
@@ -311,6 +483,7 @@ class WorkingReferenceApplicationBridge:
         self,
         *,
         report_type: str,
+        organization_id: int,
         subject_kind: str,
         subject_id: int,
         metric_code: str,
@@ -329,7 +502,7 @@ class WorkingReferenceApplicationBridge:
         return ReportCellCoordinate.from_mapping(
             {
                 "report_type": report_type,
-                "organization_id": str(self._catalog_ids["organization"]),
+                "organization_id": str(organization_id),
                 "metric_code": metric_code,
                 **subject,
                 **time,
@@ -363,12 +536,7 @@ class WorkingReferenceApplicationBridge:
             for day in range(1, day_count + 1)
         ]
 
-    def _subject_for_group(self, group_id: str) -> tuple[str, int]:
-        if "component" in group_id or "supplier" in group_id:
-            return "component", self._catalog_ids["component"]
-        return "product", self._catalog_ids["product"]
-
-    def _matrix_revision(self, report_type: str) -> str:
+    def _matrix_revision(self, report_type: str, organization_id: int) -> str:
         connection = connect_sqlite(self._database_path)
         try:
             row = connection.execute(
@@ -377,87 +545,84 @@ class WorkingReferenceApplicationBridge:
                 FROM report_fact_revisions
                 WHERE report_type = ? AND organization_id = ?
                 """,
-                (report_type, self._catalog_ids["organization"]),
+                (report_type, organization_id),
             ).fetchone()
         finally:
             connection.close()
         return f"db-{int(row[0]) if row is not None else 0}"
 
-    def _ensure_preview_catalogs(self) -> dict[str, int]:
-        connection = connect_sqlite(self._database_path)
-        try:
-            connection.execute("BEGIN IMMEDIATE")
-            organization_id = _find_or_insert(
-                connection,
-                table="organizations",
-                code=_PREVIEW_ORGANIZATION_CODE,
-                values={"name": "Рабочий пример (не производственные данные)"},
+    def _group_templates(self, report_type: str) -> tuple[WorkspaceGroupTemplate, ...]:
+        definition = self._definition(report_type)
+        layout = _mapping(definition.get("layout"), "layout")
+        templates: list[WorkspaceGroupTemplate] = []
+        for value in _sequence(layout.get("row_groups"), "row_groups"):
+            group = _mapping(value, "row group")
+            group_kind = _required_string(group, "group_kind")
+            subject_kind: SubjectKind = (
+                "component" if group_kind in {"COMPONENT_POSITION", "SUPPLIER_ITEM"} else "product"
             )
-            product_id = _find_or_insert(
-                connection,
-                table="products",
-                code="WRK-PREVIEW-PRODUCT",
-                values={
-                    "organization_id": organization_id,
-                    "name": "Рабочее изделие",
-                },
-                organization_id=organization_id,
+            templates.append(
+                WorkspaceGroupTemplate(
+                    template_group_id=_required_string(group, "group_id"),
+                    group_kind=group_kind,
+                    default_party_name="Изготовитель/поставщик",
+                    default_position_name=_required_string(group, "label"),
+                    subject_kind=subject_kind,
+                    repeatable=group.get("repeatable") is True,
+                )
             )
-            component_id = _find_or_insert(
-                connection,
-                table="components",
-                code="WRK-PREVIEW-COMPONENT",
-                values={
-                    "organization_id": organization_id,
-                    "name": "Рабочая позиция",
-                    "kind": "WORKING_REFERENCE",
-                },
-                organization_id=organization_id,
-            )
-            connection.commit()
-        except BaseException:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
-        return {
-            "organization": organization_id,
-            "product": product_id,
-            "component": component_id,
+        return tuple(templates)
+
+    def _organization_id(self, raw_value: object) -> int:
+        organization_id = (
+            self._default_organization.id
+            if raw_value is None
+            else _int_string(raw_value, "organization_id")
+        )
+        if organization_id not in {
+            organization.id for organization in self._workspace.list_organizations()
+        }:
+            raise ValueError("Организация не найдена")
+        return organization_id
+
+    def _organizations_contract(self) -> list[dict[str, str]]:
+        return [
+            {"id": str(item.id), "name": item.name, "kind": item.kind}
+            for item in self._workspace.list_organizations()
+        ]
+
+    def _layout_contract(
+        self,
+        report_type: str,
+        organization_id: int,
+        templates: tuple[WorkspaceGroupTemplate, ...],
+        groups: tuple[WorkspaceGroup, ...],
+    ) -> dict[str, object]:
+        repeatable = {
+            template.template_group_id: template for template in templates if template.repeatable
         }
-
-
-def _find_or_insert(
-    connection: sqlite3.Connection,
-    *,
-    table: str,
-    code: str,
-    values: Mapping[str, object],
-    organization_id: int | None = None,
-) -> int:
-    if table not in {"organizations", "products", "components"}:
-        raise ValueError("unsupported preview catalogue table")
-    if organization_id is None:
-        row = connection.execute(
-            f"SELECT id FROM {table} WHERE code = ?",  # noqa: S608 - allowlisted table
-            (code,),
-        ).fetchone()
-    else:
-        row = connection.execute(
-            f"SELECT id FROM {table} WHERE organization_id = ? AND code = ?",  # noqa: S608
-            (organization_id, code),
-        ).fetchone()
-    if row is not None:
-        return int(row[0])
-    columns = ["code", *values.keys()]
-    placeholders = ", ".join("?" for _ in columns)
-    cursor = connection.execute(
-        f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",  # noqa: S608
-        (code, *values.values()),
-    )
-    if cursor.lastrowid is None:
-        raise sqlite3.DatabaseError("preview catalogue insert returned no identifier")
-    return int(cursor.lastrowid)
+        return {
+            "report_type": report_type,
+            "organization_id": str(organization_id),
+            "templates": [
+                {
+                    "id": template.template_group_id,
+                    "label": template.default_position_name,
+                    "group_kind": template.group_kind,
+                }
+                for template in repeatable.values()
+            ],
+            "rows": [
+                {
+                    "id": str(group.id),
+                    "template_group_id": group.template_group_id,
+                    "party_name": group.party_name,
+                    "position_name": group.position_name,
+                }
+                for group in groups
+                if group.template_group_id in repeatable
+            ],
+        }
 
 
 def _contract_code(value: str) -> str:
@@ -493,6 +658,16 @@ def _required_string(payload: Mapping[str, object], name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ReportCellValidationError(f"{name} must be a non-empty string")
     return value
+
+
+def _int_string(value: object, name: str) -> int:
+    if not isinstance(value, str) or not value.isdigit() or int(value) <= 0:
+        raise ReportCellValidationError(f"{name} must be a positive integer string")
+    return int(value)
+
+
+def _required_int_string(payload: Mapping[str, object], name: str) -> int:
+    return _int_string(payload.get(name), name)
 
 
 def _reject_unknown(payload: Mapping[str, object], allowed: set[str]) -> None:

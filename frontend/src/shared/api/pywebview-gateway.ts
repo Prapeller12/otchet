@@ -4,8 +4,13 @@ import type {
   ExportResult,
   ImportPreview,
   ImportRequest,
+  OrganizationList,
+  OrganizationResult,
+  ReportLayoutContract,
+  ReportLayoutQuery,
   ReportMatrixContract,
   ReportMatrixQuery,
+  SaveReportLayoutRequest,
   SaveReportCellsRequest,
   SaveReportCellsResponse,
 } from "./application-gateway";
@@ -20,6 +25,17 @@ type PyWebViewApi = {
   save_report_cells(request: SaveReportCellsRequest): Promise<BridgeEnvelope>;
   validate_import(request: ImportRequest): Promise<BridgeEnvelope>;
   export_report(request: ExportRequest): Promise<BridgeEnvelope>;
+  list_organizations(request: Record<string, never>): Promise<BridgeEnvelope>;
+  create_organization(request: { name: string }): Promise<BridgeEnvelope>;
+  rename_organization(request: {
+    organization_id: string;
+    name: string;
+  }): Promise<BridgeEnvelope>;
+  archive_organization(request: {
+    organization_id: string;
+  }): Promise<BridgeEnvelope>;
+  get_report_layout(request: ReportLayoutQuery): Promise<BridgeEnvelope>;
+  save_report_layout(request: SaveReportLayoutRequest): Promise<BridgeEnvelope>;
 };
 
 declare global {
@@ -53,7 +69,13 @@ export class PyWebViewGateway implements ApplicationGateway {
       typeof api?.get_report_matrix !== "function" ||
       typeof api.save_report_cells !== "function" ||
       typeof api.validate_import !== "function" ||
-      typeof api.export_report !== "function"
+      typeof api.export_report !== "function" ||
+      typeof api.list_organizations !== "function" ||
+      typeof api.create_organization !== "function" ||
+      typeof api.rename_organization !== "function" ||
+      typeof api.archive_organization !== "function" ||
+      typeof api.get_report_layout !== "function" ||
+      typeof api.save_report_layout !== "function"
     ) {
       throw new Error("PyWebView application bridge is incomplete");
     }
@@ -78,5 +100,38 @@ export class PyWebViewGateway implements ApplicationGateway {
 
   async exportReport(request: ExportRequest): Promise<ExportResult> {
     return unwrap(await this.#api.export_report(request)) as ExportResult;
+  }
+
+  async listOrganizations(): Promise<OrganizationList> {
+    return unwrap(await this.#api.list_organizations({})) as OrganizationList;
+  }
+
+  async createOrganization(name: string): Promise<OrganizationResult> {
+    return unwrap(await this.#api.create_organization({ name })) as OrganizationResult;
+  }
+
+  async renameOrganization(
+    organizationId: string,
+    name: string,
+  ): Promise<OrganizationResult> {
+    return unwrap(
+      await this.#api.rename_organization({ organization_id: organizationId, name }),
+    ) as OrganizationResult;
+  }
+
+  async archiveOrganization(organizationId: string): Promise<OrganizationList> {
+    return unwrap(
+      await this.#api.archive_organization({ organization_id: organizationId }),
+    ) as OrganizationList;
+  }
+
+  async getReportLayout(query: ReportLayoutQuery): Promise<ReportLayoutContract> {
+    return unwrap(await this.#api.get_report_layout(query)) as ReportLayoutContract;
+  }
+
+  async saveReportLayout(
+    request: SaveReportLayoutRequest,
+  ): Promise<ReportLayoutContract> {
+    return unwrap(await this.#api.save_report_layout(request)) as ReportLayoutContract;
   }
 }

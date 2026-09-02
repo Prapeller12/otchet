@@ -4,6 +4,7 @@ import {
   displayValue,
   isConfirmedZero,
   parseCellDraft,
+  sumCellValues,
 } from "../../src/widgets/report-matrix/cell-value";
 
 describe("matrix cell values", () => {
@@ -30,4 +31,15 @@ describe("matrix cell values", () => {
       expect(parseCellDraft(draft)).toMatchObject({ valid: false });
     },
   );
+
+  it("sums exact decimal strings without converting them to Number", () => {
+    expect(
+      sumCellValues([
+        { kind: "QUANTITY", quantity: "99999999999999999999.9" },
+        { kind: "QUANTITY", quantity: "0.1" },
+        { kind: "DATA_NOT_PROVIDED" },
+      ]),
+    ).toBe("100000000000000000000");
+    expect(sumCellValues([{ kind: "DATA_NOT_PROVIDED" }])).toBeNull();
+  });
 });

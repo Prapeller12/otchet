@@ -1,4 +1,9 @@
-import { useMemo, useState, type CSSProperties, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type KeyboardEvent,
+} from "react";
 
 import type {
   ApplicationGateway,
@@ -7,7 +12,7 @@ import type {
 } from "../../shared/api/application-gateway";
 import type { ReportCellCoordinate } from "../../shared/api/report-cell-contract";
 import { CellEditor } from "./CellEditor";
-import { inputValue, parseCellDraft } from "./cell-value";
+import { inputValue, parseCellDraft, sumCellValues } from "./cell-value";
 import {
   moveAfterEnter,
   moveByArrow,
@@ -22,6 +27,7 @@ type ReportMatrixProps = {
   gateway: ApplicationGateway;
   matrix: ReportMatrixContract;
   onChange(matrix: ReportMatrixContract): void;
+  onStatusChange(status: string): void;
 };
 
 type EditingCell = MatrixPosition & { draft: string };
@@ -105,7 +111,12 @@ function newIdempotencyKey(): string {
     : `ui-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export function ReportMatrix({ gateway, matrix, onChange }: ReportMatrixProps) {
+export function ReportMatrix({
+  gateway,
+  matrix,
+  onChange,
+  onStatusChange,
+}: ReportMatrixProps) {
   const [active, setActive] = useState<MatrixPosition>({ row: 0, column: 0 });
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(() => new Set());
@@ -115,6 +126,19 @@ export function ReportMatrix({ gateway, matrix, onChange }: ReportMatrixProps) {
   const spans = useMemo(() => groupSpans(matrix), [matrix]);
   const groups = useMemo(() => headerGroups(matrix), [matrix]);
   const offsets = useMemo(() => stickyOffsets(matrix), [matrix]);
+
+  useEffect(() => {
+    const row = matrix.rows[active.row];
+    const column = matrix.time_columns[active.column];
+    if (row === undefined || column === undefined) {
+      onStatusChange("Нет доступных строк");
+      return;
+    }
+    const identifiers = matrix.left_columns
+      .map((item) => row.left_values[item.id])
+      .filter((value): value is string => Boolean(value && value !== "—"));
+    onStatusChange(`${identifiers.join(" · ")} · ${column.label}`);
+  }, [active, matrix, onStatusChange]);
 
   function beginEdit(position: MatrixPosition): void {
     const cell = matrix.rows[position.row]?.cells[position.column];
@@ -209,6 +233,7 @@ export function ReportMatrix({ gateway, matrix, onChange }: ReportMatrixProps) {
     try {
       const result = await gateway.saveReportCells({
         report_type: matrix.report_type,
+        organization_id: matrix.organization_id,
         base_revision: matrix.matrix_revision,
         idempotency_key: newIdempotencyKey(),
         changes,
@@ -299,15 +324,6 @@ export function ReportMatrix({ gateway, matrix, onChange }: ReportMatrixProps) {
         </div>
       )}
 
-      <div className="matrix-legend" aria-label="Обозначения состояний ячеек">
-        <span><i className="legend-swatch input" />Ввод</span>
-        <span><i className="legend-swatch calculated" />Σ Расчёт</span>
-        <span><i className="legend-swatch locked" />Б Блокировка</span>
-        <span><i className="legend-swatch empty" />— Данные не представлены</span>
-        <span><i className="legend-swatch zero" />0 Подтверждённый ноль</span>
-        <span><i className="legend-swatch error" />! Ошибка</span>
-      </div>
-
       <div className="matrix-scroll" data-testid="matrix-scroll">
         <table
           className="report-matrix"
@@ -371,7 +387,18 @@ export function ReportMatrix({ gateway, matrix, onChange }: ReportMatrixProps) {
                     }}
                     scope="row"
                   >
-                    {row.left_values[column.id]}
+                    <span>{row.left_values[column.id]}</span>
+                    {leftIndex === matrix.left_columns.length - 2 &&
+                      row.indicator_detail != null && (
+                        <span className="indicator-detail">
+                          <span>{row.indicator_detail.label}</span>
+                          {row.indicator_detail.kind === "SUM" && (
+                            <strong>
+                              {sumCellValues(row.cells.map((cell) => cell.value)) ?? "—"}
+                            </strong>
+                          )}
+                        </span>
+                      )}
                   </th>
                 ))}
                 {row.cells.map((cell, columnIndex) => {
@@ -410,9 +437,6 @@ export function ReportMatrix({ gateway, matrix, onChange }: ReportMatrixProps) {
           </tbody>
         </table>
       </div>
-      <p className="keyboard-help">
-        Стрелки — переход по матрице · Enter — ввод · Tab — следующее доступное поле · Esc — отмена
-      </p>
     </section>
   );
 }
