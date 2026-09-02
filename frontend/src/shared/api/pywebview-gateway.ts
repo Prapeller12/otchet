@@ -1,5 +1,7 @@
 import type {
   ApplicationGateway,
+  CommitImportRequest,
+  CommitImportResult,
   ExportRequest,
   ExportResult,
   ImportPreview,
@@ -24,6 +26,7 @@ type PyWebViewApi = {
   get_report_matrix(query: ReportMatrixQuery): Promise<BridgeEnvelope>;
   save_report_cells(request: SaveReportCellsRequest): Promise<BridgeEnvelope>;
   validate_import(request: ImportRequest): Promise<BridgeEnvelope>;
+  commit_import(request: CommitImportRequest): Promise<BridgeEnvelope>;
   export_report(request: ExportRequest): Promise<BridgeEnvelope>;
   list_organizations(request: Record<string, never>): Promise<BridgeEnvelope>;
   create_organization(request: { name: string }): Promise<BridgeEnvelope>;
@@ -69,6 +72,7 @@ export class PyWebViewGateway implements ApplicationGateway {
       typeof api?.get_report_matrix !== "function" ||
       typeof api.save_report_cells !== "function" ||
       typeof api.validate_import !== "function" ||
+      typeof api.commit_import !== "function" ||
       typeof api.export_report !== "function" ||
       typeof api.list_organizations !== "function" ||
       typeof api.create_organization !== "function" ||
@@ -96,6 +100,10 @@ export class PyWebViewGateway implements ApplicationGateway {
 
   async validateImport(request: ImportRequest): Promise<ImportPreview> {
     return unwrap(await this.#api.validate_import(request)) as ImportPreview;
+  }
+
+  async commitImport(request: CommitImportRequest): Promise<CommitImportResult> {
+    return unwrap(await this.#api.commit_import(request)) as CommitImportResult;
   }
 
   async exportReport(request: ExportRequest): Promise<ExportResult> {

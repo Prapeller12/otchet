@@ -217,7 +217,7 @@ def test_bridge_exposes_health_bootstrap_and_safe_revision_error(database_path: 
     assert bootstrap["ok"] is True
     assert bootstrap["data"] == {
         "database_ready": True,
-        "schema_versions": ["0001", "0002", "0003", "0004"],
+        "schema_versions": ["0001", "0002", "0003", "0004", "0005"],
         "newly_applied": [],
         "contract_status": "WORKING_REFERENCE",
     }
@@ -306,8 +306,10 @@ def test_pywebview_matrix_bridge_persists_zero_and_empty_across_reload(
         bridge.export_report({"report_type": "DAILY_MOVEMENT"})["error"],
     )
     for error in (import_error, export_error):
-        assert error["code"] == "TEMPLATE_CONTRACT_NOT_APPROVED"
-        assert error["message"] == ("Недоступно до утверждения версии формы и координатной карты.")
+        assert error["code"] == "EXCEL_REPORT_ERROR"
+        assert error["message"] == (
+            "Выбор Excel-файла доступен только в запущенной desktop-версии."
+        )
 
 
 def test_workspace_bridge_configures_multiple_organizations_and_report_rows(

@@ -108,6 +108,14 @@ class PortablePaths:
         return self.root / "backups"
 
     @property
+    def imports_inbox(self) -> Path:
+        return self.root / "imports" / "inbox"
+
+    @property
+    def exports(self) -> Path:
+        return self.root / "exports"
+
+    @property
     def temp(self) -> Path:
         return self.root / "temp"
 
@@ -195,8 +203,8 @@ class PortablePaths:
             self.data,
             self.database.parent,
             self.root / "attachments",
-            self.root / "imports" / "inbox",
-            self.root / "exports",
+            self.imports_inbox,
+            self.exports,
             self.backups,
             self.temp,
         )

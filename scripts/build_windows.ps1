@@ -20,7 +20,8 @@ try {
     if ($pythonVersion.Trim() -ne "3.12") { throw "Python 3.12 x64 is required for the release build." }
     foreach ($dependency in @(
         @{ Name = "pyinstaller"; Version = "6.22.2" },
-        @{ Name = "pywebview"; Version = "6.1" }
+        @{ Name = "pywebview"; Version = "6.1" },
+        @{ Name = "openpyxl"; Version = "3.1.5" }
     )) {
         $actualVersion = & $PythonExe -c "import importlib.metadata as m; print(m.version('$($dependency.Name)'))"
         if ($LASTEXITCODE -ne 0 -or $actualVersion.Trim() -ne $dependency.Version) {

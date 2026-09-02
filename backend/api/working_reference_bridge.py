@@ -1,9 +1,4 @@
-"""PyWebView application facade for the WORKING_REFERENCE matrix preview.
-
-The facade is intentionally limited: it persists versioned matrix declarations,
-but it does not post stock/product operations and it refuses Excel import/export
-until the owner approves the form contracts and business bindings.
-"""
+"""PyWebView application facade for the local reporting workspace."""
 
 from __future__ import annotations
 
@@ -11,13 +6,14 @@ import calendar
 import json
 import re
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date, timedelta
 from pathlib import Path
 from typing import cast
 from uuid import uuid4
 
 from backend.api.bridge import DesktopBridge
+from backend.application.excel_reports import ExcelReportError, ExcelReportService
 from backend.application.report_cells import (
     ReportCellChange,
     ReportCellCoordinate,
@@ -27,11 +23,17 @@ from backend.application.report_cells import (
     ReportCellValue,
 )
 from backend.infrastructure.database.migrator import connect_sqlite
+from backend.infrastructure.database.sqlite_excel_imports import (
+    SqliteExcelImportRepository,
+)
 from backend.infrastructure.database.sqlite_report_cells import (
     SqliteReportCellUnitOfWorkFactory,
 )
 from backend.infrastructure.database.sqlite_report_workspace import (
     SqliteReportWorkspaceRepository,
+)
+from backend.infrastructure.excel.openpyxl_matrix_workbook import (
+    OpenpyxlMatrixWorkbookAdapter,
 )
 from backend.repositories.report_workspace import (
     SubjectKind,
@@ -50,7 +52,7 @@ _TITLES = {
     "HEAD_SITE": "Головная площадка",
     "SUBSIDIARY": "Дочерние общества",
 }
-_IMPORT_EXPORT_REASON = "Недоступно до утверждения версии формы и координатной карты."
+_FILE_DIALOG_REASON = "Выбор Excel-файла доступен только в запущенной desktop-версии."
 
 
 class WorkingReferenceApplicationBridge:
@@ -62,6 +64,9 @@ class WorkingReferenceApplicationBridge:
         *,
         migrations_directory: str | Path,
         definitions_directory: str | Path,
+        inbox_directory: str | Path | None = None,
+        backups_directory: str | Path | None = None,
+        application_version: str = "development",
     ) -> None:
         self._database_path = Path(database_path)
         self._definitions_directory = Path(definitions_directory)
@@ -72,6 +77,29 @@ class WorkingReferenceApplicationBridge:
         self._service = ReportCellService(SqliteReportCellUnitOfWorkFactory(self._database_path))
         self._workspace = SqliteReportWorkspaceRepository(str(self._database_path))
         self._default_organization = self._workspace.ensure_default_organization()
+        root = self._database_path.parent.parent
+        self._excel = ExcelReportService(
+            report_cells=self._service,
+            import_repository=SqliteExcelImportRepository(str(self._database_path)),
+            workbook_adapter=OpenpyxlMatrixWorkbookAdapter(),
+            database_path=self._database_path,
+            inbox_directory=Path(inbox_directory or root / "imports" / "inbox"),
+            backups_directory=Path(backups_directory or root / "backups"),
+            application_version=application_version,
+        )
+        self._open_excel_file: Callable[[], Path | None] | None = None
+        self._save_excel_file: Callable[[str], Path | None] | None = None
+
+    def configure_excel_dialogs(
+        self,
+        *,
+        open_file: Callable[[], Path | None],
+        save_file: Callable[[str], Path | None],
+    ) -> None:
+        """Attach native file dialogs after the PyWebView window exists."""
+
+        self._open_excel_file = open_file
+        self._save_excel_file = save_file
 
     def health(self) -> dict[str, object]:
         return self._transport.health()
@@ -186,19 +214,65 @@ class WorkingReferenceApplicationBridge:
                 request_id,
             )
 
-    def validate_import(self, _payload: object) -> dict[str, object]:
-        return _failure(
-            "TEMPLATE_CONTRACT_NOT_APPROVED",
-            _IMPORT_EXPORT_REASON,
-            uuid4().hex,
-        )
+    def validate_import(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"report_type", "organization_id"})
+            report_type = _required_string(request, "report_type")
+            organization_id = self._organization_id(request.get("organization_id"))
+            if self._open_excel_file is None:
+                raise ExcelReportError(_FILE_DIALOG_REASON)
+            source = self._open_excel_file()
+            if source is None:
+                return {"ok": True, "data": {"cancelled": True}, "request_id": request_id}
+            preview = self._excel.stage_import(
+                source,
+                report_type=report_type,
+                organization_id=organization_id,
+                matrix=self._build_matrix(report_type, organization_id),
+            )
+            return {"ok": True, "data": preview.to_dict(), "request_id": request_id}
+        except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
+            code = error.code if isinstance(error, ExcelReportError) else "EXCEL_IMPORT_ERROR"
+            return _failure(code, str(error), request_id)
 
-    def export_report(self, _payload: object) -> dict[str, object]:
-        return _failure(
-            "TEMPLATE_CONTRACT_NOT_APPROVED",
-            _IMPORT_EXPORT_REASON,
-            uuid4().hex,
-        )
+    def commit_import(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"batch_id"})
+            result = self._excel.commit_import(_required_string(request, "batch_id"))
+            return {"ok": True, "data": result, "request_id": request_id}
+        except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
+            code = (
+                error.code
+                if isinstance(error, (ExcelReportError, ReportCellError))
+                else "EXCEL_IMPORT_ERROR"
+            )
+            return _failure(code, str(error), request_id)
+
+    def export_report(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"report_type", "organization_id"})
+            report_type = _required_string(request, "report_type")
+            organization_id = self._organization_id(request.get("organization_id"))
+            if self._save_excel_file is None:
+                raise ExcelReportError(_FILE_DIALOG_REASON)
+            suggested = f"{report_type.lower()}-{organization_id}-{date.today().isoformat()}.xlsx"
+            destination = self._save_excel_file(suggested)
+            if destination is None:
+                return {"ok": True, "data": {"cancelled": True}, "request_id": request_id}
+            result = self._excel.export(
+                destination,
+                self._build_matrix(report_type, organization_id),
+            )
+            return {"ok": True, "data": result, "request_id": request_id}
+        except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
+            code = error.code if isinstance(error, ExcelReportError) else "EXCEL_EXPORT_ERROR"
+            return _failure(code, str(error), request_id)
 
     def list_organizations(self, payload: object) -> dict[str, object]:
         request_id = uuid4().hex
@@ -460,8 +534,16 @@ class WorkingReferenceApplicationBridge:
             "rows": rows,
             "capabilities": {
                 "save": {"enabled": True},
-                "import": {"enabled": False, "reason": _IMPORT_EXPORT_REASON},
-                "export": {"enabled": False, "reason": _IMPORT_EXPORT_REASON},
+                "import": (
+                    {"enabled": True}
+                    if self._open_excel_file is not None
+                    else {"enabled": False, "reason": _FILE_DIALOG_REASON}
+                ),
+                "export": (
+                    {"enabled": True}
+                    if self._save_excel_file is not None
+                    else {"enabled": False, "reason": _FILE_DIALOG_REASON}
+                ),
             },
             "navigation": {"enter_direction": "down"},
         }
