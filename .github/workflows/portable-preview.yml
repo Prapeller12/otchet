@@ -47,8 +47,17 @@ jobs:
       - name: Run packaged self-test
         shell: pwsh
         run: |
-          & ./dist/portable/ReportingSystem/ReportingSystem.exe --self-test
-          if ($LASTEXITCODE -ne 0) { throw "Packaged self-test failed." }
+          $report = "./dist/portable/ReportingSystem/temp/self-test-result.txt"
+          & ./dist/portable/ReportingSystem/ReportingSystem.exe `
+            --self-test `
+            --self-test-report $report
+          if ($LASTEXITCODE -ne 0) {
+            if (Test-Path $report) { Get-Content $report }
+            throw "Packaged self-test failed."
+          }
+          if ((Get-Content $report -Raw).Trim() -ne "ok") {
+            throw "Packaged self-test did not produce a success report."
+          }
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

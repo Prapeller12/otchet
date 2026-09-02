@@ -103,6 +103,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--self-test", action="store_true", help="Validate release without opening UI"
     )
+    parser.add_argument("--self-test-report", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--root", type=Path, help=argparse.SUPPRESS)
     return parser
 
@@ -114,6 +115,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if arguments.self_test:
             _self_test(paths)
+            if arguments.self_test_report is not None:
+                arguments.self_test_report.write_text("ok\n", encoding="utf-8")
             return 0
         paths.validate_release_layout(require_frontend=True)
         paths.prepare_writable_directories()
@@ -126,6 +129,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         _show_error(str(exc))
         return 2
     except (ImportError, OSError, PortableLayoutError, RuntimeError, sqlite3.Error) as exc:
+        if arguments.self_test_report is not None:
+            arguments.self_test_report.parent.mkdir(parents=True, exist_ok=True)
+            arguments.self_test_report.write_text(
+                f"{type(exc).__name__}: {exc}\n", encoding="utf-8"
+            )
         _show_error(f"Программа не может быть запущена:\n{exc}")
         return 1
 
