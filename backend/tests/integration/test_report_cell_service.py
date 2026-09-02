@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import date
 from pathlib import Path
 from typing import Any, cast
 
@@ -216,7 +217,7 @@ def test_bridge_exposes_health_bootstrap_and_safe_revision_error(database_path: 
     assert bootstrap["ok"] is True
     assert bootstrap["data"] == {
         "database_ready": True,
-        "schema_versions": ["0001", "0002", "0003"],
+        "schema_versions": ["0001", "0002", "0003", "0004"],
         "newly_applied": [],
         "contract_status": "WORKING_REFERENCE",
     }
@@ -307,3 +308,146 @@ def test_pywebview_matrix_bridge_persists_zero_and_empty_across_reload(
     for error in (import_error, export_error):
         assert error["code"] == "TEMPLATE_CONTRACT_NOT_APPROVED"
         assert error["message"] == ("Недоступно до утверждения версии формы и координатной карты.")
+
+
+def test_workspace_bridge_configures_multiple_organizations_and_report_rows(
+    database_path: Path,
+) -> None:
+    bridge = WorkingReferenceApplicationBridge(
+        database_path,
+        migrations_directory=MIGRATIONS,
+        definitions_directory=DEFINITIONS,
+    )
+    initial = cast(dict[str, Any], bridge.list_organizations({})["data"])
+    initial_organizations = cast(list[dict[str, str]], initial["organizations"])
+    root_id = initial_organizations[0]["id"]
+
+    first_child = cast(
+        dict[str, Any],
+        bridge.create_organization({"name": "Дочернее общество Север"})["data"],
+    )["organization"]
+    second_child = cast(
+        dict[str, Any],
+        bridge.create_organization({"name": "Дочернее общество Восток"})["data"],
+    )["organization"]
+    assert first_child["id"] != second_child["id"]
+
+    layout_response = bridge.get_report_layout(
+        {"report_type": "DAILY_MOVEMENT", "organization_id": root_id}
+    )
+    assert layout_response["ok"] is True
+    layout = cast(dict[str, Any], layout_response["data"])
+    rows = cast(list[dict[str, Any]], layout["rows"])
+    templates = cast(list[dict[str, Any]], layout["templates"])
+    assert len(rows) == 3
+
+    edited = {**rows[0], "party_name": "Поставщик А", "position_name": "ПКИ-101"}
+    added = {
+        "id": None,
+        "template_group_id": templates[0]["id"],
+        "party_name": "Поставщик Б",
+        "position_name": "ПКИ-202",
+    }
+    saved = bridge.save_report_layout(
+        {
+            "report_type": "DAILY_MOVEMENT",
+            "organization_id": root_id,
+            "rows": [edited, added],
+        }
+    )
+    assert saved["ok"] is True
+    saved_layout = cast(dict[str, Any], saved["data"])
+    assert [row["position_name"] for row in cast(list[dict[str, Any]], saved_layout["rows"])] == [
+        "ПКИ-101",
+        "ПКИ-202",
+    ]
+
+    matrix_response = bridge.get_report_matrix(
+        {"report_type": "DAILY_MOVEMENT", "organization_id": root_id}
+    )
+    matrix = cast(dict[str, Any], matrix_response["data"])
+    matrix_rows = cast(list[dict[str, Any]], matrix["rows"])
+    assert matrix["organization_id"] == root_id
+    assert matrix_rows[0]["left_values"]["wrk-daily-party"] == "Поставщик А"
+    assert matrix_rows[0]["left_values"]["wrk-daily-position"] == "ПКИ-101"
+    assert matrix_rows[0]["indicator_detail"] == {"kind": "SUM", "label": "Сумма"}
+
+    archived = bridge.archive_organization({"organization_id": second_child["id"]})
+    active = cast(dict[str, Any], archived["data"])
+    active_ids = {row["id"] for row in cast(list[dict[str, str]], active["organizations"])}
+    assert second_child["id"] not in active_ids
+
+    connection = connect_sqlite(database_path)
+    try:
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM report_workspace_groups WHERE is_active = 0"
+            ).fetchone()[0]
+            >= 2
+        )
+        assert connection.execute(
+            "SELECT count(*) FROM audit_events WHERE action = 'SAVE_WORKSPACE_LAYOUT'"
+        ).fetchone() == (1,)
+    finally:
+        connection.close()
+
+
+def test_workspace_upgrade_keeps_preview_cells_visible(database_path: Path) -> None:
+    connection = connect_sqlite(database_path)
+    try:
+        organization = connection.execute(
+            """
+            INSERT INTO organizations (code, name)
+            VALUES ('WRK-REFERENCE-PREVIEW', 'Рабочий пример')
+            """
+        )
+        organization_id = int(organization.lastrowid or 0)
+        component = connection.execute(
+            """
+            INSERT INTO components (organization_id, code, name, kind)
+            VALUES (?, 'WRK-PREVIEW-COMPONENT', 'Рабочая позиция', 'WORKING_REFERENCE')
+            """,
+            (organization_id,),
+        )
+        component_id = int(component.lastrowid or 0)
+        connection.execute(
+            """
+            INSERT INTO products (organization_id, code, name)
+            VALUES (?, 'WRK-PREVIEW-PRODUCT', 'Рабочее изделие')
+            """,
+            (organization_id,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    report_cells = service(database_path)
+    report_cells.save_cells(
+        [
+            ReportCellChange(
+                coordinate=ReportCellCoordinate(
+                    report_type="DAILY_MOVEMENT",
+                    organization_id=str(organization_id),
+                    component_id=str(component_id),
+                    metric_code="WRK_DAILY_RECEIVED",
+                    operation_date=date.today().replace(day=1).isoformat(),
+                ),
+                value=ReportCellValue(kind="QUANTITY", quantity="17"),
+                expected_revision=None,
+            )
+        ],
+        idempotency_key="legacy-preview-value",
+        actor_ref="previous-preview",
+    )
+
+    bridge = WorkingReferenceApplicationBridge(
+        database_path,
+        migrations_directory=MIGRATIONS,
+        definitions_directory=DEFINITIONS,
+    )
+    response = bridge.get_report_matrix({"report_type": "DAILY_MOVEMENT"})
+    assert response["ok"] is True
+    matrix = cast(dict[str, Any], response["data"])
+    first_row = cast(list[dict[str, Any]], matrix["rows"])[0]
+    first_cell = cast(list[dict[str, Any]], first_row["cells"])[0]
+    assert first_cell["value"] == {"kind": "QUANTITY", "quantity": "17"}
