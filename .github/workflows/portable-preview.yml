@@ -47,11 +47,16 @@ jobs:
       - name: Run packaged self-test
         shell: pwsh
         run: |
-          $report = "./dist/portable/ReportingSystem/temp/self-test-result.txt"
-          & ./dist/portable/ReportingSystem/ReportingSystem.exe `
-            --self-test `
-            --self-test-report $report
-          if ($LASTEXITCODE -ne 0) {
+          $executable = (Resolve-Path "./dist/portable/ReportingSystem/ReportingSystem.exe").Path
+          $report = [System.IO.Path]::GetFullPath(
+            "./dist/portable/ReportingSystem/temp/self-test-result.txt"
+          )
+          $process = Start-Process `
+            -FilePath $executable `
+            -ArgumentList @("--self-test", "--self-test-report", $report) `
+            -Wait `
+            -PassThru
+          if ($process.ExitCode -ne 0) {
             if (Test-Path $report) { Get-Content $report }
             throw "Packaged self-test failed."
           }
