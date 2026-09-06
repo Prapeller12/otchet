@@ -52,7 +52,7 @@ DEV-документация v0.5 утверждена владельцем пр
 ## Запуск технического preview
 
 Готовая Windows x64 тестовая сборка публикуется в
-[GitHub Releases](https://github.com/Prapeller12/otchet/releases/tag/test-v0.1.0-dev.3).
+[GitHub Releases](https://github.com/Prapeller12/otchet/releases/tag/test-v0.1.0-dev.4).
 Скачайте ZIP, полностью распакуйте его и запустите `start.cmd`. Python и Node.js на
 пользовательском компьютере не требуются. Эта тестовая сборка использует уже установленный
 системный WebView2; автономная поставка Fixed Runtime остаётся отдельным вариантом сборки.

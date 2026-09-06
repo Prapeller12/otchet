@@ -139,6 +139,7 @@ def test_configuration_images_formulas_and_history_survive_restart(
         {"category": "FAKE"},
         {"norm": "0"},
         {"norm": "NaN"},
+        {"norm": "1e-999999999"},
         {"image": "data:image/png;base64,SGVsbG8="},
         {"image": "https://outside/image.png"},
         {"indicators": [{"code": "A", "label": "A", "formula": "=A+1"}]},

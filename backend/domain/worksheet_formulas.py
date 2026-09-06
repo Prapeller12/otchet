@@ -87,9 +87,13 @@ def evaluate_formula(
             source = expression.strip().removeprefix("=").strip().replace(";", ",")
             source = re.sub(r"(?<![<>=!])=(?!=)", "==", source.replace("<>", "!="))
             value = Decimal(ast.get_source_segment(source, node) or str(node.value))
-            if not value.is_finite() or abs(value) > Decimal("1e100"):
+            if (
+                not value.is_finite()
+                or value.copy_abs() > Decimal("1e100")
+                or (value != 0 and value.copy_abs() < Decimal("1e-100"))
+            ):
                 raise FormulaError("Число вне допустимого диапазона")
-            return value
+            return Decimal(0) if value == 0 else value
         if isinstance(node, ast.Name):
             return resolve(node.id)
         if isinstance(node, ast.UnaryOp):
@@ -151,8 +155,12 @@ def evaluate_formula(
         with localcontext() as context:
             context.prec = 120
             result = visit(tree.body)
-            if result is not None and (not result.is_finite() or abs(result) > Decimal("1e100")):
+            if result is not None and (
+                not result.is_finite()
+                or result.copy_abs() > Decimal("1e100")
+                or (result != 0 and result.copy_abs() < Decimal("1e-100"))
+            ):
                 raise FormulaError("Результат вне допустимого диапазона")
-            return result
+            return Decimal(0) if result == 0 else result
     except DecimalException as exc:
         raise FormulaError("Ошибка десятичного расчёта") from exc

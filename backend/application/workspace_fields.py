@@ -39,10 +39,16 @@ def validate_configuration(raw: object) -> dict[str, Any]:
                 number = Decimal(value)
             except InvalidOperation as exc:
                 raise ValueError("Неверное числовое значение настройки") from exc
-            if not number.is_finite() or abs(number) > Decimal("1e50"):
+            if (
+                not number.is_finite()
+                or number.copy_abs() > Decimal("1e50")
+                or (number != 0 and number.copy_abs() < Decimal("1e-50"))
+            ):
                 raise ValueError("Числовая настройка вне допустимого диапазона")
             if key == "norm" and number <= 0:
                 raise ValueError("Норма входимости должна быть больше нуля")
+            if number == 0:
+                value = "0"
         result[key] = value
     image = raw.get("image", "")
     if not isinstance(image, str) or len(image) > 2_800_000:

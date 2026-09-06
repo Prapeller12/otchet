@@ -17,6 +17,7 @@ from backend.domain.worksheet_formulas import FormulaError, evaluate_formula
         ("=IF(2<>1,30,0)", "30"),
         ("=MISSING+2", None),
         ("=CUM(A)", "19"),
+        ("=0e-999999999", "0"),
         ("=0.123456789012345678901234567890123", "0.123456789012345678901234567890123"),
     ],
 )
@@ -40,6 +41,7 @@ def test_formulas(formula: str, expected: str | None) -> None:
         "='text'",
         "=ROUNDDOWN(1,999)",
         "=1e999",
+        "=1e-999999999",
         "=open(1)",
     ],
 )
