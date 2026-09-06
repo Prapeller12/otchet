@@ -5,9 +5,19 @@ from pathlib import Path
 
 import pytest
 
+from backend.desktop.application_self_test import run_application_self_test
 from backend.desktop.database_bootstrap import backup_and_migrate
 from backend.desktop.instance_lock import AlreadyRunningError, SingleInstanceLock
 from backend.desktop.paths import PortableLayoutError, PortablePaths
+
+
+def test_application_self_test_covers_packaged_dependencies(tmp_path: Path) -> None:
+    root = Path(__file__).resolve().parents[3]
+    database = tmp_path / "self-test.sqlite3"
+    backup_and_migrate(database, root / "backend/migrations", tmp_path / "backups", "alpha")
+    run_application_self_test(
+        database, root / "backend/migrations", root / "resources/report-definitions"
+    )
 
 
 def _write_config(root: Path, *, network: bool = False, webview2_mode: str = "fixed") -> None:

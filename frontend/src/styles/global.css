@@ -360,7 +360,9 @@ main {
 
 .layout-row-editor {
   display: grid;
-  grid-template-columns: minmax(140px, 0.8fr) minmax(170px, 1fr) minmax(170px, 1fr) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  margin: 0;
   gap: 8px;
   align-items: center;
   padding: 9px;
@@ -368,6 +370,20 @@ main {
   border: 1px solid #d7e0ea;
   border-radius: 7px;
 }
+
+.layout-row-editor > .row-actions { grid-column: 1 / -1; }
+.layout-row-editor .mini-button { width: auto; min-width: 29px; padding: 3px 7px; height: auto; min-height: 29px; }
+.position-fields { grid-column: 1 / -1; min-width: 0; }
+.position-fields summary { padding: 10px 0; cursor: pointer; color: #2455a0; }
+.position-fields fieldset { padding: 0; border: 0; margin: 0; min-width: 0; }
+.position-properties { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.position-properties input { min-width: 0; max-width: 100%; }
+.position-picture { display: flex; align-items: center; gap: 10px; }
+.position-picture img { width: 88px; height: 72px; object-fit: contain; background: white; }
+.field-help { color: #52617a; font-size: 12px; line-height: 1.5; }
+.field-indicator { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 0; border-top: 1px solid #d7e0ea; }
+.field-indicator .formula-editor { grid-column: 1 / -1; }
+.formula-editor input { font-family: monospace; }
 
 .row-actions {
   display: flex;

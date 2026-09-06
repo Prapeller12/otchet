@@ -58,7 +58,7 @@ export function ReportCellView({
       aria-readonly={cell.state.access !== "editable"}
       aria-invalid={cell.state.persistence === "error"}
       aria-label={`${valueText(cell)}, ${accessText(cell)}${issueText}`}
-      title={cell.issue?.message ?? cell.lock_reason}
+      title={cell.issue?.message ?? cell.formula ?? cell.lock_reason}
       onClick={() => onActivate(position)}
       onDoubleClick={() => {
         if (cell.state.access === "editable") onEdit(position);

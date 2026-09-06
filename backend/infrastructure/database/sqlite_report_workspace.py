@@ -272,13 +272,14 @@ class SqliteReportWorkspaceRepository:
             _require_active_organization(connection, organization_id)
             existing_rows = connection.execute(
                 """
-                SELECT id, template_group_id FROM report_workspace_groups
+                SELECT id, template_group_id, configuration_json FROM report_workspace_groups
                 WHERE organization_id = ? AND report_type = ?
                 """,
                 (organization_id, report_type),
             ).fetchall()
             existing = {int(row[0]): str(row[1]) for row in existing_rows}
             retained: set[int] = set()
+            configurations = {int(row[0]): str(row[2]) for row in existing_rows}
             for sort_order, draft in enumerate(drafts):
                 template = template_map.get(draft.template_group_id)
                 if template is None or not template.repeatable:
@@ -294,15 +295,21 @@ class SqliteReportWorkspaceRepository:
                         party_name=party_name,
                         position_name=position_name,
                         sort_order=sort_order,
+                        configuration_json=draft.configuration_json or "{}",
                     )
                     retained.add(group_id)
                     continue
-                if existing.get(draft.id) != draft.template_group_id:
+                if (
+                    draft.id not in existing
+                    or draft.id in retained
+                    or not template_map[existing[draft.id]].repeatable
+                ):
                     raise ValueError("Строка не принадлежит выбранной форме")
                 connection.execute(
                     """
                     UPDATE report_workspace_groups
                     SET party_name = ?, position_name = ?, sort_order = ?, is_active = 1,
+                        template_group_id = ?, configuration_json = ?,
                         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                     WHERE id = ? AND organization_id = ? AND report_type = ?
                     """,
@@ -310,6 +317,10 @@ class SqliteReportWorkspaceRepository:
                         party_name,
                         position_name,
                         sort_order,
+                        draft.template_group_id,
+                        draft.configuration_json
+                        if draft.configuration_json is not None
+                        else configurations[draft.id],
                         draft.id,
                         organization_id,
                         report_type,
@@ -333,15 +344,38 @@ class SqliteReportWorkspaceRepository:
                     sql += f" AND id NOT IN ({retained_placeholders})"
                     parameters.extend(sorted(retained))
                 connection.execute(sql, parameters)
+            for index, template in enumerate(item for item in templates if not item.repeatable):
+                connection.execute(
+                    "UPDATE report_workspace_groups SET sort_order = ? "
+                    "WHERE organization_id = ? AND report_type = ? AND template_group_id = ?",
+                    (len(drafts) + index, organization_id, report_type, template.template_group_id),
+                )
             _audit(
                 connection,
                 entity_type="report_workspace",
                 entity_id=f"{organization_id}:{report_type}",
                 action="SAVE_WORKSPACE_LAYOUT",
+                before={
+                    "configurations": {
+                        str(key): json.loads(value) for key, value in configurations.items()
+                    }
+                },
                 after={
                     "organization_id": organization_id,
                     "report_type": report_type,
                     "active_group_ids": sorted(retained),
+                    "configurations": [
+                        {
+                            "id": draft.id,
+                            "template": draft.template_group_id,
+                            "party_name": draft.party_name,
+                            "position_name": draft.position_name,
+                            "configuration": json.loads(
+                                draft.configuration_json or configurations.get(draft.id or 0, "{}")
+                            ),
+                        }
+                        for draft in drafts
+                    ],
                 },
             )
             connection.commit()
@@ -358,7 +392,7 @@ class SqliteReportWorkspaceRepository:
             rows = connection.execute(
                 """
                 SELECT id, template_group_id, party_name, position_name, subject_kind,
-                       product_id, component_id, sort_order
+                       product_id, component_id, sort_order, configuration_json
                 FROM report_workspace_groups
                 WHERE organization_id = ? AND report_type = ? AND is_active = 1
                 ORDER BY sort_order, id
@@ -376,6 +410,7 @@ class SqliteReportWorkspaceRepository:
                     subject_kind=cast(SubjectKind, row[4]),
                     subject_id=int(row[5] if row[4] == "product" else row[6]),
                     sort_order=int(row[7]),
+                    configuration_json=str(row[8]),
                 )
                 for row in rows
             )
@@ -393,6 +428,7 @@ def _insert_group(
     position_name: str,
     sort_order: int,
     subject_id: int | None = None,
+    configuration_json: str = "{}",
 ) -> int:
     if subject_id is not None:
         product_id = subject_id if template.subject_kind == "product" else None
@@ -425,8 +461,8 @@ def _insert_group(
         """
         INSERT INTO report_workspace_groups (
             organization_id, report_type, template_group_id, party_name, position_name,
-            subject_kind, product_id, component_id, sort_order
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            subject_kind, product_id, component_id, sort_order, configuration_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             organization_id,
@@ -438,6 +474,7 @@ def _insert_group(
             product_id,
             component_id,
             sort_order,
+            configuration_json,
         ),
     )
     if cursor.lastrowid is None:
