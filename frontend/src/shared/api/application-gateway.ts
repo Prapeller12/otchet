@@ -39,12 +39,15 @@ export type MatrixCellContract = ReportCellContract & {
   column_id: string;
   issue?: CellIssue;
   lock_reason?: string;
+  formula?: string;
 };
 
 export type MatrixRowContract = {
   id: string;
   group_id: string;
   group_label: string;
+  category?: string;
+  image?: string;
   left_values: Record<string, string>;
   cells: MatrixCellContract[];
   indicator_detail?:
@@ -164,6 +167,17 @@ export type ReportLayoutTemplate = {
   id: string;
   label: string;
   group_kind: string;
+  indicators?: FieldIndicator[];
+};
+
+export type FieldIndicator = { code: string; label: string; formula: string };
+export type FieldPreset = { label: string; required_codes: string[]; indicators: FieldIndicator[] };
+export type FieldConfiguration = {
+  category: string;
+  image: string;
+  norm: string;
+  opening: string;
+  indicators: FieldIndicator[];
 };
 
 export type ReportLayoutRow = {
@@ -171,6 +185,7 @@ export type ReportLayoutRow = {
   template_group_id: string;
   party_name: string;
   position_name: string;
+  configuration?: FieldConfiguration;
 };
 
 export type ReportLayoutContract = {
@@ -178,6 +193,7 @@ export type ReportLayoutContract = {
   organization_id: string;
   templates: ReportLayoutTemplate[];
   rows: ReportLayoutRow[];
+  presets?: FieldPreset[];
 };
 
 export type ReportLayoutQuery = {

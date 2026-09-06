@@ -12,6 +12,7 @@ from typing import cast
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.cell import Cell
+from openpyxl.comments import Comment
 from openpyxl.formatting.rule import CellIsRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Side
 from openpyxl.utils import get_column_letter
@@ -140,6 +141,13 @@ class OpenpyxlMatrixWorkbookAdapter:
                 _body(target, border, fill)
                 target.number_format = "0.###############"
                 target.protection = Protection(locked=access != "editable")
+                if contract.get("formula"):
+                    target.comment = Comment(
+                        "Расчёт backend: "
+                        + str(contract["formula"])
+                        + "\nСнимок на момент экспорта. Пересчёт после импорта в программу.",
+                        "Reporting System",
+                    )
                 if access == "editable":
                     coordinate = _mapping(contract.get("coordinate"), "cell.coordinate")
                     coordinate_json = json.dumps(

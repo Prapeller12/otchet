@@ -18,8 +18,13 @@ DEV-документация v0.5 утверждена владельцем пр
 
 Полученные формы зафиксированы как `WORKING_REFERENCE`, но не считаются утверждёнными
 эталонами. Интерфейс использует только синтетические preview-идентификаторы, не проводит
-введённые значения как складские операции и блокирует Excel import/export до утверждения
-карты ячеек. Это запускаемый технический preview, но ещё не производственная версия.
+введённые значения как складские операции. Excel import/export работает с книгами,
+выгруженными программой для той же формы и организации. Это запускаемая тестовая версия.
+
+В версии 0.1.0-dev.3 добавлены категории ПКИ/ДСЕ/составная часть, изображения PNG/JPEG,
+копирование структуры позиций, собственные показатели и backend-формулы.
+Откройте «Настроить рабочее поле» → «Изображение, показатели и формулы».
+Пошаговый сценарий и границы альфа-проверки: [alpha-dev3.md](docs/test-cases/alpha-dev3.md).
 
 Актуальное состояние и блокирующие вопросы перечислены в [docs/project-status.md](docs/project-status.md).
 
@@ -47,9 +52,10 @@ DEV-документация v0.5 утверждена владельцем пр
 ## Запуск технического preview
 
 Готовая Windows x64 тестовая сборка публикуется в
-[GitHub Releases](https://github.com/Prapeller12/otchet/releases/tag/test-v0.1.0-dev.2).
+[GitHub Releases](https://github.com/Prapeller12/otchet/releases/tag/test-v0.1.0-dev.4).
 Скачайте ZIP, полностью распакуйте его и запустите `start.cmd`. Python и Node.js на
-пользовательском компьютере не требуются.
+пользовательском компьютере не требуются. Эта тестовая сборка использует уже установленный
+системный WebView2; автономная поставка Fixed Runtime остаётся отдельным вариантом сборки.
 
 Для браузерной разработки (данные хранятся только в памяти вкладки):
 
@@ -71,6 +77,7 @@ Windows ZIP собирается скриптом `scripts/build_windows.ps1` т
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install "jsonschema>=4.23,<5" "pytest>=8.3,<9" "ruff>=0.6,<1" "mypy>=1.11,<2"
+.venv/bin/python -m pip install "openpyxl==3.1.5" "Pillow==12.3.0" "types-openpyxl==3.1.5.20260827"
 .venv/bin/python scripts/verify_repository.py
 .venv/bin/ruff check backend scripts
 .venv/bin/ruff format --check backend scripts

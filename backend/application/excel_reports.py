@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, cast
@@ -204,7 +204,9 @@ class ExcelReportService:
         )
         return _preview(batch)
 
-    def commit_import(self, batch_id: str) -> dict[str, object]:
+    def commit_import(
+        self, batch_id: str, *, allowed_coordinates: Callable[[str, str], set[str]]
+    ) -> dict[str, object]:
         if len(batch_id) != 32 or not batch_id.isalnum():
             raise ExcelWorkbookValidationError("Некорректный идентификатор пакета импорта")
         batch = self._imports.get_batch(batch_id)
@@ -214,6 +216,13 @@ class ExcelReportService:
             raise ExcelWorkbookValidationError("Импорт содержит ошибки и не может быть проведён")
         if batch.status == "COMMITTED":
             return _commit_result(batch, backup_file=None, already_committed=True)
+
+        allowed = allowed_coordinates(batch.report_type, str(batch.organization_id))
+        for row in batch.rows:
+            if row.coordinate_json not in allowed:
+                raise ExcelWorkbookValidationError(
+                    "Настройка формы изменилась после предпросмотра; проверьте импорт заново"
+                )
 
         changes = [
             ReportCellChange(

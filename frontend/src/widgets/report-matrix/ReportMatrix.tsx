@@ -12,6 +12,7 @@ import type {
   ReportMatrixContract,
 } from "../../shared/api/application-gateway";
 import type { ReportCellCoordinate } from "../../shared/api/report-cell-contract";
+import { CATEGORY_LABELS } from "../../features/workspace-settings/PositionFieldsEditor";
 import { CellEditor } from "./CellEditor";
 import { inputValue, parseCellDraft, sumCellValues } from "./cell-value";
 import {
@@ -147,7 +148,7 @@ export function ReportMatrix({
 
   function beginEdit(position: MatrixPosition): void {
     const cell = matrix.rows[position.row]?.cells[position.column];
-    if (cell?.state.access !== "editable") return;
+    if (cell?.state.access !== "editable" || saving) return;
     setActive(position);
     setEditing({ ...position, draft: inputValue(cell.value) });
   }
@@ -258,6 +259,13 @@ export function ReportMatrix({
         keysAtStart.forEach((key) => next.delete(key));
         return next;
       });
+      if (matrix.rows.some((row) => row.cells.some((cell) => cell.formula))) {
+        try {
+          onChange(await gateway.getReportMatrix({ report_type: matrix.report_type, organization_id: matrix.organization_id }));
+        } catch {
+          setSaveError("Данные сохранены, но не удалось обновить расчёты. Перезагрузите отчёт.");
+        }
+      }
     } catch (reason: unknown) {
       const message = reason instanceof Error ? reason.message : "Сохранение не выполнено";
       onChange(
@@ -470,6 +478,12 @@ export function ReportMatrix({
                     scope="row"
                   >
                     <span>{row.left_values[column.id]}</span>
+                    {leftIndex === 0 && row.category && row.category !== "UNSPECIFIED" && (
+                      <small className="position-category">{CATEGORY_LABELS[row.category] ?? row.category}</small>
+                    )}
+                    {leftIndex === 0 && row.image && (
+                      <img className="matrix-position-image" src={row.image} alt={`Изображение: ${row.group_label}`} />
+                    )}
                     {leftIndex === matrix.left_columns.length - 2 &&
                       row.indicator_detail != null && (
                         <span className="indicator-detail">

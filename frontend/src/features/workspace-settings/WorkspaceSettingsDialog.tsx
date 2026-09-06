@@ -7,6 +7,7 @@ import type {
   ReportLayoutRow,
 } from "../../shared/api/application-gateway";
 import type { ReportType } from "../../shared/api/report-cell-contract";
+import { CATEGORY_LABELS, PositionFieldsEditor } from "./PositionFieldsEditor";
 
 const REPORT_LABELS: Record<ReportType, string> = {
   DAILY_MOVEMENT: "Ежедневный отчёт",
@@ -39,6 +40,7 @@ function newRow(layout: ReportLayoutContract): ReportLayoutRow | null {
     template_group_id: template.id,
     party_name: "Изготовитель/поставщик",
     position_name: template.label,
+    configuration: { category: "UNSPECIFIED", image: "", norm: "", opening: "", indicators: template.indicators ?? [] },
   };
 }
 
@@ -60,6 +62,11 @@ export function WorkspaceSettingsDialog({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dirty = layout !== null && JSON.stringify(rows) !== JSON.stringify(layout.rows);
+  function canDiscard(): boolean {
+    return !saving && (!dirty || window.confirm("Настройки не применены. Отменить изменения?"));
+  }
+  function close(): void { if (canDiscard()) onClose(); }
 
   const selectedOrganization = useMemo(
     () => organizations.find((item) => item.id === organizationId),
@@ -192,7 +199,7 @@ export function WorkspaceSettingsDialog({
             <p>Настройка рабочего поля</p>
             <h2 id="workspace-settings-title">Организации и строки отчёта</h2>
           </div>
-          <button className="icon-button" type="button" onClick={onClose} aria-label="Закрыть">
+          <button className="icon-button" type="button" disabled={saving} onClick={close} aria-label="Закрыть">
             ×
           </button>
         </header>
@@ -201,7 +208,7 @@ export function WorkspaceSettingsDialog({
           <aside className="organization-settings">
             <label>
               Организация
-              <select value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>
+              <select disabled={saving} value={organizationId} onChange={(event) => { if (canDiscard()) setOrganizationId(event.target.value); }}>
                 {organizations.map((organization) => (
                   <option key={organization.id} value={organization.id}>
                     {organization.name}
@@ -242,7 +249,7 @@ export function WorkspaceSettingsDialog({
           <div className="layout-settings">
             <label className="report-setting-select">
               Настраиваемый отчёт
-              <select value={reportType} onChange={(event) => setReportType(event.target.value as ReportType)}>
+              <select disabled={saving} value={reportType} onChange={(event) => { if (canDiscard()) setReportType(event.target.value as ReportType); }}>
                 {Object.entries(REPORT_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
@@ -271,16 +278,21 @@ export function WorkspaceSettingsDialog({
                     <div className="settings-empty">Добавьте первую строку отчёта.</div>
                   )}
                   {rows.map((row, index) => (
-                    <div className="layout-row-editor" key={row.id ?? `new-${index}`}>
+                    <fieldset disabled={saving} className="layout-row-editor" key={row.id ?? `new-${index}`}>
+                      <label>Категория позиции<select aria-label="Категория позиции" value={row.configuration?.category ?? "UNSPECIFIED"} onChange={(event) => updateRow(index, { configuration: { image: "", norm: "", opening: "", indicators: [], ...row.configuration, category: event.target.value } })}>
+                        {Object.entries(CATEGORY_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+                      </select></label>
+                      <label>Набор строк
                       <select
                         aria-label="Тип строки"
                         value={row.template_group_id}
-                        onChange={(event) => updateRow(index, { template_group_id: event.target.value })}
+                        onChange={(event) => updateRow(index, { template_group_id: event.target.value, configuration: { category: "UNSPECIFIED", image: "", norm: "", opening: "", ...row.configuration, indicators: layout.templates.find((item) => item.id === event.target.value)?.indicators ?? [] } })}
                       >
                         {layout.templates.map((template) => (
                           <option key={template.id} value={template.id}>{template.label}</option>
                         ))}
                       </select>
+                      </label>
                       <input
                         aria-label="Изготовитель или поставщик"
                         value={row.party_name}
@@ -289,16 +301,19 @@ export function WorkspaceSettingsDialog({
                       />
                       <input
                         aria-label="Позиция"
+                        list={`position-names-${row.configuration?.category ?? "UNSPECIFIED"}`}
                         value={row.position_name}
                         placeholder="Позиция"
                         onChange={(event) => updateRow(index, { position_name: event.target.value })}
                       />
                       <div className="row-actions">
+                        <button type="button" className="mini-button" onClick={() => setRows((current) => [...current, { ...row, id: null, position_name: `${row.position_name} — копия` }])}>Копировать позицию</button>
                         <button type="button" className="mini-button" onClick={() => moveRow(index, -1)} aria-label="Переместить выше">↑</button>
                         <button type="button" className="mini-button" onClick={() => moveRow(index, 1)} aria-label="Переместить ниже">↓</button>
                         <button type="button" className="mini-button remove" onClick={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))} aria-label="Убрать строку">×</button>
                       </div>
-                    </div>
+                      {row.configuration && <PositionFieldsEditor value={row.configuration} presets={layout.presets ?? []} onBusyChange={setSaving} onChange={(configuration) => updateRow(index, { configuration })} />}
+                    </fieldset>
                   ))}
                 </div>
               </>
@@ -308,9 +323,12 @@ export function WorkspaceSettingsDialog({
 
         {error !== null && <div className="settings-error" role="alert">{error}</div>}
         <footer className="settings-footer">
+          {Object.keys(CATEGORY_LABELS).map((category) => <datalist key={category} id={`position-names-${category}`}>
+            {[...new Set(rows.filter((row) => (row.configuration?.category ?? "UNSPECIFIED") === category).map((row) => row.position_name))].map((name) => <option key={name} value={name} />)}
+          </datalist>)}
           <span>Удалённые строки и общества архивируются; введённые данные сохраняются.</span>
           <div>
-            <button className="button secondary" type="button" onClick={onClose}>Отмена</button>
+            <button className="button secondary" type="button" disabled={saving} onClick={close}>Отмена</button>
             <button className="button primary" type="button" disabled={saving || loading || layout === null} onClick={() => void saveLayout()}>
               {saving ? "Сохранение…" : "Применить настройки"}
             </button>

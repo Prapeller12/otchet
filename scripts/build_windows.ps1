@@ -21,7 +21,8 @@ try {
     foreach ($dependency in @(
         @{ Name = "pyinstaller"; Version = "6.22.2" },
         @{ Name = "pywebview"; Version = "6.1" },
-        @{ Name = "openpyxl"; Version = "3.1.5" }
+        @{ Name = "openpyxl"; Version = "3.1.5" },
+        @{ Name = "Pillow"; Version = "12.3.0" }
     )) {
         $actualVersion = & $PythonExe -c "import importlib.metadata as m; print(m.version('$($dependency.Name)'))"
         if ($LASTEXITCODE -ne 0 -or $actualVersion.Trim() -ne $dependency.Version) {

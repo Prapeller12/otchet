@@ -1,0 +1,12 @@
+{
+  "presets": [
+    {
+      "label": "Формулы комплектности из образца",
+      "required_codes": ["WRK_DAILY_RECEIVED", "WRK_DAILY_USED", "WRK_DAILY_BALANCE"],
+      "indicators": [
+        {"code": "WRK_DAILY_BALANCE", "label": "Остаток", "formula": "=OPENING+CUM(WRK_DAILY_RECEIVED)-CUM(WRK_DAILY_USED)"},
+        {"code": "READY_SETS", "label": "Обеспеченность комплектами", "formula": "=IF(WRK_DAILY_BALANCE>=NORM,ROUNDDOWN(WRK_DAILY_BALANCE/NORM,0),0)"}
+      ]
+    }
+  ]
+}

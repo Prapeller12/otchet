@@ -9,7 +9,7 @@ import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date, timedelta
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 from backend.api.bridge import DesktopBridge
@@ -22,6 +22,12 @@ from backend.application.report_cells import (
     ReportCellValidationError,
     ReportCellValue,
 )
+from backend.application.workspace_fields import (
+    calculate_fields,
+    calculate_ready_sets,
+    configuration_json,
+)
+from backend.desktop.database_bootstrap import backup_database
 from backend.infrastructure.database.migrator import connect_sqlite
 from backend.infrastructure.database.sqlite_excel_imports import (
     SqliteExcelImportRepository,
@@ -78,6 +84,8 @@ class WorkingReferenceApplicationBridge:
         self._workspace = SqliteReportWorkspaceRepository(str(self._database_path))
         self._default_organization = self._workspace.ensure_default_organization()
         root = self._database_path.parent.parent
+        self._backups_directory = Path(backups_directory or root / "backups")
+        self._application_version = application_version
         self._excel = ExcelReportService(
             report_cells=self._service,
             import_repository=SqliteExcelImportRepository(str(self._database_path)),
@@ -242,7 +250,12 @@ class WorkingReferenceApplicationBridge:
         try:
             request = _mapping(payload, "payload")
             _reject_unknown(request, {"batch_id"})
-            result = self._excel.commit_import(_required_string(request, "batch_id"))
+            result = self._excel.commit_import(
+                _required_string(request, "batch_id"),
+                allowed_coordinates=lambda report, org: self._editable_coordinate_keys(
+                    report, self._organization_id(str(org))
+                ),
+            )
             return {"ok": True, "data": result, "request_id": request_id}
         except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
             code = (
@@ -378,7 +391,9 @@ class WorkingReferenceApplicationBridge:
             drafts: list[WorkspaceGroupDraft] = []
             for raw_row in raw_rows:
                 row = _mapping(raw_row, "row")
-                _reject_unknown(row, {"id", "template_group_id", "party_name", "position_name"})
+                _reject_unknown(
+                    row, {"id", "template_group_id", "party_name", "position_name", "configuration"}
+                )
                 raw_id = row.get("id")
                 row_id = None if raw_id is None else _int_string(raw_id, "row.id")
                 drafts.append(
@@ -387,9 +402,15 @@ class WorkingReferenceApplicationBridge:
                         template_group_id=_required_string(row, "template_group_id"),
                         party_name=_required_string(row, "party_name"),
                         position_name=_required_string(row, "position_name"),
+                        configuration_json=(
+                            configuration_json(row["configuration"])
+                            if "configuration" in row
+                            else None
+                        ),
                     )
                 )
             templates = self._group_templates(report_type)
+            backup_database(self._database_path, self._backups_directory, self._application_version)
             groups = self._workspace.save_groups(
                 organization_id,
                 report_type,
@@ -448,12 +469,24 @@ class WorkingReferenceApplicationBridge:
             group_record = template_groups.get(configured_group.template_group_id)
             if group_record is None:
                 raise ValueError("Настройка строки ссылается на неизвестный шаблон")
-            for row in _sequence(group_record.get("rows"), "rows"):
+            config = self._field_configuration(report_type, configured_group)
+            base_rows = {
+                _contract_code(str(item["row_id"])): item
+                for item in cast(list[dict[str, Any]], group_record["rows"])
+            }
+            group_rows: list[dict[str, Any]] = []
+            for row in config["indicators"]:
                 row_record = _mapping(row, "row")
-                template_row_id = _required_string(row_record, "row_id")
+                code = _required_string(row_record, "code")
+                template_row_id = str(
+                    base_rows.get(code, {}).get("row_id", code.lower().replace("_", "-"))
+                )
                 row_label = _required_string(row_record, "label")
-                editable = row_record.get("value_role") == "WORKING_INPUT"
-                code = _contract_code(template_row_id)
+                editable = (
+                    not row_record.get("formula")
+                    and base_rows.get(code, {}).get("value_role", "WORKING_INPUT")
+                    == "WORKING_INPUT"
+                )
                 cells: list[dict[str, object]] = []
                 for column_id, period_start in periods:
                     coordinate = self._coordinate(
@@ -467,7 +500,7 @@ class WorkingReferenceApplicationBridge:
                     current = stored.get(_coordinate_key(coordinate))
                     value = (
                         {"kind": "DATA_NOT_PROVIDED"}
-                        if current is None
+                        if current is None or not editable
                         else current.value.to_dict()
                     )
                     access = "editable" if editable else "calculated"
@@ -493,11 +526,14 @@ class WorkingReferenceApplicationBridge:
                     )
                     for index, column in enumerate(identifier_columns)
                 }
-                rows.append(
+                group_rows.append(
                     {
                         "id": f"{template_row_id}-{configured_group.id}",
                         "group_id": f"workspace-group-{configured_group.id}",
                         "group_label": configured_group.position_name,
+                        "metric_code": code,
+                        "category": config["category"],
+                        "image": config["image"] if not group_rows else "",
                         "left_values": left_values,
                         "cells": cells,
                         "indicator_detail": (
@@ -509,6 +545,10 @@ class WorkingReferenceApplicationBridge:
                         ),
                     }
                 )
+            calculate_fields(config, group_rows)
+            rows.extend(group_rows)
+
+        calculate_ready_sets(rows)
 
         return {
             "report_type": report_type,
@@ -629,9 +669,35 @@ class WorkingReferenceApplicationBridge:
                 """,
                 (report_type, organization_id),
             ).fetchone()
+            layout_revision = connection.execute(
+                "SELECT coalesce(max(id), 0) FROM audit_events "
+                "WHERE entity_type = 'report_workspace' AND entity_id = ?",
+                (f"{organization_id}:{report_type}",),
+            ).fetchone()[0]
         finally:
             connection.close()
-        return f"db-{int(row[0]) if row is not None else 0}"
+        revision = f"db-{int(row[0]) if row is not None else 0}"
+        return revision if not layout_revision else f"{revision}-layout-{layout_revision}"
+
+    def _field_configuration(self, report_type: str, group: WorkspaceGroup) -> dict[str, Any]:
+        config: dict[str, Any] = json.loads(group.configuration_json)
+        config.setdefault("category", "UNSPECIFIED")
+        config.setdefault("image", "")
+        config.setdefault("norm", "")
+        config.setdefault("opening", "")
+        if "indicators" not in config:
+            config["indicators"] = self._default_indicators(report_type, group.template_group_id)
+        return config
+
+    def _default_indicators(self, report_type: str, template_id: str) -> list[dict[str, str]]:
+        definition = cast(dict[str, Any], self._definition(report_type))
+        group = next(
+            item for item in definition["layout"]["row_groups"] if item["group_id"] == template_id
+        )
+        return [
+            {"code": _contract_code(item["row_id"]), "label": item["label"], "formula": ""}
+            for item in group["rows"]
+        ]
 
     def _group_templates(self, report_type: str) -> tuple[WorkspaceGroupTemplate, ...]:
         definition = self._definition(report_type)
@@ -683,14 +749,20 @@ class WorkingReferenceApplicationBridge:
         repeatable = {
             template.template_group_id: template for template in templates if template.repeatable
         }
+        with (self._definitions_directory / "presets" / "field-presets.v1.json").open(
+            encoding="utf-8"
+        ) as stream:
+            presets = json.load(stream)["presets"]
         return {
             "report_type": report_type,
             "organization_id": str(organization_id),
+            "presets": presets,
             "templates": [
                 {
                     "id": template.template_group_id,
                     "label": template.default_position_name,
                     "group_kind": template.group_kind,
+                    "indicators": self._default_indicators(report_type, template.template_group_id),
                 }
                 for template in repeatable.values()
             ],
@@ -700,6 +772,7 @@ class WorkingReferenceApplicationBridge:
                     "template_group_id": group.template_group_id,
                     "party_name": group.party_name,
                     "position_name": group.position_name,
+                    "configuration": self._field_configuration(report_type, group),
                 }
                 for group in groups
                 if group.template_group_id in repeatable

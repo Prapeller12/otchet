@@ -398,3 +398,5 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+.position-category { display: block; color: #617087; font-weight: normal; margin-top: 4px; }
+.matrix-position-image { display: block; width: 90px; height: 64px; object-fit: contain; margin: 6px 0; background: white; }

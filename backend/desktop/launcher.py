@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.api.working_reference_bridge import WorkingReferenceApplicationBridge
+from backend.desktop.application_self_test import run_application_self_test
 from backend.desktop.database_bootstrap import backup_and_migrate
 from backend.desktop.instance_lock import AlreadyRunningError, SingleInstanceLock
 from backend.desktop.paths import PortableLayoutError, PortablePaths
@@ -57,6 +58,9 @@ def _self_test(paths: PortablePaths) -> None:
                 raise sqlite3.DatabaseError("Self-test database integrity check failed")
         finally:
             connection.close()
+        run_application_self_test(
+            database, paths.migrations, paths.resources / "report-definitions"
+        )
 
 
 def _run_window(paths: PortablePaths) -> None:

@@ -37,6 +37,7 @@ class WorkspaceGroup:
     subject_kind: SubjectKind
     subject_id: int
     sort_order: int
+    configuration_json: str = "{}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +46,7 @@ class WorkspaceGroupDraft:
     template_group_id: str
     party_name: str
     position_name: str
+    configuration_json: str | None = None
 
 
 class ReportWorkspaceRepository(Protocol):
