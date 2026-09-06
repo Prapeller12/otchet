@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type KeyboardEvent,
 } from "react";
@@ -14,6 +15,7 @@ import type {
 import type { ReportCellCoordinate } from "../../shared/api/report-cell-contract";
 import { CATEGORY_LABELS } from "../../features/workspace-settings/PositionFieldsEditor";
 import { CellEditor } from "./CellEditor";
+import { ColumnResizeHandle } from "./ColumnResizeHandle";
 import { inputValue, parseCellDraft, sumCellValues } from "./cell-value";
 import {
   moveAfterEnter,
@@ -107,6 +109,11 @@ function stickyOffsets(matrix: ReportMatrixContract): number[] {
   });
 }
 
+function monthName(month: string): string {
+  const date = new Date(`${month}-01T12:00:00`);
+  return Number.isNaN(date.getTime()) ? month : new Intl.DateTimeFormat("ru", { month: "long" }).format(date);
+}
+
 function newIdempotencyKey(): string {
   return typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
@@ -128,10 +135,88 @@ export function ReportMatrix({
   const [excelError, setExcelError] = useState<string | null>(null);
   const [excelMessage, setExcelMessage] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [widths, setWidths] = useState<Record<string, number>>(matrix.presentation?.widths ?? {});
+  const [renaming, setRenaming] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(matrix.title);
+  const [presentationBusy, setPresentationBusy] = useState(false);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const previewSequence = useRef(0);
+  const latestMatrix = useRef(matrix);
+  latestMatrix.current = matrix;
+  const presentationQueue = useRef(Promise.resolve());
+  const monthLabels = [...new Set(matrix.time_columns.map((column) => column.group_label))];
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(() => {
+    const current = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+    return new Set([matrix.time_columns.find((column) => column.group_label === current)?.group_label ?? matrix.time_columns[0]?.group_label ?? ""]);
+  });
+  const visibleIndices = matrix.time_columns.flatMap((column, index) => expandedMonths.has(column.group_label) ? [index] : []);
+  const visibleSet = new Set(visibleIndices);
+  const leftColumns = matrix.left_columns.map((column) => ({ ...column, width: widths[column.id] ?? column.width }));
+  const timeColumns = matrix.time_columns.map((column) => ({ ...column, width: widths[column.id] ?? column.width }));
+  const visibleMatrix = { ...matrix, left_columns: leftColumns, time_columns: timeColumns.filter((_, index) => visibleSet.has(index)), rows: matrix.rows.map((row) => ({ ...row, cells: row.cells.filter((_, index) => visibleSet.has(index)) })) };
+  const query = { report_type: matrix.report_type, organization_id: matrix.organization_id, ...(matrix.year ? { year: matrix.year } : {}) };
 
   const spans = useMemo(() => groupSpans(matrix), [matrix]);
-  const groups = useMemo(() => headerGroups(matrix), [matrix]);
-  const offsets = useMemo(() => stickyOffsets(matrix), [matrix]);
+  const groups = headerGroups(visibleMatrix);
+  const offsets = stickyOffsets(visibleMatrix);
+
+  useEffect(() => () => { previewSequence.current += 1; }, []);
+
+  function navigate(position: MatrixPosition, move: (source: ReportMatrixContract, position: MatrixPosition) => MatrixPosition) {
+    const projected = { row: position.row, column: Math.max(0, visibleIndices.indexOf(position.column)) };
+    const next = move(visibleMatrix, projected);
+    setActive({ row: next.row, column: visibleIndices[next.column] ?? 0 });
+  }
+
+  function toggleMonth(month: string) {
+    if (editing) return;
+    const next = new Set(expandedMonths);
+    if (next.has(month)) next.delete(month); else next.add(month);
+    setExpandedMonths(next);
+    if (!next.has(matrix.time_columns[active.column]?.group_label ?? "")) {
+      setActive({ row: active.row, column: Math.max(0, matrix.time_columns.findIndex((column) => next.has(column.group_label))) });
+    }
+  }
+
+  function persistWidths(next: Record<string, number>) {
+    if (!gateway.saveReportPresentation) return;
+    presentationQueue.current = presentationQueue.current.then(async () => {
+      try { await gateway.saveReportPresentation!({ report_type: matrix.report_type, organization_id: matrix.organization_id, widths: next }); }
+      catch (error) { setSaveError(error instanceof Error ? error.message : "Ширина не сохранена. Повторите изменение."); }
+    });
+  }
+
+  function resizeHandle(id: string, label: string, width: number) {
+    return <ColumnResizeHandle label={label} width={width}
+      onResize={(value) => setWidths((current) => ({ ...current, [id]: value }))}
+      onCommit={(value) => persistWidths({ ...widths, [id]: value })} />;
+  }
+
+  async function renameReport() {
+    if (!titleDraft.trim() || !gateway.saveReportPresentation) return;
+    setPresentationBusy(true);
+    try {
+      const result = await gateway.saveReportPresentation({ report_type: matrix.report_type, organization_id: matrix.organization_id, title: titleDraft.trim() });
+      onChange({ ...latestMatrix.current, title: result.title ?? titleDraft.trim() });
+      setRenaming(false);
+    } catch (error) { setSaveError(error instanceof Error ? error.message : "Название не сохранено"); }
+    finally { setPresentationBusy(false); }
+  }
+
+  async function previewCalculations(next: ReportMatrixContract) {
+    const sequence = ++previewSequence.current;
+    if (gateway.mode !== "pywebview") return;
+    setPreviewBusy(true);
+    try {
+      const result = await gateway.getReportMatrix({ ...query, preview_changes: next.rows.flatMap((row) => row.cells.filter((cell) => cell.state.access === "editable" && cell.state.persistence === "dirty").map((cell) => ({ coordinate: cell.coordinate, value: cell.value }))) });
+      if (sequence !== previewSequence.current) return;
+      const calculated = new Map(result.rows.flatMap((row) => row.cells.filter((cell) => cell.state.access === "calculated").map((cell) => [cellKey(cell), cell] as const)));
+      const current = latestMatrix.current;
+      onChange({ ...current, rows: current.rows.map((row) => ({ ...row, cells: row.cells.map((cell) => calculated.get(cellKey(cell)) ?? cell) })) });
+    } catch (error) {
+      if (sequence === previewSequence.current) setSaveError(error instanceof Error ? error.message : "Не удалось пересчитать форму");
+    } finally { if (sequence === previewSequence.current) setPreviewBusy(false); }
+  }
 
   useEffect(() => {
     const row = matrix.rows[active.row];
@@ -186,11 +271,12 @@ export function ReportMatrix({
       setDirtyKeys((current) => new Set(current).add(cellKey(changedCell)));
     }
     onChange(nextMatrix);
+    void previewCalculations(nextMatrix);
     setEditing(null);
     setSaveError(null);
 
-    if (move === "enter") setActive(moveAfterEnter(nextMatrix, position));
-    if (move === "tab") setActive(moveByTab(nextMatrix, position, backwards));
+    if (move === "enter") navigate(position, moveAfterEnter);
+    if (move === "tab") navigate(position, (source, current) => moveByTab(source, current, backwards));
   }
 
   function handleCellKeyDown(
@@ -199,19 +285,19 @@ export function ReportMatrix({
   ): void {
     if (event.key.startsWith("Arrow")) {
       event.preventDefault();
-      setActive(
+      navigate(position, (source, current) =>
         moveByArrow(
-          position,
+          current,
           event.key as ArrowKey,
-          matrix.rows.length,
-          matrix.time_columns.length,
+          source.rows.length,
+          source.time_columns.length,
         ),
       );
       return;
     }
     if (event.key === "Tab") {
       event.preventDefault();
-      setActive(moveByTab(matrix, position, event.shiftKey));
+      navigate(position, (source, current) => moveByTab(source, current, event.shiftKey));
       return;
     }
     if (event.key === "Enter") {
@@ -222,6 +308,8 @@ export function ReportMatrix({
 
   async function saveChanges(): Promise<void> {
     if (dirtyKeys.size === 0 || saving) return;
+    previewSequence.current += 1;
+    setPreviewBusy(false);
     const keysAtStart = new Set(dirtyKeys);
     const changes = matrix.rows.flatMap((row) =>
       row.cells
@@ -238,6 +326,7 @@ export function ReportMatrix({
 
     try {
       const result = await gateway.saveReportCells({
+        ...query,
         report_type: matrix.report_type,
         organization_id: matrix.organization_id,
         base_revision: matrix.matrix_revision,
@@ -261,7 +350,7 @@ export function ReportMatrix({
       });
       if (matrix.rows.some((row) => row.cells.some((cell) => cell.formula))) {
         try {
-          onChange(await gateway.getReportMatrix({ report_type: matrix.report_type, organization_id: matrix.organization_id }));
+          onChange(await gateway.getReportMatrix(query));
         } catch {
           setSaveError("Данные сохранены, но не удалось обновить расчёты. Перезагрузите отчёт.");
         }
@@ -287,6 +376,7 @@ export function ReportMatrix({
     setExcelMessage(null);
     try {
       const preview = await gateway.validateImport({
+        ...query,
         report_type: matrix.report_type,
         organization_id: matrix.organization_id,
       });
@@ -303,8 +393,9 @@ export function ReportMatrix({
     setExcelBusy("commit");
     setExcelError(null);
     try {
-      const result = await gateway.commitImport({ batch_id: importPreview.batch_id });
+      const result = await gateway.commitImport({ batch_id: importPreview.batch_id, ...(matrix.year ? { year: matrix.year } : {}) });
       const refreshed = await gateway.getReportMatrix({
+        ...query,
         report_type: matrix.report_type,
         organization_id: matrix.organization_id,
       });
@@ -327,6 +418,7 @@ export function ReportMatrix({
     setExcelMessage(null);
     try {
       const result = await gateway.exportReport({
+        ...query,
         report_type: matrix.report_type,
         organization_id: matrix.organization_id,
       });
@@ -354,10 +446,14 @@ export function ReportMatrix({
       <div className="matrix-toolbar">
         <div>
           <div className="title-line">
-            <h2 id="matrix-title">{matrix.title}</h2>
-            <span className="reference-badge">Рабочая форма</span>
+            {renaming ? <form className="rename-report" onSubmit={(event) => { event.preventDefault(); void renameReport(); }}>
+              <input aria-label="Название отчёта" autoFocus maxLength={200} value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} disabled={presentationBusy} />
+              <button className="button primary" disabled={presentationBusy || !titleDraft.trim()}>Применить название</button>
+              <button className="button secondary" type="button" disabled={presentationBusy} onClick={() => setRenaming(false)}>Отмена</button>
+            </form> : <h2 id="matrix-title">{matrix.title}</h2>}
+            {!renaming && gateway.saveReportPresentation && <button type="button" className="mini-button" aria-label="Переименовать отчёт" onClick={() => { setTitleDraft(matrix.title); setRenaming(true); }}>✎</button>}
           </div>
-          <p>{matrix.subtitle}</p>
+          {previewBusy && <p role="status">Пересчёт…</p>}
         </div>
         <div className="toolbar-actions">
           <button
@@ -393,17 +489,17 @@ export function ReportMatrix({
         </div>
       </div>
 
-      <div className="source-notice" role="note">
-        <strong>{matrix.source_notice}</strong>
-        <span>
-          {importReason ??
-            "Excel: выгрузите книгу, заполните жёлтые ячейки и импортируйте её обратно."}
-        </span>
-      </div>
+      <nav className="month-controls" aria-label="Месяцы отчёта">
+        {matrix.year && <strong>{matrix.year}</strong>}
+        {monthLabels.map((month) => <button key={month} type="button" aria-expanded={expandedMonths.has(month)} disabled={editing !== null}
+          onClick={() => toggleMonth(month)}>{expandedMonths.has(month) ? "▾" : "▸"} {monthName(month)}</button>)}
+        <button type="button" disabled={editing !== null} onClick={() => setExpandedMonths(new Set(monthLabels))}>Раскрыть все</button>
+        <button type="button" disabled={editing !== null} onClick={() => setExpandedMonths(new Set())}>Свернуть все</button>
+      </nav>
 
       {saveError !== null && (
         <div className="save-error" role="alert">
-          Изменения сохранены локально в форме, но backend их не принял: {saveError}
+          {saveError}
         </div>
       )}
 
@@ -417,21 +513,22 @@ export function ReportMatrix({
       <div className="matrix-scroll" data-testid="matrix-scroll">
         <table
           className="report-matrix"
+          style={{ width: leftColumns.reduce((sum, column) => sum + column.width, 0) + visibleMatrix.time_columns.reduce((sum, column) => sum + column.width, 0), minWidth: 0 }}
           aria-label={matrix.title}
           aria-rowcount={matrix.rows.length + 2}
-          aria-colcount={matrix.left_columns.length + matrix.time_columns.length}
+          aria-colcount={matrix.left_columns.length + visibleMatrix.time_columns.length}
         >
           <colgroup>
-            {matrix.left_columns.map((column) => (
+            {leftColumns.map((column) => (
               <col key={column.id} style={{ width: column.width }} />
             ))}
-            {matrix.time_columns.map((column) => (
+            {visibleMatrix.time_columns.map((column) => (
               <col key={column.id} style={{ width: column.width }} />
             ))}
           </colgroup>
           <thead>
             <tr className="matrix-header-group-row">
-              {matrix.left_columns.map((column, index) => (
+              {leftColumns.map((column, index) => (
                 <th
                   key={column.id}
                   rowSpan={2}
@@ -440,17 +537,18 @@ export function ReportMatrix({
                   scope="col"
                 >
                   {column.label}
+                  {resizeHandle(column.id, column.label, column.width)}
                 </th>
               ))}
               {groups.map((group, index) => (
                 <th key={`${group.label}-${index}`} colSpan={group.span} scope="colgroup">
-                  {group.label}
+                  <button className="month-heading" type="button" disabled={editing !== null} onClick={() => toggleMonth(group.label)}>▾ {monthName(group.label)}</button>
                 </th>
               ))}
             </tr>
             <tr className="matrix-header-leaf-row">
-              {matrix.time_columns.map((column) => (
-                <th key={column.id} scope="col">{column.label}</th>
+              {visibleMatrix.time_columns.map((column) => (
+                <th key={column.id} scope="col">{column.label}{resizeHandle(column.id, `${column.group_label} ${column.label}`, column.width)}</th>
               ))}
             </tr>
           </thead>
@@ -461,19 +559,19 @@ export function ReportMatrix({
                   <th
                     rowSpan={spans.get(rowIndex)}
                     className="sticky-left matrix-group-cell"
-                    style={{ left: offsets[0], minWidth: matrix.left_columns[0].width }}
+                    style={{ left: offsets[0], width: leftColumns[0]?.width }}
                     scope="rowgroup"
                   >
                     {row.left_values[matrix.left_columns[0].id]}
                   </th>
                 )}
-                {matrix.left_columns.slice(1).map((column, leftIndex) => (
+                {leftColumns.slice(1).map((column, leftIndex) => (
                   <th
                     key={column.id}
                     className="sticky-left matrix-indicator-cell"
                     style={{
                       left: offsets[leftIndex + 1],
-                      minWidth: column.width,
+                      width: column.width,
                     }}
                     scope="row"
                   >
@@ -498,6 +596,7 @@ export function ReportMatrix({
                   </th>
                 ))}
                 {row.cells.map((cell, columnIndex) => {
+                  if (!visibleSet.has(columnIndex)) return null;
                   const position = { row: rowIndex, column: columnIndex };
                   const isEditing =
                     editing?.row === rowIndex && editing.column === columnIndex;
@@ -505,7 +604,7 @@ export function ReportMatrix({
                     <td
                       key={cell.column_id}
                       className={isEditing ? "matrix-value-cell is-editing" : "matrix-value-cell"}
-                      style={{ minWidth: matrix.time_columns[columnIndex]?.width }}
+                      style={{ width: timeColumns[columnIndex]?.width }}
                     >
                       {isEditing ? (
                         <CellEditor

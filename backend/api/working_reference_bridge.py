@@ -119,10 +119,12 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"report_type", "organization_id"})
+            _reject_unknown(request, {"report_type", "organization_id", "year", "preview_changes"})
             report_type = _required_string(request, "report_type")
             organization_id = self._organization_id(request.get("organization_id"))
-            matrix = self._build_matrix(report_type, organization_id)
+            matrix = self._build_matrix(
+                report_type, organization_id, _year(request), request.get("preview_changes")
+            )
             return {"ok": True, "data": matrix, "request_id": request_id}
         except (OSError, ValueError, KeyError, json.JSONDecodeError, ReportCellError) as error:
             return _failure("WORKING_REFERENCE_ERROR", str(error), request_id)
@@ -139,6 +141,7 @@ class WorkingReferenceApplicationBridge:
                     "base_revision",
                     "idempotency_key",
                     "changes",
+                    "year",
                 },
             )
             report_type = _required_string(request, "report_type")
@@ -156,7 +159,7 @@ class WorkingReferenceApplicationBridge:
             ):
                 raise ReportCellValidationError("changes must be an array")
 
-            allowed = self._editable_coordinate_keys(report_type, organization_id)
+            allowed = self._editable_coordinate_keys(report_type, organization_id, _year(request))
             current = {
                 _coordinate_key(cell.coordinate): cell
                 for cell in self._service.get_cells(
@@ -226,7 +229,7 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"report_type", "organization_id"})
+            _reject_unknown(request, {"report_type", "organization_id", "year"})
             report_type = _required_string(request, "report_type")
             organization_id = self._organization_id(request.get("organization_id"))
             if self._open_excel_file is None:
@@ -238,7 +241,7 @@ class WorkingReferenceApplicationBridge:
                 source,
                 report_type=report_type,
                 organization_id=organization_id,
-                matrix=self._build_matrix(report_type, organization_id),
+                matrix=self._build_matrix(report_type, organization_id, _year(request)),
             )
             return {"ok": True, "data": preview.to_dict(), "request_id": request_id}
         except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
@@ -249,11 +252,11 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"batch_id"})
+            _reject_unknown(request, {"batch_id", "year"})
             result = self._excel.commit_import(
                 _required_string(request, "batch_id"),
                 allowed_coordinates=lambda report, org: self._editable_coordinate_keys(
-                    report, self._organization_id(str(org))
+                    report, self._organization_id(str(org)), _year(request)
                 ),
             )
             return {"ok": True, "data": result, "request_id": request_id}
@@ -269,7 +272,7 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"report_type", "organization_id"})
+            _reject_unknown(request, {"report_type", "organization_id", "year"})
             report_type = _required_string(request, "report_type")
             organization_id = self._organization_id(request.get("organization_id"))
             if self._save_excel_file is None:
@@ -280,7 +283,7 @@ class WorkingReferenceApplicationBridge:
                 return {"ok": True, "data": {"cancelled": True}, "request_id": request_id}
             result = self._excel.export(
                 destination,
-                self._build_matrix(report_type, organization_id),
+                self._build_matrix(report_type, organization_id, _year(request)),
             )
             return {"ok": True, "data": result, "request_id": request_id}
         except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
@@ -431,9 +434,63 @@ class WorkingReferenceApplicationBridge:
         ) as error:
             return _failure("WORKSPACE_SETTINGS_ERROR", str(error), request_id)
 
-    def _build_matrix(self, report_type: str, organization_id: int) -> dict[str, object]:
+    def save_report_presentation(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"report_type", "organization_id", "title", "widths"})
+            report_type = _required_string(request, "report_type")
+            self._definition(report_type)
+            organization_id = self._organization_id(request.get("organization_id"))
+            patch: dict[str, object] = {}
+            if "title" in request:
+                title = _required_string(request, "title").strip()
+                if not title or len(title) > 200:
+                    raise ValueError("Название отчёта: от 1 до 200 символов")
+                patch["title"] = title
+            if "widths" in request:
+                widths = _mapping(request["widths"], "widths")
+                if len(widths) > 400 or any(
+                    not isinstance(key, str)
+                    or len(key) > 80
+                    or isinstance(width, bool)
+                    or not isinstance(width, int)
+                    or not 48 <= width <= 600
+                    for key, width in widths.items()
+                ):
+                    raise ValueError("Ширина столбца: от 48 до 600 пикселей")
+                patch["widths"] = dict(widths)
+            result = self._workspace.save_presentation(organization_id, report_type, patch)
+            return {"ok": True, "data": result, "request_id": request_id}
+        except (ValueError, sqlite3.Error, ReportCellError) as error:
+            return _failure("PRESENTATION_ERROR", str(error), request_id)
+
+    def _build_matrix(
+        self,
+        report_type: str,
+        organization_id: int,
+        year: int | None = None,
+        preview_changes: object = None,
+    ) -> dict[str, object]:
         definition = self._definition(report_type)
-        periods = self._periods(report_type)
+        periods = self._periods(report_type, year)
+        presentation = self._workspace.get_presentation(organization_id, report_type)
+        widths = cast(dict[str, int], presentation.get("widths", {}))
+        previews: dict[str, ReportCellValue] = {}
+        if preview_changes is not None:
+            changes = _sequence(preview_changes, "preview_changes")
+            if len(changes) > 10000:
+                raise ValueError("Слишком много изменений предпросмотра")
+            for raw in changes:
+                change = _mapping(raw, "change")
+                _reject_unknown(change, {"coordinate", "value"})
+                coordinate = ReportCellCoordinate.from_mapping(
+                    _mapping(change.get("coordinate"), "coordinate")
+                )
+                key = _coordinate_key(coordinate)
+                if key in previews:
+                    raise ValueError("Повторная ячейка предпросмотра")
+                previews[key] = ReportCellValue.from_mapping(_mapping(change.get("value"), "value"))
         rows: list[dict[str, object]] = []
         stored = {
             _coordinate_key(cell.coordinate): cell
@@ -452,6 +509,10 @@ class WorkingReferenceApplicationBridge:
             }
             for index, column in enumerate(identifier_columns)
         ]
+        for left_column in left_columns:
+            left_column["width"] = widths.get(
+                str(left_column["id"]), cast(int, left_column["width"])
+            )
         template_groups = {
             _required_string(group_record, "group_id"): group_record
             for group_record in (
@@ -503,6 +564,11 @@ class WorkingReferenceApplicationBridge:
                         if current is None or not editable
                         else current.value.to_dict()
                     )
+                    preview = previews.pop(_coordinate_key(coordinate), None)
+                    if preview is not None:
+                        if not editable:
+                            raise ValueError("Расчётная ячейка не редактируется")
+                        value = preview.to_dict()
                     access = "editable" if editable else "calculated"
                     cell: dict[str, object] = {
                         "column_id": column_id,
@@ -549,11 +615,15 @@ class WorkingReferenceApplicationBridge:
             rows.extend(group_rows)
 
         calculate_ready_sets(rows)
+        if previews:
+            raise ValueError("Ячейка предпросмотра вне выбранного отчёта или периода")
 
         return {
             "report_type": report_type,
             "organization_id": str(organization_id),
-            "title": _TITLES[report_type],
+            "title": presentation.get("title", _TITLES[report_type]),
+            "year": year,
+            "presentation": presentation,
             "subtitle": "Сквозной локальный контур на обезличенных данных",
             "form_status": "WORKING_REFERENCE",
             "source_notice": (
@@ -567,7 +637,7 @@ class WorkingReferenceApplicationBridge:
                     "id": column_id,
                     "label": period_start[8:10],
                     "group_label": period_start[:7],
-                    "width": 76,
+                    "width": widths.get(column_id, 76),
                 }
                 for column_id, period_start in periods
             ],
@@ -588,8 +658,10 @@ class WorkingReferenceApplicationBridge:
             "navigation": {"enter_direction": "down"},
         }
 
-    def _editable_coordinate_keys(self, report_type: str, organization_id: int) -> set[str]:
-        matrix = self._build_matrix(report_type, organization_id)
+    def _editable_coordinate_keys(
+        self, report_type: str, organization_id: int, year: int | None = None
+    ) -> set[str]:
+        matrix = self._build_matrix(report_type, organization_id, year)
         keys: set[str] = set()
         for row in cast(list[dict[str, object]], matrix["rows"]):
             for cell in cast(list[dict[str, object]], row["cells"]):
@@ -641,7 +713,15 @@ class WorkingReferenceApplicationBridge:
             raise ValueError("invalid WORKING_REFERENCE matrix descriptor")
         return cast(dict[str, object], value)
 
-    def _periods(self, report_type: str) -> list[tuple[str, str]]:
+    def _periods(self, report_type: str, year: int | None = None) -> list[tuple[str, str]]:
+        if year is not None:
+            result: list[tuple[str, str]] = []
+            for month in range(1, 13):
+                count = calendar.monthrange(year, month)[1]
+                for day in range(1, count + 1, 7 if report_type == "SUBSIDIARY" else 1):
+                    value = date(year, month, day).isoformat()
+                    result.append((value, value))
+            return result
         first = date.today().replace(day=1)
         if report_type == "SUBSIDIARY":
             starts: list[date] = []
@@ -687,7 +767,23 @@ class WorkingReferenceApplicationBridge:
         config.setdefault("opening", "")
         if "indicators" not in config:
             config["indicators"] = self._default_indicators(report_type, group.template_group_id)
+        defaults = self._preset_data().get("defaults", {})
+        codes = {item["code"] for item in config["indicators"]}
+        if {"WRK_DAILY_RECEIVED", "WRK_DAILY_USED"} <= codes:
+            for item in config["indicators"]:
+                if item["code"] in defaults and not item["formula"].strip():
+                    item["formula"] = defaults[item["code"]]
         return config
+
+    def _preset_data(self) -> dict[str, Any]:
+        return cast(
+            dict[str, Any],
+            json.loads(
+                (self._definitions_directory / "presets" / "field-presets.v1.json").read_text(
+                    encoding="utf-8"
+                )
+            ),
+        )
 
     def _default_indicators(self, report_type: str, template_id: str) -> list[dict[str, str]]:
         definition = cast(dict[str, Any], self._definition(report_type))
@@ -695,7 +791,13 @@ class WorkingReferenceApplicationBridge:
             item for item in definition["layout"]["row_groups"] if item["group_id"] == template_id
         )
         return [
-            {"code": _contract_code(item["row_id"]), "label": item["label"], "formula": ""}
+            {
+                "code": _contract_code(item["row_id"]),
+                "label": item["label"],
+                "formula": self._preset_data()
+                .get("defaults", {})
+                .get(_contract_code(item["row_id"]), ""),
+            }
             for item in group["rows"]
         ]
 
@@ -778,6 +880,15 @@ class WorkingReferenceApplicationBridge:
                 if group.template_group_id in repeatable
             ],
         }
+
+
+def _year(request: Mapping[str, object]) -> int | None:
+    value = request.get("year")
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 1900 <= value <= 2100:
+        raise ValueError("Год должен быть целым числом от 1900 до 2100")
+    return value
 
 
 def _contract_code(value: str) -> str:

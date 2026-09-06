@@ -31,10 +31,12 @@ describe("configurable position fields", () => {
     await waitFor(() => expect(screen.getByAltText("Изображение позиции")).toHaveAttribute("src", expect.stringContaining("data:image/png;base64,")));
     expect(busy.mock.calls).toEqual([[true], [false]]);
     await user.click(screen.getByRole("button", { name: "Формулы комплектности из образца" }));
+    expect(screen.getAllByLabelText("Код для формул")[0]).not.toBeVisible();
+    expect(screen.getAllByLabelText("Формула")[2]).not.toBeVisible();
     expect(screen.getAllByLabelText("Формула")[2]).toHaveValue(presets.presets[0]!.indicators[0]!.formula);
     expect(screen.getAllByLabelText("Формула")[3]).toHaveValue(presets.presets[0]!.indicators[1]!.formula);
     await user.type(screen.getByLabelText("Норма входимости"), "3");
-    await user.type(screen.getByLabelText("Начальный остаток месяца"), "71");
+    await user.type(screen.getByLabelText("Начальный остаток"), "71");
     await user.click(screen.getByRole("button", { name: "+ Показатель" }));
     expect(screen.getAllByLabelText("Название показателя")).toHaveLength(5);
     await user.click(screen.getAllByRole("button", { name: "Показатель выше" })[4]!);

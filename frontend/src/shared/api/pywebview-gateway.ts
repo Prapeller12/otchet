@@ -15,6 +15,8 @@ import type {
   SaveReportLayoutRequest,
   SaveReportCellsRequest,
   SaveReportCellsResponse,
+  SaveReportPresentationRequest,
+  ReportPresentation,
 } from "./application-gateway";
 import { parseReportMatrix, parseSaveResponse } from "./runtime-guards";
 
@@ -23,6 +25,7 @@ type BridgeEnvelope =
   | { ok: false; error: { code: string; message: string } };
 
 type PyWebViewApi = {
+  save_report_presentation(request: SaveReportPresentationRequest): Promise<BridgeEnvelope>;
   get_report_matrix(query: ReportMatrixQuery): Promise<BridgeEnvelope>;
   save_report_cells(request: SaveReportCellsRequest): Promise<BridgeEnvelope>;
   validate_import(request: ImportRequest): Promise<BridgeEnvelope>;
@@ -90,6 +93,10 @@ export class PyWebViewGateway implements ApplicationGateway {
     query: ReportMatrixQuery,
   ): Promise<ReportMatrixContract> {
     return parseReportMatrix(unwrap(await this.#api.get_report_matrix(query)));
+  }
+
+  async saveReportPresentation(request: SaveReportPresentationRequest): Promise<ReportPresentation> {
+    return unwrap(await this.#api.save_report_presentation(request)) as ReportPresentation;
   }
 
   async saveReportCells(

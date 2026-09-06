@@ -10,6 +10,7 @@ import json
 import re
 import warnings
 from collections.abc import Mapping
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -23,13 +24,20 @@ CATEGORIES = {"UNSPECIFIED", "PKI", "DSE", "PART", "PRODUCT", "ASSEMBLY"}
 def validate_configuration(raw: object) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError("Настройки позиции должны быть объектом")
-    allowed = {"category", "image", "norm", "opening", "indicators"}
+    allowed = {"category", "image", "norm", "opening", "opening_date", "indicators"}
     if raw.keys() - allowed:
         raise ValueError("Неизвестные настройки позиции")
     category = raw.get("category", "UNSPECIFIED")
     if not isinstance(category, str) or category not in CATEGORIES:
         raise ValueError("Выберите ПКИ, ДСЕ, составную часть, изделие или комплект")
     result: dict[str, Any] = {"category": category}
+    if "opening_date" in raw:
+        opening_date = raw["opening_date"]
+        if not isinstance(opening_date, str) or (
+            opening_date and date.fromisoformat(opening_date).isoformat() != opening_date
+        ):
+            raise ValueError("Дата начального остатка должна быть в формате ГГГГ-ММ-ДД")
+        result["opening_date"] = opening_date
     for key in ("norm", "opening"):
         value = raw.get(key, "")
         if not isinstance(value, str) or len(value) > 100:
@@ -99,6 +107,8 @@ def validate_configuration(raw: object) -> dict[str, Any]:
             "MAX",
             "IF",
             "CUM",
+            "CUMSUM",
+            "BALANCE",
             "ROUNDDOWN",
         }:
             raise ValueError("Код показателя повторяется или зарезервирован")
@@ -161,6 +171,34 @@ def calculate_fields(
     }
     cache: dict[tuple[str, int], Decimal | None] = {}
     active: set[tuple[str, int]] = set()
+    prefixes: dict[tuple[str, int], list[tuple[Decimal | None, bool]]] = {}
+    month_starts: list[int] = []
+    last_month = ""
+    month_start = 0
+    dates: list[str] = []
+    for i, cell in enumerate(rows[0]["cells"] if rows else []):
+        coordinate = cell["coordinate"]
+        day = str(coordinate.get("operation_date", coordinate.get("period_start", "")))
+        dates.append(day)
+        month = day[:7]
+        if month != last_month:
+            month_start, last_month = i, month
+        month_starts.append(month_start)
+    opening_date = str(config.get("opening_date", ""))
+    opening_start = next((i for i, day in enumerate(dates) if day >= opening_date), len(dates))
+
+    def prefix(name: str, index: int, start: int) -> tuple[Decimal | None, bool]:
+        entries = prefixes.setdefault((name, start), [])
+        while len(entries) <= index - start:
+            total, missing = entries[-1] if entries else (None, False)
+            current = value(name, start + len(entries))
+            entries.append(
+                (
+                    total if current is None else (total or Decimal(0)) + current,
+                    missing or current is None,
+                )
+            )
+        return entries[index - start]
 
     def value(code: str, index: int) -> Decimal | None:
         if code in {"NORM", "OPENING"}:
@@ -178,13 +216,32 @@ def calculate_fields(
             if code in formulas:
 
                 def cumulative(name: str) -> Decimal | None:
-                    values = [value(name, i) for i in range(index + 1)]
-                    if any(item is None for item in values):
+                    total, missing = prefix(name, index, month_starts[index])
+                    return None if missing else total
+
+                def recorded_sum(name: str) -> Decimal | None:
+                    return prefix(name, index, 0)[0]
+
+                def balance(received: str, used: str) -> Decimal | None:
+                    if index < opening_start:
                         return None
-                    return sum((item for item in values if item is not None), Decimal(0))
+                    incoming = prefix(received, index, opening_start)[0]
+                    outgoing = prefix(used, index, opening_start)[0]
+                    opening = value("OPENING", index)
+                    if incoming is None and outgoing is None and opening is None:
+                        return None
+                    return (
+                        (opening or Decimal(0))
+                        + (incoming or Decimal(0))
+                        - (outgoing or Decimal(0))
+                    )
 
                 result = evaluate_formula(
-                    formulas[code], lambda name: value(name, index), cumulative
+                    formulas[code],
+                    lambda name: value(name, index),
+                    cumulative,
+                    recorded_sum,
+                    balance,
                 )
             else:
                 cell_value = by_code[code]["cells"][index]["value"]

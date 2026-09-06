@@ -31,6 +31,7 @@ export function ReportMatrixPage({
       .getReportMatrix({
         report_type: reportType,
         organization_id: organizationId,
+        year: new Date().getFullYear(),
       })
       .then((result) => {
         if (active) setMatrix(result);

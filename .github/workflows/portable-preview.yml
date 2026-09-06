@@ -95,5 +95,5 @@ jobs:
               --target $env:GITHUB_SHA `
               --prerelease `
               --title "Reporting System $version test build" `
-              --notes "Windows x64 alpha for manual testing. Adds PKI/DSE/part categories, position images, configurable indicators, backend formulas, source readiness presets and guarded Excel import. Read TESTING.txt after extracting the ZIP; run start.cmd. Uses the system WebView2 Runtime. Alpha scope and limitations: docs/test-cases/alpha-dev3.md."
+              --notes "Windows x64 alpha for manual testing. Fixes the default balance and live calculation preview; adds collapsible months, resizable columns, editable report titles and ready-to-use Excel calculation presets. Read TESTING.txt after extracting the ZIP; run start.cmd. Uses the system WebView2 Runtime. Alpha scope and limitations: docs/test-cases/alpha-dev5.md."
           }

@@ -61,6 +61,8 @@ export type MatrixNavigation = {
 };
 
 export type ReportMatrixContract = {
+  year?: number | null;
+  presentation?: ReportPresentation;
   report_type: ReportType;
   organization_id: string;
   title: string;
@@ -76,6 +78,8 @@ export type ReportMatrixContract = {
 };
 
 export type ReportMatrixQuery = {
+  year?: number;
+  preview_changes?: CellChange[];
   report_type: ReportType;
   organization_id: string;
 };
@@ -86,6 +90,7 @@ export type CellChange = {
 };
 
 export type SaveReportCellsRequest = {
+  year?: number;
   report_type: ReportType;
   organization_id: string;
   base_revision: string;
@@ -99,6 +104,7 @@ export type SaveReportCellsResponse = {
 };
 
 export type ImportRequest = {
+  year?: number;
   report_type: ReportType;
   organization_id: string;
 };
@@ -124,6 +130,7 @@ export type ImportPreview = {
 };
 
 export type CommitImportRequest = {
+  year?: number;
   batch_id: string;
 };
 
@@ -137,6 +144,7 @@ export type CommitImportResult = {
 };
 
 export type ExportRequest = {
+  year?: number;
   report_type: ReportType;
   organization_id: string;
 };
@@ -177,6 +185,7 @@ export type FieldConfiguration = {
   image: string;
   norm: string;
   opening: string;
+  opening_date?: string;
   indicators: FieldIndicator[];
 };
 
@@ -205,6 +214,9 @@ export type SaveReportLayoutRequest = ReportLayoutQuery & {
   rows: ReportLayoutRow[];
 };
 
+export type ReportPresentation = { title?: string; widths?: Record<string, number> };
+export type SaveReportPresentationRequest = ReportLayoutQuery & ReportPresentation;
+
 export type ApplicationError = {
   code: string;
   message: string;
@@ -218,6 +230,7 @@ export type ApplicationError = {
 
 export interface ApplicationGateway {
   readonly mode: "pywebview" | "demo";
+  saveReportPresentation?(request: SaveReportPresentationRequest): Promise<ReportPresentation>;
   getReportMatrix(query: ReportMatrixQuery): Promise<ReportMatrixContract>;
   saveReportCells(
     request: SaveReportCellsRequest,

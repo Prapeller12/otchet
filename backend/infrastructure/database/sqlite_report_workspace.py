@@ -25,6 +25,53 @@ class SqliteReportWorkspaceRepository:
     def __init__(self, database_path: str) -> None:
         self._database_path = database_path
 
+    def get_presentation(self, organization_id: int, report_type: str) -> dict[str, object]:
+        connection = connect_sqlite(self._database_path)
+        try:
+            row = connection.execute(
+                "SELECT settings_json FROM report_presentation "
+                "WHERE organization_id = ? AND report_type = ?",
+                (organization_id, report_type),
+            ).fetchone()
+            return {} if row is None else cast(dict[str, object], json.loads(row[0]))
+        finally:
+            connection.close()
+
+    def save_presentation(
+        self, organization_id: int, report_type: str, patch: Mapping[str, object]
+    ) -> dict[str, object]:
+        connection = connect_sqlite(self._database_path)
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT settings_json FROM report_presentation "
+                "WHERE organization_id = ? AND report_type = ?",
+                (organization_id, report_type),
+            ).fetchone()
+            before = {} if row is None else json.loads(row[0])
+            after = {**before, **patch}
+            connection.execute(
+                "INSERT INTO report_presentation VALUES (?, ?, ?) "
+                "ON CONFLICT (organization_id, report_type) "
+                "DO UPDATE SET settings_json = excluded.settings_json",
+                (organization_id, report_type, json.dumps(after, ensure_ascii=False)),
+            )
+            _audit(
+                connection,
+                entity_type="report_presentation",
+                entity_id=f"{organization_id}:{report_type}",
+                action="UPDATE",
+                before=before,
+                after=after,
+            )
+            connection.commit()
+            return after
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
     def ensure_default_organization(self) -> WorkspaceOrganization:
         connection = connect_sqlite(self._database_path)
         try:
