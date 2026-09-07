@@ -121,6 +121,18 @@ def _run_window(paths: PortablePaths) -> None:
             return Path(selected)
         return Path(selected[0]) if selected else None
 
+    def save_pdf_file(suggested_name: str) -> Path | None:
+        selected = window.create_file_dialog(
+            webview.FileDialog.SAVE,
+            directory=str(paths.exports),
+            save_filename=suggested_name,
+            file_types=("Документ PDF (*.pdf)",),
+        )
+        if not selected:
+            return None
+        return Path(selected) if isinstance(selected, (str, Path)) else Path(selected[0])
+
+    bridge.configure_pdf_dialog(save_pdf_file)
     bridge.configure_excel_dialogs(
         open_file=open_excel_file,
         save_file=save_excel_file,

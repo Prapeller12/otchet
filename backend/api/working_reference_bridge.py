@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import calendar
+import hashlib
 import json
+import os
 import re
 import sqlite3
+import tempfile
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import closing
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -14,6 +18,7 @@ from uuid import uuid4
 
 from backend.api.bridge import DesktopBridge
 from backend.application.excel_reports import ExcelReportError, ExcelReportService
+from backend.application.monthly_report import monthly_snapshot
 from backend.application.report_cells import (
     ReportCellChange,
     ReportCellCoordinate,
@@ -35,12 +40,17 @@ from backend.infrastructure.database.sqlite_excel_imports import (
 from backend.infrastructure.database.sqlite_report_cells import (
     SqliteReportCellUnitOfWorkFactory,
 )
+from backend.infrastructure.database.sqlite_report_verification import (
+    SqliteReportVerificationRepository,
+    database_stamp,
+)
 from backend.infrastructure.database.sqlite_report_workspace import (
     SqliteReportWorkspaceRepository,
 )
 from backend.infrastructure.excel.openpyxl_matrix_workbook import (
     OpenpyxlMatrixWorkbookAdapter,
 )
+from backend.infrastructure.monthly_pdf import render_monthly_pdf
 from backend.repositories.report_workspace import (
     SubjectKind,
     WorkspaceGroup,
@@ -95,6 +105,8 @@ class WorkingReferenceApplicationBridge:
             backups_directory=Path(backups_directory or root / "backups"),
             application_version=application_version,
         )
+        self._verification = SqliteReportVerificationRepository(str(self._database_path))
+        self._save_pdf_file: Callable[[str], Path | None] | None = None
         self._open_excel_file: Callable[[], Path | None] | None = None
         self._save_excel_file: Callable[[str], Path | None] | None = None
 
@@ -109,6 +121,128 @@ class WorkingReferenceApplicationBridge:
         self._open_excel_file = open_file
         self._save_excel_file = save_file
 
+    def configure_pdf_dialog(self, save_file: Callable[[str], Path | None]) -> None:
+        self._save_pdf_file = save_file
+
+    def _monthly_snapshot(self, request: Mapping[str, object]) -> dict[str, Any]:
+        report_type = _required_string(request, "report_type")
+        organization_id = self._organization_id(request.get("organization_id"))
+        year = _year(request) or date.today().year
+        # Initialise configured groups before taking a stable database stamp.
+        self._build_matrix(report_type, organization_id, year)
+        with closing(connect_sqlite(self._database_path)) as connection:
+            before = database_stamp(connection)
+        matrix = self._build_matrix(report_type, organization_id, year)
+        organization = next(
+            o.name for o in self._workspace.list_organizations() if o.id == organization_id
+        )
+        with closing(connect_sqlite(self._database_path)) as connection:
+            if before != database_stamp(connection):
+                raise ValueError("Данные изменились при чтении. Повторите действие")
+        if (
+            "expected_revision" in request
+            and request["expected_revision"] != matrix["matrix_revision"]
+        ):
+            raise ValueError(
+                "Отчёт изменился. Перезагрузите форму перед печатью или подтверждением"
+            )
+        snapshot = monthly_snapshot(matrix, cast(int, request.get("month")), organization)
+        snapshot["_stamp"] = before
+        return snapshot
+
+    def get_report_verification(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(
+                request, {"report_type", "organization_id", "year", "month", "expected_revision"}
+            )
+            snapshot = self._monthly_snapshot(request)
+            return {
+                "ok": True,
+                "data": self._verification.status(snapshot),
+                "request_id": request_id,
+            }
+        except (OSError, ValueError, KeyError, sqlite3.Error, ReportCellError) as error:
+            return _failure("VERIFICATION_ERROR", str(error), request_id)
+
+    def verify_report(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(
+                request,
+                {
+                    "report_type",
+                    "organization_id",
+                    "year",
+                    "month",
+                    "signer_name",
+                    "snapshot_sha256",
+                    "confirmed",
+                    "expected_revision",
+                },
+            )
+            if request.get("confirmed") is not True:
+                raise ValueError("Подтвердите, что данные проверены")
+            snapshot = self._monthly_snapshot(request)
+            result = self._verification.verify(
+                snapshot,
+                _required_string(request, "signer_name"),
+                _required_string(request, "snapshot_sha256"),
+            )
+            return {"ok": True, "data": result, "request_id": request_id}
+        except (OSError, ValueError, KeyError, sqlite3.Error, ReportCellError) as error:
+            return _failure("VERIFICATION_ERROR", str(error), request_id)
+
+    def export_pdf(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(
+                request, {"report_type", "organization_id", "year", "month", "expected_revision"}
+            )
+            if self._save_pdf_file is None:
+                raise ValueError("Сохранение PDF доступно в desktop-версии")
+            snapshot = self._monthly_snapshot(request)
+            if any(row["errors"] for row in snapshot["rows"]):
+                raise ValueError("Сначала исправьте ошибки расчёта")
+            destination = self._save_pdf_file(
+                f"{snapshot['report_type'].lower()}-{snapshot['period']}.pdf"
+            )
+            if destination is None:
+                return {"ok": True, "data": {"cancelled": True}, "request_id": request_id}
+            if destination.suffix.lower() != ".pdf":
+                raise ValueError("Выберите файл с расширением .pdf")
+            content = render_monthly_pdf(
+                snapshot,
+                self._verification.status(snapshot),
+                self._definitions_directory.parent / "fonts" / "ReportingSerif.ttf",
+            )
+            temporary: Path | None = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    dir=destination.parent, suffix=".pdf.tmp", delete=False
+                ) as stream:
+                    temporary = Path(stream.name)
+                    stream.write(content)
+                os.replace(temporary, destination)
+            finally:
+                if temporary is not None:
+                    temporary.unlink(missing_ok=True)
+            return {
+                "ok": True,
+                "data": {
+                    "cancelled": False,
+                    "file_name": destination.name,
+                    "file_path": str(destination),
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                },
+                "request_id": request_id,
+            }
+        except (OSError, ValueError, KeyError, sqlite3.Error, ReportCellError) as error:
+            return _failure("PDF_EXPORT_ERROR", str(error), request_id)
+
     def health(self) -> dict[str, object]:
         return self._transport.health()
 
@@ -119,10 +253,12 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"report_type", "organization_id"})
+            _reject_unknown(request, {"report_type", "organization_id", "year", "preview_changes"})
             report_type = _required_string(request, "report_type")
             organization_id = self._organization_id(request.get("organization_id"))
-            matrix = self._build_matrix(report_type, organization_id)
+            matrix = self._build_matrix(
+                report_type, organization_id, _year(request), request.get("preview_changes")
+            )
             return {"ok": True, "data": matrix, "request_id": request_id}
         except (OSError, ValueError, KeyError, json.JSONDecodeError, ReportCellError) as error:
             return _failure("WORKING_REFERENCE_ERROR", str(error), request_id)
@@ -139,6 +275,7 @@ class WorkingReferenceApplicationBridge:
                     "base_revision",
                     "idempotency_key",
                     "changes",
+                    "year",
                 },
             )
             report_type = _required_string(request, "report_type")
@@ -156,7 +293,7 @@ class WorkingReferenceApplicationBridge:
             ):
                 raise ReportCellValidationError("changes must be an array")
 
-            allowed = self._editable_coordinate_keys(report_type, organization_id)
+            allowed = self._editable_coordinate_keys(report_type, organization_id, _year(request))
             current = {
                 _coordinate_key(cell.coordinate): cell
                 for cell in self._service.get_cells(
@@ -226,7 +363,7 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"report_type", "organization_id"})
+            _reject_unknown(request, {"report_type", "organization_id", "year"})
             report_type = _required_string(request, "report_type")
             organization_id = self._organization_id(request.get("organization_id"))
             if self._open_excel_file is None:
@@ -238,7 +375,7 @@ class WorkingReferenceApplicationBridge:
                 source,
                 report_type=report_type,
                 organization_id=organization_id,
-                matrix=self._build_matrix(report_type, organization_id),
+                matrix=self._build_matrix(report_type, organization_id, _year(request)),
             )
             return {"ok": True, "data": preview.to_dict(), "request_id": request_id}
         except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
@@ -249,11 +386,11 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"batch_id"})
+            _reject_unknown(request, {"batch_id", "year"})
             result = self._excel.commit_import(
                 _required_string(request, "batch_id"),
                 allowed_coordinates=lambda report, org: self._editable_coordinate_keys(
-                    report, self._organization_id(str(org))
+                    report, self._organization_id(str(org)), _year(request)
                 ),
             )
             return {"ok": True, "data": result, "request_id": request_id}
@@ -269,7 +406,7 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"report_type", "organization_id"})
+            _reject_unknown(request, {"report_type", "organization_id", "year"})
             report_type = _required_string(request, "report_type")
             organization_id = self._organization_id(request.get("organization_id"))
             if self._save_excel_file is None:
@@ -280,7 +417,7 @@ class WorkingReferenceApplicationBridge:
                 return {"ok": True, "data": {"cancelled": True}, "request_id": request_id}
             result = self._excel.export(
                 destination,
-                self._build_matrix(report_type, organization_id),
+                self._build_matrix(report_type, organization_id, _year(request)),
             )
             return {"ok": True, "data": result, "request_id": request_id}
         except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
@@ -431,9 +568,63 @@ class WorkingReferenceApplicationBridge:
         ) as error:
             return _failure("WORKSPACE_SETTINGS_ERROR", str(error), request_id)
 
-    def _build_matrix(self, report_type: str, organization_id: int) -> dict[str, object]:
+    def save_report_presentation(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"report_type", "organization_id", "title", "widths"})
+            report_type = _required_string(request, "report_type")
+            self._definition(report_type)
+            organization_id = self._organization_id(request.get("organization_id"))
+            patch: dict[str, object] = {}
+            if "title" in request:
+                title = _required_string(request, "title").strip()
+                if not title or len(title) > 200:
+                    raise ValueError("Название отчёта: от 1 до 200 символов")
+                patch["title"] = title
+            if "widths" in request:
+                widths = _mapping(request["widths"], "widths")
+                if len(widths) > 400 or any(
+                    not isinstance(key, str)
+                    or len(key) > 80
+                    or isinstance(width, bool)
+                    or not isinstance(width, int)
+                    or not 48 <= width <= 600
+                    for key, width in widths.items()
+                ):
+                    raise ValueError("Ширина столбца: от 48 до 600 пикселей")
+                patch["widths"] = dict(widths)
+            result = self._workspace.save_presentation(organization_id, report_type, patch)
+            return {"ok": True, "data": result, "request_id": request_id}
+        except (ValueError, sqlite3.Error, ReportCellError) as error:
+            return _failure("PRESENTATION_ERROR", str(error), request_id)
+
+    def _build_matrix(
+        self,
+        report_type: str,
+        organization_id: int,
+        year: int | None = None,
+        preview_changes: object = None,
+    ) -> dict[str, object]:
         definition = self._definition(report_type)
-        periods = self._periods(report_type)
+        periods = self._periods(report_type, year)
+        presentation = self._workspace.get_presentation(organization_id, report_type)
+        widths = cast(dict[str, int], presentation.get("widths", {}))
+        previews: dict[str, ReportCellValue] = {}
+        if preview_changes is not None:
+            changes = _sequence(preview_changes, "preview_changes")
+            if len(changes) > 10000:
+                raise ValueError("Слишком много изменений предпросмотра")
+            for raw in changes:
+                change = _mapping(raw, "change")
+                _reject_unknown(change, {"coordinate", "value"})
+                coordinate = ReportCellCoordinate.from_mapping(
+                    _mapping(change.get("coordinate"), "coordinate")
+                )
+                key = _coordinate_key(coordinate)
+                if key in previews:
+                    raise ValueError("Повторная ячейка предпросмотра")
+                previews[key] = ReportCellValue.from_mapping(_mapping(change.get("value"), "value"))
         rows: list[dict[str, object]] = []
         stored = {
             _coordinate_key(cell.coordinate): cell
@@ -452,6 +643,10 @@ class WorkingReferenceApplicationBridge:
             }
             for index, column in enumerate(identifier_columns)
         ]
+        for left_column in left_columns:
+            left_column["width"] = widths.get(
+                str(left_column["id"]), cast(int, left_column["width"])
+            )
         template_groups = {
             _required_string(group_record, "group_id"): group_record
             for group_record in (
@@ -503,6 +698,11 @@ class WorkingReferenceApplicationBridge:
                         if current is None or not editable
                         else current.value.to_dict()
                     )
+                    preview = previews.pop(_coordinate_key(coordinate), None)
+                    if preview is not None:
+                        if not editable:
+                            raise ValueError("Расчётная ячейка не редактируется")
+                        value = preview.to_dict()
                     access = "editable" if editable else "calculated"
                     cell: dict[str, object] = {
                         "column_id": column_id,
@@ -549,11 +749,15 @@ class WorkingReferenceApplicationBridge:
             rows.extend(group_rows)
 
         calculate_ready_sets(rows)
+        if previews:
+            raise ValueError("Ячейка предпросмотра вне выбранного отчёта или периода")
 
         return {
             "report_type": report_type,
             "organization_id": str(organization_id),
-            "title": _TITLES[report_type],
+            "title": presentation.get("title", _TITLES[report_type]),
+            "year": year,
+            "presentation": presentation,
             "subtitle": "Сквозной локальный контур на обезличенных данных",
             "form_status": "WORKING_REFERENCE",
             "source_notice": (
@@ -567,7 +771,7 @@ class WorkingReferenceApplicationBridge:
                     "id": column_id,
                     "label": period_start[8:10],
                     "group_label": period_start[:7],
-                    "width": 76,
+                    "width": widths.get(column_id, 76),
                 }
                 for column_id, period_start in periods
             ],
@@ -588,8 +792,10 @@ class WorkingReferenceApplicationBridge:
             "navigation": {"enter_direction": "down"},
         }
 
-    def _editable_coordinate_keys(self, report_type: str, organization_id: int) -> set[str]:
-        matrix = self._build_matrix(report_type, organization_id)
+    def _editable_coordinate_keys(
+        self, report_type: str, organization_id: int, year: int | None = None
+    ) -> set[str]:
+        matrix = self._build_matrix(report_type, organization_id, year)
         keys: set[str] = set()
         for row in cast(list[dict[str, object]], matrix["rows"]):
             for cell in cast(list[dict[str, object]], row["cells"]):
@@ -641,7 +847,15 @@ class WorkingReferenceApplicationBridge:
             raise ValueError("invalid WORKING_REFERENCE matrix descriptor")
         return cast(dict[str, object], value)
 
-    def _periods(self, report_type: str) -> list[tuple[str, str]]:
+    def _periods(self, report_type: str, year: int | None = None) -> list[tuple[str, str]]:
+        if year is not None:
+            result: list[tuple[str, str]] = []
+            for month in range(1, 13):
+                count = calendar.monthrange(year, month)[1]
+                for day in range(1, count + 1, 7 if report_type == "SUBSIDIARY" else 1):
+                    value = date(year, month, day).isoformat()
+                    result.append((value, value))
+            return result
         first = date.today().replace(day=1)
         if report_type == "SUBSIDIARY":
             starts: list[date] = []
@@ -687,7 +901,23 @@ class WorkingReferenceApplicationBridge:
         config.setdefault("opening", "")
         if "indicators" not in config:
             config["indicators"] = self._default_indicators(report_type, group.template_group_id)
+        defaults = self._preset_data().get("defaults", {})
+        codes = {item["code"] for item in config["indicators"]}
+        if {"WRK_DAILY_RECEIVED", "WRK_DAILY_USED"} <= codes:
+            for item in config["indicators"]:
+                if item["code"] in defaults and not item["formula"].strip():
+                    item["formula"] = defaults[item["code"]]
         return config
+
+    def _preset_data(self) -> dict[str, Any]:
+        return cast(
+            dict[str, Any],
+            json.loads(
+                (self._definitions_directory / "presets" / "field-presets.v1.json").read_text(
+                    encoding="utf-8"
+                )
+            ),
+        )
 
     def _default_indicators(self, report_type: str, template_id: str) -> list[dict[str, str]]:
         definition = cast(dict[str, Any], self._definition(report_type))
@@ -695,7 +925,13 @@ class WorkingReferenceApplicationBridge:
             item for item in definition["layout"]["row_groups"] if item["group_id"] == template_id
         )
         return [
-            {"code": _contract_code(item["row_id"]), "label": item["label"], "formula": ""}
+            {
+                "code": _contract_code(item["row_id"]),
+                "label": item["label"],
+                "formula": self._preset_data()
+                .get("defaults", {})
+                .get(_contract_code(item["row_id"]), ""),
+            }
             for item in group["rows"]
         ]
 
@@ -778,6 +1014,15 @@ class WorkingReferenceApplicationBridge:
                 if group.template_group_id in repeatable
             ],
         }
+
+
+def _year(request: Mapping[str, object]) -> int | None:
+    value = request.get("year")
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 1900 <= value <= 2100:
+        raise ValueError("Год должен быть целым числом от 1900 до 2100")
+    return value
 
 
 def _contract_code(value: str) -> str:

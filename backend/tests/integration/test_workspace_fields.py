@@ -3,6 +3,8 @@ from __future__ import annotations
 import base64
 import io
 import json
+import shutil
+from datetime import date
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -42,6 +44,261 @@ def picture() -> str:
     stream = io.BytesIO()
     Image.new("RGB", (8, 8), "blue").save(stream, "PNG")
     return "data:image/png;base64," + base64.b64encode(stream.getvalue()).decode()
+
+
+def test_default_balance_midmonth_preview_save_and_month_carry(
+    app: WorkingReferenceApplicationBridge, tmp_path: Path
+) -> None:
+    query = {**QUERY, "year": 2026}
+    matrix = data(app.get_report_matrix(query))
+    assert len(matrix["time_columns"]) == 365
+    indices = {column["id"]: i for i, column in enumerate(matrix["time_columns"])}
+    rows = {row["metric_code"]: row for row in matrix["rows"]}
+    changes = [
+        {
+            "coordinate": rows[code]["cells"][indices[day]]["coordinate"],
+            "value": {"kind": "QUANTITY", "quantity": quantity},
+        }
+        for code, day, quantity in [
+            ("WRK_DAILY_RECEIVED", "2026-09-14", "20"),
+            ("WRK_DAILY_USED", "2026-09-14", "3"),
+            ("WRK_DAILY_USED", "2026-10-01", "2"),
+        ]
+    ]
+    preview = data(app.get_report_matrix({**query, "preview_changes": changes}))
+    balance = next(row for row in preview["rows"] if row["metric_code"] == "WRK_DAILY_BALANCE")
+    assert balance["cells"][indices["2026-09-13"]]["value"] == {"kind": "DATA_NOT_PROVIDED"}
+    assert balance["cells"][indices["2026-09-14"]]["value"] == {
+        "kind": "QUANTITY",
+        "quantity": "17",
+    }
+    assert balance["cells"][indices["2026-10-01"]]["value"] == {
+        "kind": "QUANTITY",
+        "quantity": "15",
+    }
+    fresh = data(app.get_report_matrix(query))
+    assert fresh == matrix  # Preview is read-only, including the fact revision.
+    data(
+        app.save_report_cells(
+            {
+                **query,
+                "base_revision": matrix["matrix_revision"],
+                "idempotency_key": uuid4().hex,
+                "changes": changes,
+            }
+        )
+    )
+    saved = data(app.get_report_matrix(query))
+    assert saved["rows"][2]["cells"] == balance["cells"]
+    assert saved["rows"][0]["cells"][0]["value"] == {"kind": "DATA_NOT_PROVIDED"}
+    conn = connect_sqlite(tmp_path / "reporting.db")
+    try:
+        assert conn.execute("SELECT count(*) FROM report_fact_revisions").fetchone()[0] == 3
+    finally:
+        conn.close()
+
+
+def test_year_scope_leap_day_and_invalid_preview(app: WorkingReferenceApplicationBridge) -> None:
+    matrix = data(app.get_report_matrix({**QUERY, "year": 2024}))
+    assert len(matrix["time_columns"]) == 366
+    assert any(column["id"] == "2024-02-29" for column in matrix["time_columns"])
+    for year in [True, "2026", 1899, 2101]:
+        assert not app.get_report_matrix({**QUERY, "year": year})["ok"]
+    protected = matrix["rows"][2]["cells"][0]["coordinate"]
+    assert not app.get_report_matrix(
+        {
+            **QUERY,
+            "year": 2024,
+            "preview_changes": [
+                {"coordinate": protected, "value": {"kind": "QUANTITY", "quantity": "10"}}
+            ],
+        }
+    )["ok"]
+
+
+def test_report_presentation_persists_and_is_scoped(app: WorkingReferenceApplicationBridge) -> None:
+    data(
+        app.save_report_presentation(
+            {**QUERY, "title": "Мой ежедневный отчёт", "widths": {"party": 123, "2026-09-14": 99}}
+        )
+    )
+    data(app.save_report_presentation({**QUERY, "widths": {"party": 210}}))
+    matrix = data(app.get_report_matrix({**QUERY, "year": 2026}))
+    assert matrix["title"] == "Мой ежедневный отчёт"
+    assert matrix["presentation"]["widths"] == {"party": 210}
+    other = data(app.get_report_matrix({"report_type": "HEAD_SITE", "organization_id": "1"}))
+    assert other["title"] != matrix["title"]
+    patches: list[dict[str, Any]] = [
+        {"title": " "},
+        {"title": "x" * 201},
+        {"widths": {"party": 1}},
+        {"widths": {"party": True}},
+    ]
+    for patch in patches:
+        assert not app.save_report_presentation({**QUERY, **patch})["ok"]
+
+
+def test_upgrade_preserves_opening_date_and_repairs_previous_preset(tmp_path: Path) -> None:
+    old_migrations = tmp_path / "old-migrations"
+    old_migrations.mkdir()
+    for path in (ROOT / "backend/migrations").glob("*.sql"):
+        if path.name < "0007":
+            shutil.copyfile(path, old_migrations / path.name)
+    database = tmp_path / "upgrade.db"
+    conn = connect_sqlite(database)
+    apply_migrations(conn, old_migrations)
+    conn.close()
+    app = WorkingReferenceApplicationBridge(
+        database,
+        migrations_directory=old_migrations,
+        definitions_directory=ROOT / "resources/report-definitions",
+        backups_directory=tmp_path / "backups",
+    )
+    layout = data(app.get_report_layout(QUERY))
+    config = layout["rows"][0]["configuration"]
+    config.update(opening="5", norm="3")
+    config["indicators"][2]["formula"] = "=OPENING+CUM(WRK_DAILY_RECEIVED)-CUM(WRK_DAILY_USED)"
+    config["indicators"].append(layout["presets"][0]["indicators"][1])
+    data(app.save_report_layout({**QUERY, "rows": layout["rows"]}))
+    conn = connect_sqlite(database)
+    try:
+        assert apply_migrations(conn, ROOT / "backend/migrations") == ("0007", "0008")
+        assert apply_migrations(conn, ROOT / "backend/migrations") == ()
+    finally:
+        conn.close()
+    updated = data(app.get_report_layout(QUERY))["rows"][0]["configuration"]
+    assert updated["opening"] == "5"
+    assert updated["opening_date"] == date.today().replace(day=1).isoformat()
+    assert updated["indicators"][2]["formula"] == "=BALANCE(WRK_DAILY_RECEIVED,WRK_DAILY_USED)"
+    year = data(app.get_report_matrix({**QUERY, "year": date.today().year}))
+    index = next(
+        i for i, c in enumerate(year["time_columns"]) if c["id"] == updated["opening_date"]
+    )
+    assert year["rows"][2]["cells"][index]["value"] == {"kind": "QUANTITY", "quantity": "5"}
+    if index:
+        assert year["rows"][2]["cells"][index - 1]["value"] == {"kind": "DATA_NOT_PROVIDED"}
+
+
+@pytest.mark.parametrize("report", ["DAILY_MOVEMENT", "HEAD_SITE", "SUBSIDIARY"])
+def test_year_excel_roundtrip(
+    app: WorkingReferenceApplicationBridge, tmp_path: Path, report: str
+) -> None:
+    query = {"report_type": report, "organization_id": "1", "year": 2026}
+    destination = tmp_path / "year.xlsx"
+    matrix = data(app.get_report_matrix(query))
+    first_row = next(
+        row for row in matrix["rows"] if row["cells"][0]["state"]["access"] == "editable"
+    )
+    changes = [
+        {
+            "coordinate": first_row["cells"][index]["coordinate"],
+            "value": {"kind": "QUANTITY", "quantity": value},
+        }
+        for index, value in [(0, "12.25"), (-1, "0")]
+    ]
+    data(
+        app.save_report_cells(
+            {
+                **query,
+                "base_revision": matrix["matrix_revision"],
+                "idempotency_key": uuid4().hex,
+                "changes": changes,
+            }
+        )
+    )
+    app.configure_excel_dialogs(open_file=lambda: destination, save_file=lambda _: destination)
+    data(app.export_report(query))
+    preview = data(app.validate_import(query))
+    assert preview["error_count"] == 0
+    data(app.commit_import({"batch_id": preview["batch_id"], "year": 2026}))
+    saved = data(app.get_report_matrix(query))
+    for index, value in [(0, "12.25"), (-1, "0")]:
+        assert saved["rows"][0]["cells"][index]["value"] == {"kind": "QUANTITY", "quantity": value}
+
+
+@pytest.mark.parametrize(
+    "report,preset_label,input_code,output_code,expected",
+    [
+        (
+            "HEAD_SITE",
+            "Накопительный факт выпуска комплекта",
+            "WRK_HEAD_ASSEMBLY_FACT",
+            "TOTAL_FACT",
+            "20",
+        ),
+        (
+            "HEAD_SITE",
+            "Накопительный факт выпуска изделия",
+            "WRK_HEAD_PRODUCT_FACT",
+            "TOTAL_FACT",
+            "20",
+        ),
+        (
+            "SUBSIDIARY",
+            "Поставка и отклонение от договора",
+            "WRK_SUBSIDIARY_SUPPLY",
+            "CONTRACT_VARIANCE",
+            "-80",
+        ),
+        (
+            "DAILY_MOVEMENT",
+            "Наличие и комплектность — как в Excel",
+            "AVAILABLE_QTY",
+            "READY_SETS",
+            "6",
+        ),
+    ],
+)
+def test_source_presets_without_manual_formulas(
+    app: WorkingReferenceApplicationBridge,
+    report: str,
+    preset_label: str,
+    input_code: str,
+    output_code: str,
+    expected: str,
+) -> None:
+    query = {"report_type": report, "organization_id": "1"}
+    layout = data(app.get_report_layout(query))
+    preset = next(item for item in layout["presets"] if item["label"] == preset_label)
+    position = next(
+        row
+        for row in layout["rows"]
+        if set(preset["required_codes"])
+        <= {field["code"] for field in row["configuration"]["indicators"]}
+    )
+    config = position["configuration"]
+    config["norm"] = "3"
+    indicators = {item["code"]: item for item in config["indicators"]}
+    indicators.update({item["code"]: item for item in preset["indicators"]})
+    config["indicators"] = list(indicators.values())
+    data(app.save_report_layout({**query, "rows": layout["rows"]}))
+    matrix = data(app.get_report_matrix({**query, "year": 2026}))
+    rows = {
+        row["metric_code"]: row
+        for row in matrix["rows"]
+        if row["group_id"] == f"workspace-group-{position['id']}"
+    }
+    changes = [
+        {
+            "coordinate": rows[input_code]["cells"][13]["coordinate"],
+            "value": {"kind": "QUANTITY", "quantity": "20"},
+        }
+    ]
+    if "CONTRACT_QTY" in rows:
+        changes.append(
+            {
+                "coordinate": rows["CONTRACT_QTY"]["cells"][13]["coordinate"],
+                "value": {"kind": "QUANTITY", "quantity": "100"},
+            }
+        )
+    preview = data(app.get_report_matrix({**query, "year": 2026, "preview_changes": changes}))
+    actual = next(
+        row
+        for row in preview["rows"]
+        if row["group_id"] == f"workspace-group-{position['id']}"
+        and row["metric_code"] == output_code
+    )
+    assert actual["cells"][13]["value"] == {"kind": "QUANTITY", "quantity": expected}
 
 
 def save_values(

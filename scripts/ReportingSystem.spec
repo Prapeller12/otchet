@@ -6,8 +6,8 @@ from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, co
 
 repository_root = Path(SPECPATH).resolve().parent
 
-hidden_imports = collect_submodules("webview")
-datas = collect_data_files("webview")
+hidden_imports = collect_submodules("webview") + ["reportlab.pdfbase.pdfmetrics", "reportlab.pdfbase.ttfonts", "reportlab.pdfgen.canvas"]
+datas = collect_data_files("webview") + collect_data_files("reportlab")
 binaries = collect_dynamic_libs("webview")
 
 analysis = Analysis(

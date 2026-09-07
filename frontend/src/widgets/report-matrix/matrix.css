@@ -6,13 +6,30 @@
   box-shadow: 0 10px 30px rgba(20, 35, 60, 0.07);
 }
 
+.column-resize-handle {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 8px;
+  cursor: col-resize; touch-action: none; z-index: 10;
+}
+.column-resize-handle:hover, .column-resize-handle:focus-visible { background: var(--pk-primary); outline: 2px solid var(--pk-primary); }
+.month-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; padding: 9px 16px; border-bottom: 1px solid var(--pk-border); }
+.month-controls button { cursor: pointer; padding: 5px 8px; border: 1px solid var(--pk-border); border-radius: 5px; background: var(--pk-paper); color: var(--pk-text); }
+.month-controls button[aria-expanded="true"] { background: var(--pk-primary-soft); color: var(--pk-primary); border-color: var(--pk-primary-border); }
+.month-heading { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.rename-report { display: flex; flex-wrap: wrap; gap: 6px; }
+.rename-report input { width: min(360px, 45vw); padding: 7px; border: 1px solid var(--pk-primary-border); border-radius: 5px; }
+.preset-choices { padding: 12px; background: var(--pk-primary-soft); border: 1px solid var(--pk-primary-border); border-radius: 6px; }
+.preset-choices button { margin: 4px; }
+.calculation-description { align-self: center; font-size: 12px; color: var(--pk-success-text); }
+.advanced-formula { grid-column: 1 / -1; font-size: 12px; }
+.advanced-formula summary { cursor: pointer; color: var(--pk-secondary); margin-bottom: 8px; }
+
 .matrix-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
   padding: 20px 22px 17px;
-  border-bottom: 1px solid #e6ebf2;
+  border-bottom: 1px solid var(--pk-border);
 }
 
 .matrix-toolbar h2 {
@@ -39,9 +56,9 @@
 
 .reference-badge {
   padding: 4px 7px;
-  color: #855c00;
-  background: #fff5d6;
-  border: 1px solid #ecd38a;
+  color: var(--pk-warning-text);
+  background: var(--pk-warning-soft);
+  border: 1px solid var(--pk-warning-border);
   border-radius: 999px;
   font-size: 11px;
   font-weight: 750;
@@ -64,20 +81,20 @@
 }
 
 .button.secondary {
-  color: #34445f;
-  background: #fff;
-  border-color: #c8d2e1;
+  color: var(--pk-text);
+  background: var(--pk-surface);
+  border-color: var(--pk-border);
 }
 
 .button.primary {
-  color: #fff;
+  color: var(--pk-surface);
   background: var(--blue-600);
 }
 
 .button:disabled {
-  color: #8b98aa;
-  background: #eef1f5;
-  border-color: #dde3eb;
+  color: var(--pk-muted);
+  background: var(--pk-sunken);
+  border-color: var(--pk-border);
   cursor: not-allowed;
 }
 
@@ -91,19 +108,19 @@
 }
 
 .source-notice {
-  color: #5e526f;
-  background: #f7f3fb;
-  border-bottom: 1px solid #e5ddec;
+  color: var(--pk-secondary);
+  background: var(--pk-paper);
+  border-bottom: 1px solid var(--pk-border);
 }
 
 .source-notice strong {
-  color: #3f3152;
+  color: var(--pk-text);
 }
 
 .save-error {
-  color: #8d1d2b;
-  background: #fff0f1;
-  border-bottom: 1px solid #f0c6cb;
+  color: var(--pk-error-text);
+  background: var(--pk-error-soft);
+  border-bottom: 1px solid var(--pk-error-border);
 }
 
 .matrix-scroll {
@@ -119,17 +136,18 @@
   table-layout: fixed;
   border-spacing: 0;
   border-collapse: separate;
-  color: #202c40;
+  color: var(--pk-text);
   font-size: 12px;
 }
 
 .report-matrix th,
 .report-matrix td {
+  overflow-wrap: anywhere;
   height: 40px;
   padding: 0;
-  background: #fff;
-  border-right: 1px solid #d8e0ea;
-  border-bottom: 1px solid #d8e0ea;
+  background: var(--pk-surface);
+  border-right: 1px solid var(--pk-border);
+  border-bottom: 1px solid var(--pk-border);
 }
 
 .report-matrix thead th {
@@ -137,18 +155,18 @@
   z-index: 5;
   height: 34px;
   padding: 5px 8px;
-  color: #31415b;
-  background: #e9eef6;
+  color: var(--pk-text);
+  background: var(--pk-sunken);
   text-align: center;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .matrix-header-group-row th {
   top: 0;
   height: 31px;
-  color: #fff;
-  background: #334c74;
-  border-color: #536b8e;
+  color: var(--pk-surface);
+  background: var(--pk-header);
+  border-color: var(--pk-border);
 }
 
 .matrix-header-leaf-row th {
@@ -158,19 +176,19 @@
 .report-matrix .sticky-left {
   position: sticky;
   z-index: 3;
-  background: #f7f9fc;
+  background: var(--pk-paper);
 }
 
 .report-matrix thead .sticky-left {
   z-index: 8;
-  color: #fff;
-  background: #334c74;
+  color: var(--pk-surface);
+  background: var(--pk-header);
 }
 
 .matrix-group-cell {
   padding: 10px 12px !important;
-  color: #24334c;
-  background: #edf2f8 !important;
+  color: var(--pk-text);
+  background: var(--pk-sunken) !important;
   text-align: left;
   vertical-align: top;
   font-weight: 700;
@@ -179,7 +197,7 @@
 
 .matrix-indicator-cell {
   padding: 0 11px !important;
-  color: #35445d;
+  color: var(--pk-text);
   text-align: left;
   font-weight: 650;
   box-shadow: 4px 0 8px rgba(26, 42, 67, 0.07);
@@ -191,20 +209,20 @@
   justify-content: space-between;
   gap: 8px;
   margin-top: 3px;
-  color: #74839a;
+  color: var(--pk-secondary);
   font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .indicator-detail strong {
-  color: #1e4f93;
+  color: var(--pk-primary);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
 .matrix-value-cell {
-  background: #fff;
+  background: var(--pk-surface);
 }
 
 .matrix-value-cell.is-editing {
@@ -216,8 +234,8 @@
   width: 100%;
   height: 39px;
   padding: 0 8px;
-  color: #1e2b40;
-  background: #fff;
+  color: var(--pk-text);
+  background: var(--pk-surface);
   border: 0;
   cursor: default;
   text-align: right;
@@ -229,41 +247,41 @@
 }
 
 .matrix-cell-button.is-calculated {
-  color: #3f4d62;
-  background: #edf1f6;
+  color: var(--pk-text);
+  background: var(--pk-sunken);
 }
 
 .matrix-cell-button.is-locked {
-  color: #6e655c;
-  background: repeating-linear-gradient(135deg, #f5f2ee, #f5f2ee 5px, #ece8e2 5px, #ece8e2 10px);
+  color: var(--pk-secondary);
+  background: repeating-linear-gradient(135deg, var(--pk-sunken), var(--pk-sunken) 5px, var(--pk-sunken) 5px, var(--pk-sunken) 10px);
 }
 
 .matrix-cell-button.is-empty .cell-value {
-  color: #9aa6b6;
+  color: var(--pk-muted);
 }
 
 .matrix-cell-button.is-zero {
-  color: #174d9b;
-  background-color: #eef4ff;
+  color: var(--pk-primary);
+  background-color: var(--pk-primary-soft);
 }
 
 .matrix-cell-button.is-dirty {
-  box-shadow: inset 0 -3px 0 #e7a62d;
+  box-shadow: inset 0 -3px 0 var(--pk-warning);
 }
 
 .matrix-cell-button.is-saving {
-  background-color: #eef5ff;
+  background-color: var(--pk-primary-soft);
 }
 
 .matrix-cell-button.is-error {
-  color: #a02130;
-  background: #ffeff1;
-  box-shadow: inset 0 0 0 2px #d65260;
+  color: var(--pk-error-text);
+  background: var(--pk-error-soft);
+  box-shadow: inset 0 0 0 2px var(--pk-error);
 }
 
 .matrix-cell-button:focus-visible {
   z-index: 2;
-  outline: 3px solid rgba(45, 98, 208, 0.45);
+  outline: 3px solid rgb(31 95 74 / 35%);
   outline-offset: -3px;
 }
 
@@ -286,17 +304,17 @@
   font-weight: 800;
 }
 
-.marker-locked { color: #6a5c4c; background: #ded7ce; }
-.marker-error { color: #fff; background: #c93444; }
-.marker-dirty { color: #8f5c00; background: #ffe2a2; }
-.marker-saving { color: #174d9b; background: #cfe0ff; }
+.marker-locked { color: var(--pk-secondary); background: var(--pk-border); }
+.marker-error { color: var(--pk-surface); background: var(--pk-error); }
+.marker-dirty { color: var(--pk-warning-text); background: var(--pk-warning-border); }
+.marker-saving { color: var(--pk-primary); background: var(--pk-primary-border); }
 
 .matrix-cell-editor {
   width: 100%;
   height: 39px;
   padding: 0 8px;
-  color: #12203a;
-  background: #fff;
+  color: var(--pk-text);
+  background: var(--pk-surface);
   border: 0;
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -304,9 +322,9 @@
 
 .excel-success {
   padding: 10px 22px;
-  color: #175c3b;
-  background: #ebf8f1;
-  border-bottom: 1px solid #bfe4cf;
+  color: var(--pk-success-text);
+  background: var(--pk-success-soft);
+  border-bottom: 1px solid var(--pk-primary-border);
   font-size: 12px;
   font-weight: 650;
 }
@@ -326,7 +344,7 @@
   max-height: min(720px, calc(100vh - 48px));
   overflow: auto;
   padding: 24px;
-  background: #fff;
+  background: var(--pk-surface);
   border-radius: 12px;
   box-shadow: 0 24px 70px rgba(17, 29, 47, 0.28);
 }
@@ -351,7 +369,7 @@
 
 .excel-preview-counts span {
   padding: 12px 8px;
-  background: #f1f5fa;
+  background: var(--pk-sunken);
   border-radius: 8px;
   text-align: center;
   font-size: 12px;
@@ -359,19 +377,19 @@
 
 .excel-preview-counts strong {
   display: block;
-  color: #203a64;
+  color: var(--pk-text);
   font-size: 20px;
 }
 
 .excel-preview-counts .has-errors,
 .excel-preview-counts .has-errors strong {
-  color: #982434;
-  background: #fff0f1;
+  color: var(--pk-error-text);
+  background: var(--pk-error-soft);
 }
 
 .excel-preview-note {
   padding: 11px 12px;
-  background: #eef5ff;
+  background: var(--pk-primary-soft);
   border-radius: 7px;
 }
 
@@ -379,9 +397,9 @@
   max-height: 220px;
   overflow: auto;
   padding: 10px 10px 10px 30px;
-  color: #8d1d2b;
-  background: #fff5f6;
-  border: 1px solid #f0c6cb;
+  color: var(--pk-error-text);
+  background: var(--pk-error-soft);
+  border: 1px solid var(--pk-error-border);
   border-radius: 7px;
   font-size: 12px;
 }
@@ -398,5 +416,5 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
-.position-category { display: block; color: #617087; font-weight: normal; margin-top: 4px; }
+.position-category { display: block; color: var(--pk-secondary); font-weight: normal; margin-top: 4px; }
 .matrix-position-image { display: block; width: 90px; height: 64px; object-fit: contain; margin: 6px 0; background: white; }

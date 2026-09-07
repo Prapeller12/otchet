@@ -200,7 +200,7 @@ export function WorkspaceSettingsDialog({
             <h2 id="workspace-settings-title">Организации и строки отчёта</h2>
           </div>
           <button className="icon-button" type="button" disabled={saving} onClick={close} aria-label="Закрыть">
-            ×
+            Закрыть
           </button>
         </header>
 
@@ -308,9 +308,9 @@ export function WorkspaceSettingsDialog({
                       />
                       <div className="row-actions">
                         <button type="button" className="mini-button" onClick={() => setRows((current) => [...current, { ...row, id: null, position_name: `${row.position_name} — копия` }])}>Копировать позицию</button>
-                        <button type="button" className="mini-button" onClick={() => moveRow(index, -1)} aria-label="Переместить выше">↑</button>
-                        <button type="button" className="mini-button" onClick={() => moveRow(index, 1)} aria-label="Переместить ниже">↓</button>
-                        <button type="button" className="mini-button remove" onClick={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))} aria-label="Убрать строку">×</button>
+                        <button type="button" className="mini-button" onClick={() => moveRow(index, -1)} aria-label="Переместить выше">↑ Выше</button>
+                        <button type="button" className="mini-button" onClick={() => moveRow(index, 1)} aria-label="Переместить ниже">↓ Ниже</button>
+                        <button type="button" className="mini-button remove" onClick={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))} aria-label="Убрать строку">Убрать строку</button>
                       </div>
                       {row.configuration && <PositionFieldsEditor value={row.configuration} presets={layout.presets ?? []} onBusyChange={setSaving} onChange={(configuration) => updateRow(index, { configuration })} />}
                     </fieldset>

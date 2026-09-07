@@ -60,15 +60,21 @@ def parse_formula(expression: str) -> ast.Expression:
                 "IF",
                 "ROUNDDOWN",
                 "CUM",
+                "CUMSUM",
+                "BALANCE",
             }:
                 raise FormulaError("Неизвестная функция")
             if node.keywords or not node.args or len(node.args) > 50:
                 raise FormulaError("Неверные аргументы функции")
-            expected = {"IF": 3, "ROUNDDOWN": 2, "CUM": 1}.get(node.func.id)
+            expected = {"IF": 3, "ROUNDDOWN": 2, "CUM": 1, "CUMSUM": 1, "BALANCE": 2}.get(
+                node.func.id
+            )
             if expected is not None and len(node.args) != expected:
                 raise FormulaError("Неверное число аргументов функции")
-            if node.func.id == "CUM" and not isinstance(node.args[0], ast.Name):
-                raise FormulaError("CUM принимает код показателя")
+            if node.func.id in {"CUM", "CUMSUM", "BALANCE"} and any(
+                not isinstance(arg, ast.Name) for arg in node.args
+            ):
+                raise FormulaError("Накопительный расчёт принимает коды показателей")
         if isinstance(node, ast.Compare) and len(node.ops) != 1:
             raise FormulaError("Цепочки сравнений не поддерживаются")
     return tree
@@ -78,6 +84,8 @@ def evaluate_formula(
     expression: str,
     resolve: Callable[[str], Decimal | None],
     cumulative: Callable[[str], Decimal | None],
+    recorded_sum: Callable[[str], Decimal | None] | None = None,
+    balance: Callable[[str, str], Decimal | None] | None = None,
 ) -> Decimal | None:
     tree = parse_formula(expression)
 
@@ -132,6 +140,16 @@ def evaluate_formula(
             name = node.func.id
             if name == "CUM" and isinstance(node.args[0], ast.Name):
                 return cumulative(node.args[0].id)
+            if name == "CUMSUM" and isinstance(node.args[0], ast.Name):
+                if recorded_sum is None:
+                    raise FormulaError("Накопительная сумма недоступна")
+                return recorded_sum(node.args[0].id)
+            if name == "BALANCE":
+                if balance is None:
+                    raise FormulaError("Расчёт остатка недоступен")
+                first, second = node.args
+                assert isinstance(first, ast.Name) and isinstance(second, ast.Name)
+                return balance(first.id, second.id)
             if name == "IF":
                 condition = visit(node.args[0])
                 return None if condition is None else visit(node.args[1 if condition else 2])

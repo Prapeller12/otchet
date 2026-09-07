@@ -1,0 +1,36 @@
+/* Reference: Prapeller12/kanban-python-code- @ 9ac4f399b5128a8dc4d1b01faabfbb6477c07963.
+   Adapted from design-tokens.css and the actual header/page blocks.
+   System fonts only; all assets remain local. */
+:root {
+  --pk-bg: #f6f8fa;
+  --pk-surface: #fff;
+  --pk-paper: #fafaf7;
+  --pk-sunken: #f2f1ec;
+  --pk-border-subtle: #e8e6df;
+  --pk-border: #dcd9d2;
+  --pk-border-strong: #c9c5bc;
+  --pk-muted: #9a968b;
+  --pk-secondary: #6b6860;
+  --pk-text: #2b2a26;
+  --pk-header: #24292f;
+  --pk-primary-soft: #e8f0ec;
+  --pk-primary-border: #ccded5;
+  --pk-primary: #1f5f4a;
+  --pk-primary-hover: #18503e;
+  --pk-primary-strong: #113e30;
+  --pk-warning-soft: #fbf1e1;
+  --pk-warning-border: #f6dfb7;
+  --pk-warning: #e89a3c;
+  --pk-warning-text: #9c6219;
+  --pk-error-soft: #fbeae7;
+  --pk-error-border: #f4c9c2;
+  --pk-error: #c0392b;
+  --pk-error-text: #a02e22;
+  --pk-success-soft: #e6f2eb;
+  --pk-success: #3d8b5a;
+  --pk-success-text: #2f6e47;
+  --pk-font: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --pk-mono: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
+  --pk-shadow: 0 1px 2px rgb(26 26 26 / 6%);
+  --pk-shadow-dialog: 0 12px 32px rgb(26 26 26 / 16%);
+}

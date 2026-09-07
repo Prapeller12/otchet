@@ -5,6 +5,8 @@ import { App } from "./app/App";
 import { ApplicationGatewayProvider } from "./app/providers/ApplicationGatewayProvider";
 import { createApplicationGateway } from "./shared/api/create-application-gateway";
 import "./styles/global.css";
+import "./styles/design-tokens.css";
+import "./styles/kanban-layout.css";
 
 async function bootstrap(): Promise<void> {
   const rootElement = document.getElementById("root");

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { UiIcon } from "../shared/ui/UiIcon";
 
 import { WorkspaceSettingsDialog } from "../features/workspace-settings/WorkspaceSettingsDialog";
 import { ReportMatrixPage } from "../pages/report-matrix/ReportMatrixPage";
@@ -55,13 +56,10 @@ export function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div>
+        <div className="app-brand">
           <p className="app-eyebrow">Локальный контур</p>
           <h1>Производственная отчётность</h1>
         </div>
-        <button className="header-settings-button" type="button" onClick={() => setSettingsOpen(true)}>
-          Настроить рабочее поле
-        </button>
       </header>
 
       <div className="workspace-navigation">
@@ -74,6 +72,7 @@ export function App() {
               aria-current={type === reportType ? "page" : undefined}
               onClick={() => setReportType(type)}
             >
+              <UiIcon name={type === "DAILY_MOVEMENT" ? "calendar" : type === "HEAD_SITE" ? "factory" : "buildings"} />
               {REPORT_LABELS[type]}
             </button>
           ))}
@@ -88,6 +87,10 @@ export function App() {
             ))}
           </select>
         </label>
+        <button className="header-settings-button" type="button" onClick={() => setSettingsOpen(true)}>
+          <UiIcon name="settings" />
+          Настроить рабочее поле
+        </button>
       </div>
 
       <main>

@@ -95,5 +95,5 @@ jobs:
               --target $env:GITHUB_SHA `
               --prerelease `
               --title "Reporting System $version test build" `
-              --notes "Windows x64 alpha for manual testing. Adds PKI/DSE/part categories, position images, configurable indicators, backend formulas, source readiness presets and guarded Excel import. Read TESTING.txt after extracting the ZIP; run start.cmd. Uses the system WebView2 Runtime. Alpha scope and limitations: docs/test-cases/alpha-dev3.md."
+              --notes "Windows x64 alpha. Compact five-digit numeric columns, monthly A4 PDF and local version-bound data confirmation. Read TESTING.txt, extract and run start.cmd. System WebView2 required. Scope: docs/test-cases/alpha-dev8.md."
           }
