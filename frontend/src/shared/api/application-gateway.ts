@@ -229,6 +229,9 @@ export type ApplicationError = {
 };
 
 export interface ApplicationGateway {
+  exportPdf?(request: MonthlyReportQuery): Promise<ExportResult>;
+  getReportVerification?(request: MonthlyReportQuery): Promise<ReportVerification>;
+  verifyReport?(request: VerifyReportRequest): Promise<ReportVerification>;
   readonly mode: "pywebview" | "demo";
   saveReportPresentation?(request: SaveReportPresentationRequest): Promise<ReportPresentation>;
   getReportMatrix(query: ReportMatrixQuery): Promise<ReportMatrixContract>;
@@ -245,3 +248,11 @@ export interface ApplicationGateway {
   getReportLayout(query: ReportLayoutQuery): Promise<ReportLayoutContract>;
   saveReportLayout(request: SaveReportLayoutRequest): Promise<ReportLayoutContract>;
 }
+
+export type MonthlyReportQuery = ExportRequest & { month: number; expected_revision?: string };
+export type ReportVerification = {
+  status: "UNVERIFIED" | "VERIFIED" | "STALE";
+  snapshot_sha256: string; verified_sha256?: string;
+  signer_name?: string; signed_at?: string;
+};
+export type VerifyReportRequest = MonthlyReportQuery & { signer_name: string; snapshot_sha256: string; confirmed: boolean };

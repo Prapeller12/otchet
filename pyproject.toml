@@ -1,10 +1,10 @@
 [project]
 name = "reporting-system"
-version = "0.1.0.dev7"
+version = "0.1.0.dev8"
 description = "Portable production reporting system"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["openpyxl==3.1.5", "Pillow==12.3.0"]
+dependencies = ["openpyxl==3.1.5", "Pillow==12.3.0", "reportlab==4.4.9"]
 
 [project.optional-dependencies]
 dev = [

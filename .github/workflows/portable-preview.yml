@@ -95,5 +95,5 @@ jobs:
               --target $env:GITHUB_SHA `
               --prerelease `
               --title "Reporting System $version test build" `
-              --notes "Windows x64 alpha. Readable numeric columns, larger labeled controls and an inline formula library on all report sheets. Backend calculations unchanged. Read TESTING.txt; extract the ZIP and run start.cmd. Requires system WebView2. Verification and A/B protocol: docs/test-cases/alpha-dev7.md."
+              --notes "Windows x64 alpha. Compact five-digit numeric columns, monthly A4 PDF and local version-bound data confirmation. Read TESTING.txt, extract and run start.cmd. System WebView2 required. Scope: docs/test-cases/alpha-dev8.md."
           }

@@ -162,7 +162,7 @@ def test_upgrade_preserves_opening_date_and_repairs_previous_preset(tmp_path: Pa
     data(app.save_report_layout({**QUERY, "rows": layout["rows"]}))
     conn = connect_sqlite(database)
     try:
-        assert apply_migrations(conn, ROOT / "backend/migrations") == ("0007",)
+        assert apply_migrations(conn, ROOT / "backend/migrations") == ("0007", "0008")
         assert apply_migrations(conn, ROOT / "backend/migrations") == ()
     finally:
         conn.close()

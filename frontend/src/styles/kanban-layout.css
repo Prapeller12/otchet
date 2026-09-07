@@ -126,3 +126,12 @@ main { min-width: 0; padding: 12px 12px 16px; }
 .formula-card > input { width: 100%; font-family: var(--pk-mono); margin: 10px 0; }
 .formula-card .field-help { margin-bottom: 0; }
 @media (max-width: 1100px) { .report-tabs { flex-basis: 100%; } .workspace-navigation { padding-bottom: 8px; } .organization-switcher { margin-left: auto; } }
+
+.matrix-cell-button, .matrix-cell-editor { padding-left: 6px; padding-right: 6px; }
+.cell-markers { top: 1px; left: 1px; }
+.cell-marker { min-width: 6px; width: 6px; height: 6px; padding: 0; font-size: 0; border-radius: 50%; }
+.monthly-report-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 16px; border-bottom: 1px solid var(--pk-border); }
+.monthly-report-actions select { min-height: 40px; padding: 6px; margin-left: 8px; }
+.monthly-report-actions p { margin: 0; }
+.verification-form label { display: block; margin: 12px 0; }
+.verification-form input[type="text"] { width: 100%; min-height: 44px; padding: 8px; }

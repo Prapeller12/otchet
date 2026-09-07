@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import calendar
+import hashlib
 import json
+import os
 import re
 import sqlite3
+import tempfile
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import closing
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -14,6 +18,7 @@ from uuid import uuid4
 
 from backend.api.bridge import DesktopBridge
 from backend.application.excel_reports import ExcelReportError, ExcelReportService
+from backend.application.monthly_report import monthly_snapshot
 from backend.application.report_cells import (
     ReportCellChange,
     ReportCellCoordinate,
@@ -35,12 +40,17 @@ from backend.infrastructure.database.sqlite_excel_imports import (
 from backend.infrastructure.database.sqlite_report_cells import (
     SqliteReportCellUnitOfWorkFactory,
 )
+from backend.infrastructure.database.sqlite_report_verification import (
+    SqliteReportVerificationRepository,
+    database_stamp,
+)
 from backend.infrastructure.database.sqlite_report_workspace import (
     SqliteReportWorkspaceRepository,
 )
 from backend.infrastructure.excel.openpyxl_matrix_workbook import (
     OpenpyxlMatrixWorkbookAdapter,
 )
+from backend.infrastructure.monthly_pdf import render_monthly_pdf
 from backend.repositories.report_workspace import (
     SubjectKind,
     WorkspaceGroup,
@@ -95,6 +105,8 @@ class WorkingReferenceApplicationBridge:
             backups_directory=Path(backups_directory or root / "backups"),
             application_version=application_version,
         )
+        self._verification = SqliteReportVerificationRepository(str(self._database_path))
+        self._save_pdf_file: Callable[[str], Path | None] | None = None
         self._open_excel_file: Callable[[], Path | None] | None = None
         self._save_excel_file: Callable[[str], Path | None] | None = None
 
@@ -108,6 +120,128 @@ class WorkingReferenceApplicationBridge:
 
         self._open_excel_file = open_file
         self._save_excel_file = save_file
+
+    def configure_pdf_dialog(self, save_file: Callable[[str], Path | None]) -> None:
+        self._save_pdf_file = save_file
+
+    def _monthly_snapshot(self, request: Mapping[str, object]) -> dict[str, Any]:
+        report_type = _required_string(request, "report_type")
+        organization_id = self._organization_id(request.get("organization_id"))
+        year = _year(request) or date.today().year
+        # Initialise configured groups before taking a stable database stamp.
+        self._build_matrix(report_type, organization_id, year)
+        with closing(connect_sqlite(self._database_path)) as connection:
+            before = database_stamp(connection)
+        matrix = self._build_matrix(report_type, organization_id, year)
+        organization = next(
+            o.name for o in self._workspace.list_organizations() if o.id == organization_id
+        )
+        with closing(connect_sqlite(self._database_path)) as connection:
+            if before != database_stamp(connection):
+                raise ValueError("Данные изменились при чтении. Повторите действие")
+        if (
+            "expected_revision" in request
+            and request["expected_revision"] != matrix["matrix_revision"]
+        ):
+            raise ValueError(
+                "Отчёт изменился. Перезагрузите форму перед печатью или подтверждением"
+            )
+        snapshot = monthly_snapshot(matrix, cast(int, request.get("month")), organization)
+        snapshot["_stamp"] = before
+        return snapshot
+
+    def get_report_verification(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(
+                request, {"report_type", "organization_id", "year", "month", "expected_revision"}
+            )
+            snapshot = self._monthly_snapshot(request)
+            return {
+                "ok": True,
+                "data": self._verification.status(snapshot),
+                "request_id": request_id,
+            }
+        except (OSError, ValueError, KeyError, sqlite3.Error, ReportCellError) as error:
+            return _failure("VERIFICATION_ERROR", str(error), request_id)
+
+    def verify_report(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(
+                request,
+                {
+                    "report_type",
+                    "organization_id",
+                    "year",
+                    "month",
+                    "signer_name",
+                    "snapshot_sha256",
+                    "confirmed",
+                    "expected_revision",
+                },
+            )
+            if request.get("confirmed") is not True:
+                raise ValueError("Подтвердите, что данные проверены")
+            snapshot = self._monthly_snapshot(request)
+            result = self._verification.verify(
+                snapshot,
+                _required_string(request, "signer_name"),
+                _required_string(request, "snapshot_sha256"),
+            )
+            return {"ok": True, "data": result, "request_id": request_id}
+        except (OSError, ValueError, KeyError, sqlite3.Error, ReportCellError) as error:
+            return _failure("VERIFICATION_ERROR", str(error), request_id)
+
+    def export_pdf(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(
+                request, {"report_type", "organization_id", "year", "month", "expected_revision"}
+            )
+            if self._save_pdf_file is None:
+                raise ValueError("Сохранение PDF доступно в desktop-версии")
+            snapshot = self._monthly_snapshot(request)
+            if any(row["errors"] for row in snapshot["rows"]):
+                raise ValueError("Сначала исправьте ошибки расчёта")
+            destination = self._save_pdf_file(
+                f"{snapshot['report_type'].lower()}-{snapshot['period']}.pdf"
+            )
+            if destination is None:
+                return {"ok": True, "data": {"cancelled": True}, "request_id": request_id}
+            if destination.suffix.lower() != ".pdf":
+                raise ValueError("Выберите файл с расширением .pdf")
+            content = render_monthly_pdf(
+                snapshot,
+                self._verification.status(snapshot),
+                self._definitions_directory.parent / "fonts" / "ReportingSerif.ttf",
+            )
+            temporary: Path | None = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    dir=destination.parent, suffix=".pdf.tmp", delete=False
+                ) as stream:
+                    temporary = Path(stream.name)
+                    stream.write(content)
+                os.replace(temporary, destination)
+            finally:
+                if temporary is not None:
+                    temporary.unlink(missing_ok=True)
+            return {
+                "ok": True,
+                "data": {
+                    "cancelled": False,
+                    "file_name": destination.name,
+                    "file_path": str(destination),
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                },
+                "request_id": request_id,
+            }
+        except (OSError, ValueError, KeyError, sqlite3.Error, ReportCellError) as error:
+            return _failure("PDF_EXPORT_ERROR", str(error), request_id)
 
     def health(self) -> dict[str, object]:
         return self._transport.health()

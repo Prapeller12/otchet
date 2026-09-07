@@ -120,6 +120,23 @@ def run_application_self_test(database: Path, migrations: Path, definitions: Pat
         preview = checked(app.validate_import(query))
         checked(app.commit_import({"batch_id": preview["batch_id"]}))
 
+    publication_query = {**calendar_query, "month": 9}
+    verification = checked(app.get_report_verification(publication_query))
+    checked(
+        app.verify_report(
+            {
+                **publication_query,
+                "signer_name": "Self-test",
+                "confirmed": True,
+                "snapshot_sha256": verification["snapshot_sha256"],
+            }
+        )
+    )
+    app.configure_pdf_dialog(partial(_destination, root / "self-test.pdf"))
+    checked(app.export_pdf(publication_query))
+    if not (root / "self-test.pdf").read_bytes().startswith(b"%PDF-"):
+        raise RuntimeError("Application self-test: PDF was not generated")
+
 
 def _destination(path: Path, _suggested: str = "") -> Path:
     return path

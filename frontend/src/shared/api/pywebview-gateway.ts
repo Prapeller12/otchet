@@ -1,5 +1,6 @@
 import type {
   ApplicationGateway,
+  MonthlyReportQuery, ReportVerification, VerifyReportRequest,
   CommitImportRequest,
   CommitImportResult,
   ExportRequest,
@@ -25,6 +26,9 @@ type BridgeEnvelope =
   | { ok: false; error: { code: string; message: string } };
 
 type PyWebViewApi = {
+  export_pdf(request: MonthlyReportQuery): Promise<BridgeEnvelope>;
+  get_report_verification(request: MonthlyReportQuery): Promise<BridgeEnvelope>;
+  verify_report(request: VerifyReportRequest): Promise<BridgeEnvelope>;
   save_report_presentation(request: SaveReportPresentationRequest): Promise<BridgeEnvelope>;
   get_report_matrix(query: ReportMatrixQuery): Promise<BridgeEnvelope>;
   save_report_cells(request: SaveReportCellsRequest): Promise<BridgeEnvelope>;
@@ -87,6 +91,16 @@ export class PyWebViewGateway implements ApplicationGateway {
       throw new Error("PyWebView application bridge is incomplete");
     }
     return new PyWebViewGateway(api as PyWebViewApi);
+  }
+
+  async exportPdf(request: MonthlyReportQuery): Promise<ExportResult> {
+    return unwrap(await this.#api.export_pdf(request)) as ExportResult;
+  }
+  async getReportVerification(request: MonthlyReportQuery): Promise<ReportVerification> {
+    return unwrap(await this.#api.get_report_verification(request)) as ReportVerification;
+  }
+  async verifyReport(request: VerifyReportRequest): Promise<ReportVerification> {
+    return unwrap(await this.#api.verify_report(request)) as ReportVerification;
   }
 
   async getReportMatrix(

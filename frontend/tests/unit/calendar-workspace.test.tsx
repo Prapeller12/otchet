@@ -84,11 +84,11 @@ it("keeps legacy narrow numeric columns large enough and clamps keyboard resizin
   initial.presentation = { widths: { "2026-01-14": 48 } };
   show(new DemoGateway(), initial);
   const handle = screen.getByRole("separator", { name: "Ширина: 2026-01 14" });
-  expect(handle).toHaveAttribute("aria-valuenow", "84");
+  expect(handle).toHaveAttribute("aria-valuenow", "64");
   fireEvent.keyDown(handle, { key: "Home" });
-  expect(handle).toHaveAttribute("aria-valuenow", "84");
+  expect(handle).toHaveAttribute("aria-valuenow", "64");
   fireEvent.keyDown(handle, { key: "ArrowLeft" });
-  expect(handle).toHaveAttribute("aria-valuenow", "84");
+  expect(handle).toHaveAttribute("aria-valuenow", "64");
 });
 
 it("requests backend draft calculation before save and retains both dirty inputs", async () => {

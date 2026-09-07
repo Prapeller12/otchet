@@ -1,3 +1,4 @@
+import { MonthlyReportActions } from "./MonthlyReportActions";
 import {
   useEffect,
   useMemo,
@@ -153,7 +154,7 @@ export function ReportMatrix({
   const visibleIndices = matrix.time_columns.flatMap((column, index) => expandedMonths.has(column.group_label) ? [index] : []);
   const visibleSet = new Set(visibleIndices);
   const leftColumns = matrix.left_columns.map((column) => ({ ...column, width: widths[column.id] ?? column.width }));
-  const timeColumns = matrix.time_columns.map((column) => ({ ...column, width: Math.max(84, widths[column.id] ?? 84) }));
+  const timeColumns = matrix.time_columns.map((column) => ({ ...column, width: Math.max(64, widths[column.id] ?? 64) }));
   const visibleMatrix = { ...matrix, left_columns: leftColumns, time_columns: timeColumns.filter((_, index) => visibleSet.has(index)), rows: matrix.rows.map((row) => ({ ...row, cells: row.cells.filter((_, index) => visibleSet.has(index)) })) };
   const query = { report_type: matrix.report_type, organization_id: matrix.organization_id, ...(matrix.year ? { year: matrix.year } : {}) };
 
@@ -188,7 +189,7 @@ export function ReportMatrix({
   }
 
   function resizeHandle(id: string, label: string, width: number) {
-    return <ColumnResizeHandle label={label} width={width} minimum={matrix.time_columns.some(column => column.id === id) ? 84 : 48}
+    return <ColumnResizeHandle label={label} width={width} minimum={matrix.time_columns.some(column => column.id === id) ? 64 : 48}
       onResize={(value) => setWidths((current) => ({ ...current, [id]: value }))}
       onCommit={(value) => persistWidths({ ...widths, [id]: value })} />;
   }
@@ -493,7 +494,12 @@ export function ReportMatrix({
         </div>
       </div>
 
+      <MonthlyReportActions gateway={gateway} query={query} revision={matrix.matrix_revision} title={matrix.title} blocked={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} />
       <nav className="month-controls" aria-label="Месяцы отчёта">
+        <button type="button" disabled={editing !== null} onClick={() => {
+          const next = { ...widths, ...Object.fromEntries(matrix.time_columns.map(column => [column.id, 64])) };
+          setWidths(next); persistWidths(next);
+        }}>Компактные столбцы: 5 цифр</button>
         {matrix.year && <strong>{matrix.year}</strong>}
         {monthLabels.map((month) => <button key={month} type="button" aria-expanded={expandedMonths.has(month)} disabled={editing !== null}
           onClick={() => toggleMonth(month)}>{expandedMonths.has(month) ? "▾" : "▸"} {monthName(month)}</button>)}
