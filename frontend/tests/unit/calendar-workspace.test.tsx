@@ -79,6 +79,18 @@ it("renames the heading, saves resize gestures and removes the technical banner"
   vi.unstubAllGlobals();
 });
 
+it("keeps legacy narrow numeric columns large enough and clamps keyboard resizing", async () => {
+  const initial = calendar();
+  initial.presentation = { widths: { "2026-01-14": 48 } };
+  show(new DemoGateway(), initial);
+  const handle = screen.getByRole("separator", { name: "Ширина: 2026-01 14" });
+  expect(handle).toHaveAttribute("aria-valuenow", "84");
+  fireEvent.keyDown(handle, { key: "Home" });
+  expect(handle).toHaveAttribute("aria-valuenow", "84");
+  fireEvent.keyDown(handle, { key: "ArrowLeft" });
+  expect(handle).toHaveAttribute("aria-valuenow", "84");
+});
+
 it("requests backend draft calculation before save and retains both dirty inputs", async () => {
   const gateway = new DemoGateway();
   Object.defineProperty(gateway, "mode", { value: "pywebview" });

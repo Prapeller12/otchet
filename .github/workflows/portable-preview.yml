@@ -95,5 +95,4 @@ jobs:
               --target $env:GITHUB_SHA `
               --prerelease `
               --title "Reporting System $version test build" `
-              --notes "Windows x64 alpha for manual testing. Refreshes the UI using the Kanban frontend reference: compact dark header, green actions, light tables and settings dialogs. Backend, calculations and existing actions are unchanged from dev.5. Read TESTING.txt after extracting the ZIP; run start.cmd. Uses the system WebView2 Runtime. Alpha scope and limitations: docs/test-cases/alpha-dev6.md."
-          }
+              --notes "Windows x64 alpha. Readable numeric columns, larger labeled controls and an inline formula library on all report sheets. Backend calculations unchanged. Read TESTING.txt; extract the ZIP and run start.cmd. Requires system WebView2. Verification and A/B protocol: docs/test-cases/alpha-dev7.md."

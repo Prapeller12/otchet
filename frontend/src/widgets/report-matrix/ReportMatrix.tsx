@@ -153,7 +153,7 @@ export function ReportMatrix({
   const visibleIndices = matrix.time_columns.flatMap((column, index) => expandedMonths.has(column.group_label) ? [index] : []);
   const visibleSet = new Set(visibleIndices);
   const leftColumns = matrix.left_columns.map((column) => ({ ...column, width: widths[column.id] ?? column.width }));
-  const timeColumns = matrix.time_columns.map((column) => ({ ...column, width: widths[column.id] ?? column.width }));
+  const timeColumns = matrix.time_columns.map((column) => ({ ...column, width: Math.max(84, widths[column.id] ?? 84) }));
   const visibleMatrix = { ...matrix, left_columns: leftColumns, time_columns: timeColumns.filter((_, index) => visibleSet.has(index)), rows: matrix.rows.map((row) => ({ ...row, cells: row.cells.filter((_, index) => visibleSet.has(index)) })) };
   const query = { report_type: matrix.report_type, organization_id: matrix.organization_id, ...(matrix.year ? { year: matrix.year } : {}) };
 
@@ -188,7 +188,7 @@ export function ReportMatrix({
   }
 
   function resizeHandle(id: string, label: string, width: number) {
-    return <ColumnResizeHandle label={label} width={width}
+    return <ColumnResizeHandle label={label} width={width} minimum={matrix.time_columns.some(column => column.id === id) ? 84 : 48}
       onResize={(value) => setWidths((current) => ({ ...current, [id]: value }))}
       onCommit={(value) => persistWidths({ ...widths, [id]: value })} />;
   }
@@ -452,7 +452,7 @@ export function ReportMatrix({
               <button className="button primary" disabled={presentationBusy || !titleDraft.trim()}>Применить название</button>
               <button className="button secondary" type="button" disabled={presentationBusy} onClick={() => setRenaming(false)}>Отмена</button>
             </form> : <h2 id="matrix-title">{matrix.title}</h2>}
-            {!renaming && gateway.saveReportPresentation && <button type="button" className="mini-button" aria-label="Переименовать отчёт" onClick={() => { setTitleDraft(matrix.title); setRenaming(true); }}><UiIcon name="edit" /></button>}
+            {!renaming && gateway.saveReportPresentation && <button type="button" className="mini-button" aria-label="Переименовать отчёт" onClick={() => { setTitleDraft(matrix.title); setRenaming(true); }}><UiIcon name="edit" /> Переименовать отчёт</button>}
           </div>
           {previewBusy && <p role="status">Пересчёт…</p>}
         </div>

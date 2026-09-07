@@ -104,3 +104,25 @@ main { min-width: 0; padding: 12px 12px 16px; }
   .status-context { max-width: 160px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+
+/* Readable controls and an inline reference shared by all report sheets. */
+.button, .header-settings-button, .report-tab { min-height: 44px; font-size: 14px; }
+.header-settings-button { border: 1px solid var(--pk-primary-border); border-radius: 4px; color: var(--pk-primary-strong); background: var(--pk-primary-soft); font-weight: 600; }
+.mini-button, .layout-row-editor .mini-button, .icon-button { width: auto; min-width: 44px; min-height: 44px; height: auto; padding: 8px 12px; font-size: 14px; }
+.month-controls button { min-height: 36px; font-size: 13px; }
+.organization-switcher select { width: 260px; min-height: 40px; }
+.organization-settings input, .organization-settings select, .layout-settings input, .layout-settings select { min-height: 40px; font-size: 14px; }
+.position-fields > summary, .advanced-formula > summary, .formula-library > summary { min-height: 44px; padding: 10px 8px; cursor: pointer; font-size: 14px; font-weight: 600; }
+.matrix-cell-button, .matrix-cell-editor { white-space: nowrap; font-size: 13px; }
+.cell-value { white-space: nowrap; overflow-wrap: normal; word-break: normal; }
+.cell-markers { left: 3px; right: auto; }
+.settings-dialog { width: min(1440px, 96vw); }
+.settings-header, .settings-footer { flex-wrap: wrap; }
+.row-actions, .compact-actions { flex-wrap: wrap; gap: 8px; }
+.formula-library { grid-column: 1 / -1; min-width: 0; padding: 12px; border: 1px solid var(--pk-primary-border); border-radius: 6px; background: var(--pk-primary-soft); }
+.formula-library > p { margin: 8px 0; }
+.formula-library label { margin: 12px 0; }
+.formula-card { margin: 12px 0; padding: 12px; border: 1px solid var(--pk-border); background: var(--pk-surface); border-radius: 4px; }
+.formula-card > input { width: 100%; font-family: var(--pk-mono); margin: 10px 0; }
+.formula-card .field-help { margin-bottom: 0; }
+@media (max-width: 1100px) { .report-tabs { flex-basis: 100%; } .workspace-navigation { padding-bottom: 8px; } .organization-switcher { margin-left: auto; } }

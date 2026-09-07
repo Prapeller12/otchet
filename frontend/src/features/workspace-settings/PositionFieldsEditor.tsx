@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { FormulaLibrary } from "./FormulaLibrary";
 import type { FieldConfiguration, FieldIndicator, FieldPreset } from "../../shared/api/application-gateway";
 
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -60,6 +61,10 @@ export function PositionFieldsEditor({ value, presets = [], onChange, onBusyChan
         {presets.filter((item) => item.required_codes.every((code) => value.indicators.some((indicator) => indicator.code === code))).map((item) =>
           <button key={item.label} type="button" className="button secondary" onClick={() => preset(item)}>{item.label}</button>)}
       </div>
+      <FormulaLibrary indicators={value.indicators} presets={presets} onInsert={(code, formula) => {
+        const index = value.indicators.findIndex(item => item.code === code);
+        if (index >= 0) edit(index, { formula });
+      }} />
       {value.indicators.map((item, index) => <div className="field-indicator" key={index}>
         <label>Название показателя<input value={item.label} onChange={(event) => edit(index, { label: event.target.value })} /></label>
         <p className="calculation-description">{item.formula.startsWith("=BALANCE(") ? "Начальный остаток + получено − использовано, накопительно" : item.formula ? presets.find((preset) => preset.indicators.some((candidate) => candidate.code === item.code && candidate.formula === item.formula))?.label ?? "Пользовательский расчёт" : "Ввод вручную"}</p>
@@ -71,8 +76,8 @@ export function PositionFieldsEditor({ value, presets = [], onChange, onBusyChan
         <div className="row-actions">
           <button type="button" className="mini-button" aria-label="Показатель выше" disabled={index === 0} onClick={() => {
             const next = [...value.indicators]; [next[index - 1], next[index]] = [next[index]!, next[index - 1]!]; onChange({ ...value, indicators: next });
-          }}>↑</button>
-          <button type="button" className="mini-button" aria-label="Убрать показатель" onClick={() => onChange({ ...value, indicators: value.indicators.filter((_, i) => i !== index) })}>×</button>
+          }}>↑ Выше</button>
+          <button type="button" className="mini-button" aria-label="Убрать показатель" onClick={() => onChange({ ...value, indicators: value.indicators.filter((_, i) => i !== index) })}>Убрать показатель</button>
         </div>
       </div>)}
       <div className="compact-actions">
