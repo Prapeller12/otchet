@@ -16,6 +16,7 @@ import type { ReportCellCoordinate } from "../../shared/api/report-cell-contract
 import { CATEGORY_LABELS } from "../../features/workspace-settings/PositionFieldsEditor";
 import { CellEditor } from "./CellEditor";
 import { ColumnResizeHandle } from "./ColumnResizeHandle";
+import { UiIcon } from "../../shared/ui/UiIcon";
 import { inputValue, parseCellDraft, sumCellValues } from "./cell-value";
 import {
   moveAfterEnter,
@@ -451,7 +452,7 @@ export function ReportMatrix({
               <button className="button primary" disabled={presentationBusy || !titleDraft.trim()}>Применить название</button>
               <button className="button secondary" type="button" disabled={presentationBusy} onClick={() => setRenaming(false)}>Отмена</button>
             </form> : <h2 id="matrix-title">{matrix.title}</h2>}
-            {!renaming && gateway.saveReportPresentation && <button type="button" className="mini-button" aria-label="Переименовать отчёт" onClick={() => { setTitleDraft(matrix.title); setRenaming(true); }}>✎</button>}
+            {!renaming && gateway.saveReportPresentation && <button type="button" className="mini-button" aria-label="Переименовать отчёт" onClick={() => { setTitleDraft(matrix.title); setRenaming(true); }}><UiIcon name="edit" /></button>}
           </div>
           {previewBusy && <p role="status">Пересчёт…</p>}
         </div>
@@ -466,6 +467,7 @@ export function ReportMatrix({
             onClick={() => void startImport()}
           >
             {excelBusy === "import" ? "Проверка…" : "Импорт Excel"}
+            <UiIcon name="import" />
           </button>
           <button
             type="button"
@@ -477,6 +479,7 @@ export function ReportMatrix({
             onClick={() => void exportExcel()}
           >
             {excelBusy === "export" ? "Выгрузка…" : "Экспорт Excel"}
+            <UiIcon name="export" />
           </button>
           <button
             type="button"
@@ -485,6 +488,7 @@ export function ReportMatrix({
             onClick={() => void saveChanges()}
           >
             {saving ? "Сохранение…" : `Сохранить${dirtyKeys.size > 0 ? ` (${dirtyKeys.size})` : ""}`}
+            <UiIcon name="save" />
           </button>
         </div>
       </div>

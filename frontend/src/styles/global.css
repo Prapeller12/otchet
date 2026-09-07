@@ -1,16 +1,16 @@
 :root {
   font-family: Inter, "Segoe UI", Arial, sans-serif;
-  color: #172033;
-  background: #eef2f7;
+  color: var(--pk-text);
+  background: var(--pk-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --navy-950: #111c33;
-  --navy-800: #22365c;
-  --blue-600: #2d62d0;
-  --blue-100: #e8f0ff;
-  --line: #d6deea;
-  --muted: #64748b;
-  --surface: #ffffff;
+  --navy-950: var(--pk-header);
+  --navy-800: var(--pk-header);
+  --blue-600: var(--pk-primary);
+  --blue-100: var(--pk-primary-soft);
+  --line: var(--pk-border);
+  --muted: var(--pk-secondary);
+  --surface: var(--pk-surface);
 }
 
 * {
@@ -21,7 +21,7 @@ body {
   margin: 0;
   min-width: 960px;
   min-height: 100vh;
-  background: #eef2f7;
+  background: var(--pk-bg);
 }
 
 button,
@@ -33,7 +33,7 @@ select {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 3px solid rgba(45, 98, 208, 0.32);
+  outline: 3px solid rgb(31 95 74 / 25%);
   outline-offset: 1px;
 }
 
@@ -48,9 +48,9 @@ select:focus-visible {
   justify-content: space-between;
   min-height: 84px;
   padding: 14px 28px;
-  color: #fff;
+  color: var(--pk-surface);
   background: linear-gradient(120deg, var(--navy-950), var(--navy-800));
-  border-bottom: 3px solid #4f7fe0;
+  border-bottom: 3px solid var(--pk-primary);
 }
 
 .app-header h1 {
@@ -61,7 +61,7 @@ select:focus-visible {
 
 .app-eyebrow {
   margin: 0;
-  color: #aebfe0;
+  color: var(--pk-muted);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -71,7 +71,7 @@ select:focus-visible {
 .header-settings-button {
   min-height: 38px;
   padding: 0 14px;
-  color: #fff;
+  color: var(--pk-surface);
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 7px;
@@ -90,7 +90,7 @@ select:focus-visible {
   justify-content: space-between;
   gap: 16px;
   padding-right: 28px;
-  background: #fff;
+  background: var(--pk-surface);
   border-bottom: 1px solid var(--line);
 }
 
@@ -98,13 +98,13 @@ select:focus-visible {
   display: flex;
   gap: 4px;
   padding: 0 28px;
-  background: #fff;
+  background: var(--pk-surface);
 }
 
 .report-tab {
   position: relative;
   padding: 15px 18px 13px;
-  color: #52627b;
+  color: var(--pk-secondary);
   background: transparent;
   border: 0;
   cursor: pointer;
@@ -113,7 +113,7 @@ select:focus-visible {
 
 .report-tab:hover {
   color: var(--navy-950);
-  background: #f7f9fc;
+  background: var(--pk-paper);
 }
 
 .report-tab.is-active {
@@ -135,7 +135,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 9px;
-  color: #52627b;
+  color: var(--pk-secondary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -144,9 +144,9 @@ select:focus-visible {
   min-width: 230px;
   height: 34px;
   padding: 0 30px 0 10px;
-  color: #263650;
-  background: #fff;
-  border: 1px solid #c8d2e1;
+  color: var(--pk-text);
+  background: var(--pk-surface);
+  border: 1px solid var(--pk-border);
   border-radius: 6px;
 }
 
@@ -164,9 +164,9 @@ main {
   grid-template-columns: auto minmax(220px, 1fr) auto auto;
   align-items: center;
   min-height: 30px;
-  color: #35445d;
-  background: #f4f6f9;
-  border-top: 1px solid #cbd4e0;
+  color: var(--pk-text);
+  background: var(--pk-sunken);
+  border-top: 1px solid var(--pk-border);
   box-shadow: 0 -2px 8px rgba(23, 36, 57, 0.08);
   font-size: 11px;
 }
@@ -174,20 +174,20 @@ main {
 .application-status-bar > span {
   min-width: 0;
   padding: 7px 12px;
-  border-right: 1px solid #d5dce6;
+  border-right: 1px solid var(--pk-border);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .status-ready {
-  color: #fff;
-  background: #2f6f4e;
+  color: var(--pk-surface);
+  background: var(--pk-success-text);
   font-weight: 700;
 }
 
 .status-context {
-  color: #52627b;
+  color: var(--pk-secondary);
 }
 
 .status-database {
@@ -200,7 +200,7 @@ main {
 .status-database i {
   width: 7px;
   height: 7px;
-  background: #35b978;
+  background: var(--pk-success);
   border-radius: 50%;
 }
 
@@ -220,8 +220,8 @@ main {
   width: min(1120px, 96vw);
   height: min(760px, 92vh);
   overflow: hidden;
-  background: #fff;
-  border: 1px solid #bec9d8;
+  background: var(--pk-surface);
+  border: 1px solid var(--pk-border);
   border-radius: 12px;
   box-shadow: 0 24px 70px rgba(10, 20, 38, 0.35);
 }
@@ -236,8 +236,8 @@ main {
 }
 
 .settings-header {
-  color: #fff;
-  background: #1b2e50;
+  color: var(--pk-surface);
+  background: var(--pk-header);
 }
 
 .settings-header p,
@@ -247,7 +247,7 @@ main {
 
 .settings-header p {
   margin-bottom: 3px;
-  color: #aebfe0;
+  color: var(--pk-muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -261,7 +261,7 @@ main {
 .icon-button {
   width: 34px;
   height: 34px;
-  color: #fff;
+  color: var(--pk-surface);
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 6px;
@@ -287,15 +287,15 @@ main {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  background: #f4f7fb;
-  border-right: 1px solid #d8e0ea;
+  background: var(--pk-paper);
+  border-right: 1px solid var(--pk-border);
 }
 
 .organization-settings label,
 .layout-settings label {
   display: grid;
   gap: 6px;
-  color: #47566e;
+  color: var(--pk-secondary);
   font-size: 12px;
   font-weight: 700;
 }
@@ -306,9 +306,9 @@ main {
 .layout-settings select {
   min-height: 36px;
   padding: 7px 9px;
-  color: #263650;
-  background: #fff;
-  border: 1px solid #c7d1df;
+  color: var(--pk-text);
+  background: var(--pk-surface);
+  border: 1px solid var(--pk-border);
   border-radius: 6px;
 }
 
@@ -319,9 +319,9 @@ main {
 }
 
 .button.danger {
-  color: #9b2432;
-  background: #fff;
-  border-color: #e0a7ae;
+  color: var(--pk-error-text);
+  background: var(--pk-surface);
+  border-color: var(--pk-error-border);
 }
 
 .new-organization {
@@ -329,8 +329,8 @@ main {
   gap: 8px;
   margin-top: 8px;
   padding-top: 16px;
-  border-top: 1px solid #d5deea;
-  color: #34445f;
+  border-top: 1px solid var(--pk-border);
+  color: var(--pk-text);
   font-size: 12px;
 }
 
@@ -349,7 +349,7 @@ main {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  color: #273750;
+  color: var(--pk-text);
 }
 
 .layout-row-list {
@@ -366,22 +366,22 @@ main {
   gap: 8px;
   align-items: center;
   padding: 9px;
-  background: #f8fafc;
-  border: 1px solid #d7e0ea;
+  background: var(--pk-paper);
+  border: 1px solid var(--pk-border);
   border-radius: 7px;
 }
 
 .layout-row-editor > .row-actions { grid-column: 1 / -1; }
 .layout-row-editor .mini-button { width: auto; min-width: 29px; padding: 3px 7px; height: auto; min-height: 29px; }
 .position-fields { grid-column: 1 / -1; min-width: 0; }
-.position-fields summary { padding: 10px 0; cursor: pointer; color: #2455a0; }
+.position-fields summary { padding: 10px 0; cursor: pointer; color: var(--pk-primary); }
 .position-fields fieldset { padding: 0; border: 0; margin: 0; min-width: 0; }
 .position-properties { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .position-properties input { min-width: 0; max-width: 100%; }
 .position-picture { display: flex; align-items: center; gap: 10px; }
 .position-picture img { width: 88px; height: 72px; object-fit: contain; background: white; }
-.field-help { color: #52617a; font-size: 12px; line-height: 1.5; }
-.field-indicator { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 0; border-top: 1px solid #d7e0ea; }
+.field-help { color: var(--pk-secondary); font-size: 12px; line-height: 1.5; }
+.field-indicator { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 0; border-top: 1px solid var(--pk-border); }
 .field-indicator .formula-editor { grid-column: 1 / -1; }
 .formula-editor input { font-family: monospace; }
 
@@ -393,39 +393,39 @@ main {
 .mini-button {
   width: 29px;
   height: 29px;
-  color: #3b4e6c;
-  background: #fff;
-  border: 1px solid #c7d1df;
+  color: var(--pk-text);
+  background: var(--pk-surface);
+  border: 1px solid var(--pk-border);
   border-radius: 5px;
   cursor: pointer;
 }
 
 .mini-button.remove {
-  color: #a12634;
-  border-color: #e2b0b6;
+  color: var(--pk-error-text);
+  border-color: var(--pk-error-border);
 }
 
 .settings-empty {
   padding: 32px;
-  color: #748198;
+  color: var(--pk-secondary);
   text-align: center;
-  background: #f8fafc;
-  border: 1px dashed #c9d3e0;
+  background: var(--pk-paper);
+  border: 1px dashed var(--pk-border);
   border-radius: 8px;
 }
 
 .settings-error {
   padding: 10px 20px;
-  color: #982534;
-  background: #fff0f2;
-  border-top: 1px solid #ecc5ca;
+  color: var(--pk-error-text);
+  background: var(--pk-error-soft);
+  border-top: 1px solid var(--pk-error-border);
   font-size: 12px;
 }
 
 .settings-footer {
-  color: #65748b;
-  background: #f8fafc;
-  border-top: 1px solid #d9e1eb;
+  color: var(--pk-secondary);
+  background: var(--pk-paper);
+  border-top: 1px solid var(--pk-border);
   font-size: 11px;
 }
 
@@ -438,7 +438,7 @@ main {
   padding: 40px;
   color: var(--muted);
   text-align: center;
-  background: #fff;
+  background: var(--pk-surface);
   border: 1px solid var(--line);
   border-radius: 10px;
 }
@@ -446,7 +446,7 @@ main {
 .load-state-error {
   display: grid;
   gap: 6px;
-  color: #9f2833;
+  color: var(--pk-error-text);
 }
 
 @media (max-width: 1100px) {
