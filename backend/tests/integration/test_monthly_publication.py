@@ -120,7 +120,7 @@ def test_verification_migration_from_dev7(tmp_path: Path) -> None:
     connection = connect_sqlite(tmp_path / "old.db")
     try:
         apply_migrations(connection, old)
-        assert apply_migrations(connection, ROOT / "backend/migrations") == ("0008",)
+        assert apply_migrations(connection, ROOT / "backend/migrations") == ("0008", "0009")
         assert apply_migrations(connection, ROOT / "backend/migrations") == ()
     finally:
         connection.close()

@@ -140,3 +140,30 @@ def run_application_self_test(database: Path, migrations: Path, definitions: Pat
 
 def _destination(path: Path, _suggested: str = "") -> Path:
     return path
+
+
+def prepare_reference_window_test(database: Path, directory: Path) -> None:
+    """Seed only the disposable --ui-self-test directory with a weekly source form."""
+    from typing import cast
+
+    from openpyxl import Workbook
+    from openpyxl.worksheet.worksheet import Worksheet
+
+    from backend.infrastructure.database.sqlite_reference_reports import ReferenceReports
+
+    workbook = Workbook()
+    sheet = cast(Worksheet, workbook.active)
+    sheet["A2"] = "Контрольный импорт готового отчёта"
+    sheet["E7"] = "Входимость в изделие"
+    sheet["J7"] = "Общий дефицит"
+    sheet["K7"] = "Факт"
+    sheet["L9"] = 375
+    sheet["M9"] = 300
+    sheet["I9"] = "=SUM(L9:M9)"
+    sheet["F9"] = "Контрольный изготовитель"
+    source = directory / "ui-reference.xlsx"
+    workbook.save(source)
+    workbook.close()
+    service = ReferenceReports(database)
+    preview = service.stage(source, 1)
+    service.commit(preview["batch_id"])

@@ -9,6 +9,7 @@ import os
 import re
 import sqlite3
 import tempfile
+import zipfile
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import closing
 from datetime import date, timedelta
@@ -17,7 +18,11 @@ from typing import Any, cast
 from uuid import uuid4
 
 from backend.api.bridge import DesktopBridge
-from backend.application.excel_reports import ExcelReportError, ExcelReportService
+from backend.application.excel_reports import (
+    ExcelReportError,
+    ExcelReportService,
+    ExcelWorkbookValidationError,
+)
 from backend.application.monthly_report import monthly_snapshot
 from backend.application.report_cells import (
     ReportCellChange,
@@ -37,6 +42,7 @@ from backend.infrastructure.database.migrator import connect_sqlite
 from backend.infrastructure.database.sqlite_excel_imports import (
     SqliteExcelImportRepository,
 )
+from backend.infrastructure.database.sqlite_reference_reports import ReferenceReports
 from backend.infrastructure.database.sqlite_report_cells import (
     SqliteReportCellUnitOfWorkFactory,
 )
@@ -105,6 +111,7 @@ class WorkingReferenceApplicationBridge:
             backups_directory=Path(backups_directory or root / "backups"),
             application_version=application_version,
         )
+        self._references = ReferenceReports(self._database_path)
         self._verification = SqliteReportVerificationRepository(str(self._database_path))
         self._save_pdf_file: Callable[[str], Path | None] | None = None
         self._open_excel_file: Callable[[], Path | None] | None = None
@@ -371,13 +378,22 @@ class WorkingReferenceApplicationBridge:
             source = self._open_excel_file()
             if source is None:
                 return {"ok": True, "data": {"cancelled": True}, "request_id": request_id}
-            preview = self._excel.stage_import(
-                source,
-                report_type=report_type,
-                organization_id=organization_id,
-                matrix=self._build_matrix(report_type, organization_id, _year(request)),
-            )
-            return {"ok": True, "data": preview.to_dict(), "request_id": request_id}
+            try:
+                preview = self._excel.stage_import(
+                    source,
+                    report_type=report_type,
+                    organization_id=organization_id,
+                    matrix=self._build_matrix(report_type, organization_id, _year(request)),
+                )
+                result = preview.to_dict()
+            except ExcelWorkbookValidationError as exc:
+                if str(exc) != "Книга не создана этой программой: системная карта отсутствует":
+                    raise
+                try:
+                    result = self._references.stage(source, organization_id)
+                except (ValueError, zipfile.BadZipFile) as invalid:
+                    raise ExcelWorkbookValidationError(str(invalid)) from invalid
+            return {"ok": True, "data": result, "request_id": request_id}
         except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
             code = error.code if isinstance(error, ExcelReportError) else "EXCEL_IMPORT_ERROR"
             return _failure(code, str(error), request_id)
@@ -387,6 +403,16 @@ class WorkingReferenceApplicationBridge:
         try:
             request = _mapping(payload, "payload")
             _reject_unknown(request, {"batch_id", "year"})
+            identity = _required_string(request, "batch_id")
+            if self._references.owns(identity):
+                backup_database(
+                    self._database_path, self._backups_directory, self._application_version
+                )
+                return {
+                    "ok": True,
+                    "data": self._references.commit(identity),
+                    "request_id": request_id,
+                }
             result = self._excel.commit_import(
                 _required_string(request, "batch_id"),
                 allowed_coordinates=lambda report, org: self._editable_coordinate_keys(
@@ -423,6 +449,48 @@ class WorkingReferenceApplicationBridge:
         except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
             code = error.code if isinstance(error, ExcelReportError) else "EXCEL_EXPORT_ERROR"
             return _failure(code, str(error), request_id)
+
+    def reference_report(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"action", "organization_id", "id", "revision", "changes"})
+            organization = self._organization_id(request.get("organization_id"))
+            action = _required_string(request, "action")
+            result: object
+            if action == "list":
+                result = self._references.list_reports(organization)
+            elif action == "get":
+                result = self._references.get(_required_string(request, "id"), organization)
+            elif action == "save":
+                changes = request.get("changes")
+                revision = request.get("revision")
+                if not isinstance(changes, list) or not isinstance(revision, int):
+                    raise ValueError("Некорректные изменения отчёта")
+                backup_database(
+                    self._database_path, self._backups_directory, self._application_version
+                )
+                result = self._references.save(
+                    _required_string(request, "id"), organization, revision, changes
+                )
+            elif action == "export":
+                identity = _required_string(request, "id")
+                doc = self._references.get(identity, organization)
+                if self._save_excel_file is None:
+                    raise ExcelReportError(_FILE_DIALOG_REASON)
+                destination = self._save_excel_file(doc["file_name"])
+                if destination is None:
+                    result = {"cancelled": True}
+                else:
+                    if destination.suffix.lower() != ".xlsx":
+                        destination = destination.with_suffix(".xlsx")
+                    self._references.export(identity, organization, destination)
+                    result = {"cancelled": False, "file_name": destination.name}
+            else:
+                raise ValueError("Неизвестное действие")
+            return {"ok": True, "data": result, "request_id": request_id}
+        except (ValueError, TypeError, KeyError, OSError, sqlite3.Error, zipfile.BadZipFile) as exc:
+            return _failure("REFERENCE_REPORT_ERROR", str(exc), request_id)
 
     def list_organizations(self, payload: object) -> dict[str, object]:
         request_id = uuid4().hex

@@ -43,6 +43,24 @@ def monitor_window(
                 grab = importlib.import_module("PIL.ImageGrab")
                 grab.grab().save(paths.temp / f"window-{tab + 1}.png")
         if ui_self_test:
+            window.evaluate_js("""(() => {
+              const select = document.querySelector('.reference-selector select');
+              if (!select || select.options.length < 2)
+                throw new Error('Imported workbook not listed');
+              select.value = select.options[1].value;
+              select.dispatchEvent(new Event('change', {bubbles:true}));
+            })()""")
+            deadline = time.monotonic() + 30
+            while not window.evaluate_js("!!document.querySelector('.reference-grid')"):
+                if time.monotonic() > deadline:
+                    raise RuntimeError("Импортированный отчёт не открылся")
+                time.sleep(0.25)
+            if not window.evaluate_js(
+                "document.querySelector('.reference-grid').textContent.includes('675')"
+            ):
+                raise RuntimeError("Не отображается результат формулы импортированного отчёта")
+            grab = importlib.import_module("PIL.ImageGrab")
+            grab.grab().save(paths.temp / "window-4.png")
             window.destroy()
     except Exception as exc:
         failures.append(

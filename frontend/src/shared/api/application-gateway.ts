@@ -116,6 +116,7 @@ export type ImportIssue = {
 };
 
 export type ImportPreview = {
+  reference_workbook?: ReferenceWorkbook;
   cancelled: boolean;
   batch_id?: string;
   file_name?: string;
@@ -135,6 +136,7 @@ export type CommitImportRequest = {
 };
 
 export type CommitImportResult = {
+  reference_workbook_id?: string;
   batch_id: string;
   status: "COMMITTED";
   imported_count: number;
@@ -229,6 +231,7 @@ export type ApplicationError = {
 };
 
 export interface ApplicationGateway {
+  referenceReport?(request: ReferenceRequest): Promise<unknown>;
   exportPdf?(request: MonthlyReportQuery): Promise<ExportResult>;
   getReportVerification?(request: MonthlyReportQuery): Promise<ReportVerification>;
   verifyReport?(request: VerifyReportRequest): Promise<ReportVerification>;
@@ -256,3 +259,9 @@ export type ReportVerification = {
   signer_name?: string; signed_at?: string;
 };
 export type VerifyReportRequest = MonthlyReportQuery & { signer_name: string; snapshot_sha256: string; confirmed: boolean };
+
+export type ReferenceCell = { value: string | null; kind: "n" | "s" | "f" | "d"; display: string; error?: string };
+export type ReferenceSheet = { name: string; rows: number; columns: number; merges: string[]; cells: Record<string, ReferenceCell> };
+export type ReferenceWorkbook = { id: string; file_name: string; report_type: ReportType; revision: number; warnings: string[]; errors: string[]; sheets: ReferenceSheet[] };
+export type ReferenceSummary = Pick<ReferenceWorkbook, "id" | "file_name" | "report_type">;
+export type ReferenceRequest = { action: "list" | "get" | "save" | "export"; organization_id: string; id?: string; revision?: number; changes?: { sheet: number; address: string; value: string | null }[] };

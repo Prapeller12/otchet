@@ -1,0 +1,16 @@
+.reference-report { background: white; border: 1px solid #d7d5cd; border-radius: 6px; padding: 16px; margin: 12px; }
+.reference-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.reference-toolbar h2 { flex: 1; font-size: 18px; }
+.reference-toolbar button, .reference-report select { min-height: 44px; padding: 8px 14px; }
+.reference-scroll { overflow: auto; max-height: 65vh; margin-top: 12px; }
+.reference-grid { border-collapse: collapse; table-layout: fixed; width: max-content; font-size: 13px; }
+.reference-grid td { border: 1px solid #bbb; padding: 6px; min-width: 60px; white-space: pre-wrap; overflow-wrap: anywhere; height: 30px; vertical-align: middle; }
+.reference-header { background: #e7ece8; font-weight: 600; }
+.reference-formula { background: #eee; }
+.reference-editable:focus { outline: 2px solid #1f5f4a; outline-offset: -2px; }
+.reference-grid input { width: 100%; min-width: 55px; padding: 4px; }
+.reference-warning { padding: 8px; background: #fff2cc; }
+.excel-dialog:has(.reference-scroll) { width: min(1200px, 95vw); }
+.excel-dialog .reference-scroll { max-height: 40vh; }
+.reference-selector { display: flex; align-items: center; gap: 8px; padding: 8px 20px; }
+.reference-selector select { min-height: 44px; max-width: 65vw; }

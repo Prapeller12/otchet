@@ -18,7 +18,10 @@ from pathlib import Path
 from typing import Any
 
 from backend.api.working_reference_bridge import WorkingReferenceApplicationBridge
-from backend.desktop.application_self_test import run_application_self_test
+from backend.desktop.application_self_test import (
+    prepare_reference_window_test,
+    run_application_self_test,
+)
 from backend.desktop.database_bootstrap import backup_and_migrate
 from backend.desktop.instance_lock import AlreadyRunningError, SingleInstanceLock
 from backend.desktop.paths import PortableLayoutError, PortablePaths
@@ -79,6 +82,9 @@ def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
         backups_directory=paths.backups,
         application_version=_version(paths),
     )
+
+    if ui_self_test:
+        prepare_reference_window_test(paths.database, paths.temp)
 
     webview.settings["ALLOW_DOWNLOADS"] = False
     webview.settings["ALLOW_FILE_URLS"] = False
