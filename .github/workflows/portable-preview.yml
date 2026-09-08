@@ -12,7 +12,7 @@ permissions:
 jobs:
   build-preview:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -37,11 +37,17 @@ jobs:
           "jsonschema==4.26.0"
           "pytest==8.4.2"
 
+      - name: Fetch verified WebView2 Fixed Runtime
+        shell: pwsh
+        run: |
+          $runtime = ./scripts/fetch_webview2.ps1 -Destination "$env:RUNNER_TEMP/webview2"
+          "REPORTING_WEBVIEW2=$runtime" >> $env:GITHUB_ENV
+
       - name: Build portable preview
         shell: pwsh
         run: >-
           ./scripts/build_windows.ps1
-          -EvergreenTestBuild
+          -WebView2RuntimePath $env:REPORTING_WEBVIEW2
           -OutputPath ./dist/portable
 
       - name: Run packaged self-test
@@ -63,6 +69,35 @@ jobs:
           if ((Get-Content $report -Raw).Trim() -ne "ok") {
             throw "Packaged self-test did not produce a success report."
           }
+
+      - name: Test real window from extracted ZIP with Cyrillic path
+        shell: pwsh
+        run: |
+          $testRoot = Join-Path $env:RUNNER_TEMP "Ручной тест отчётности"
+          $zip = Get-ChildItem ./dist/portable/*.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath $testRoot
+          $app = Join-Path $testRoot "ReportingSystem"
+          $report = Join-Path $app "temp/ui-result.txt"
+          $process = Start-Process -FilePath (Join-Path $app "ReportingSystem.exe") `
+            -ArgumentList @("--ui-self-test", "--self-test-report", "`"$report`"") -PassThru
+          if (-not $process.WaitForExit(180000)) {
+            Stop-Process -Id $process.Id -Force
+            throw "Real WebView2 window timed out."
+          }
+          Copy-Item (Join-Path $app "temp/window-*.png") ./dist/portable -ErrorAction SilentlyContinue
+          if ($process.ExitCode -ne 0 -or -not (Test-Path $report)) {
+            if (Test-Path $report) { Get-Content $report }
+            throw "Real WebView2 window failed."
+          }
+          if ((Get-Content $report -Raw).Trim() -ne "ok") { throw "UI test failed." }
+
+      - name: Upload window evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: window-evidence
+          path: dist/portable/window-*.png
+          if-no-files-found: ignore
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -95,5 +130,5 @@ jobs:
               --target $env:GITHUB_SHA `
               --prerelease `
               --title "Reporting System $version test build" `
-              --notes "Windows x64 alpha. Compact five-digit numeric columns, monthly A4 PDF and local version-bound data confirmation. Read TESTING.txt, extract and run start.cmd. System WebView2 required. Scope: docs/test-cases/alpha-dev8.md."
+              --notes "Windows x64 alpha. Compact five-digit numeric columns, monthly A4 PDF and local version-bound data confirmation. Read TESTING.txt, extract and run start.cmd. WebView2 Fixed Runtime included; real-window startup test required. Windows 10 ACL limitations: docs/decisions/ADR-0001-webview2-fixed-runtime-windows10-acl.md."
           }
