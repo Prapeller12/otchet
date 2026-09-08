@@ -74,6 +74,8 @@ def test_reference_import_edit_restart_export(tmp_path: Path, kind: str) -> None
             repository.save(identity, 1, 0, [{"sheet": 0, "address": address, "value": "1"}])
     changed = repository.save(identity, 1, 0, [{"sheet": 0, "address": "L9", "value": "400"}])
     assert changed["sheets"][0]["cells"]["I9"]["display"] == "700"
+    fresh_preview = unwrap(app.validate_import(query))
+    assert fresh_preview["reference_workbook"]["sheets"][0]["cells"]["L9"]["display"] == "375"
     with pytest.raises(ValueError):
         repository.save(identity, 1, 0, [{"sheet": 0, "address": "M9", "value": "1"}])
     fresh = bridge(tmp_path)

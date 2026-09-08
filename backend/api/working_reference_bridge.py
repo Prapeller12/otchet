@@ -474,7 +474,7 @@ class WorkingReferenceApplicationBridge:
                 result = self._references.list_reports(organization)
             elif action == "transfer":
                 document = self._references.get(
-                    _required_string(request, "id"), organization, staged=True
+                    _required_string(request, "id"), organization, staged=True, original=True
                 )
                 report_type = _required_string(request, "report_type")
                 matrix = self._build_matrix(report_type, organization, _year(request))

@@ -35,7 +35,7 @@ class ReferenceReports:
                 (organization, digest),
             ).fetchone()
             if old:
-                result = self.get(old[0], organization, staged=True)
+                result = self.get(old[0], organization, staged=True, original=allow_errors)
                 return self.preview(result, already=bool(old[1]))
             doc = read_reference(content)
             if doc["errors"] and not allow_errors:
@@ -113,7 +113,9 @@ class ReferenceReports:
                 )
             ]
 
-    def get(self, identity: str, organization: int, *, staged: bool = False) -> dict[str, Any]:
+    def get(
+        self, identity: str, organization: int, *, staged: bool = False, original: bool = False
+    ) -> dict[str, Any]:
         with closing(connect_sqlite(self.database)) as conn:
             row = conn.execute(
                 "SELECT file_name,sha256,document,committed FROM "
@@ -126,8 +128,8 @@ class ReferenceReports:
             revision = 0
             for saved_revision, changes in conn.execute(
                 "SELECT revision,changes FROM reference_workbook_revisions WHERE "
-                "workbook_id=? ORDER BY revision",
-                (identity,),
+                "workbook_id=? AND ? = 0 ORDER BY revision",
+                (identity, int(original)),
             ):
                 revision = saved_revision
                 for change in json.loads(changes):
