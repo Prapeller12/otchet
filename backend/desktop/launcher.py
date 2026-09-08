@@ -7,6 +7,7 @@ import ctypes
 import faulthandler
 import importlib
 import logging
+import mimetypes
 import os
 import shutil
 import sqlite3
@@ -17,10 +18,14 @@ from pathlib import Path
 from typing import Any
 
 from backend.api.working_reference_bridge import WorkingReferenceApplicationBridge
-from backend.desktop.application_self_test import run_application_self_test
+from backend.desktop.application_self_test import (
+    prepare_reference_window_test,
+    run_application_self_test,
+)
 from backend.desktop.database_bootstrap import backup_and_migrate
 from backend.desktop.instance_lock import AlreadyRunningError, SingleInstanceLock
 from backend.desktop.paths import PortableLayoutError, PortablePaths
+from backend.desktop.window_health import monitor_window
 from backend.infrastructure.database.migrator import apply_migrations, connect_sqlite
 
 
@@ -63,7 +68,11 @@ def _self_test(paths: PortablePaths) -> None:
         )
 
 
-def _run_window(paths: PortablePaths) -> None:
+def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
+    # Windows registry MIME associations must not turn JS modules into text/plain.
+    mimetypes.init()
+    mimetypes.add_type("application/javascript", ".js")
+    mimetypes.add_type("text/css", ".css")
     webview: Any = importlib.import_module("webview")
     bridge = WorkingReferenceApplicationBridge(
         paths.database,
@@ -73,6 +82,9 @@ def _run_window(paths: PortablePaths) -> None:
         backups_directory=paths.backups,
         application_version=_version(paths),
     )
+
+    if ui_self_test:
+        prepare_reference_window_test(paths.database, paths.temp)
 
     webview.settings["ALLOW_DOWNLOADS"] = False
     webview.settings["ALLOW_FILE_URLS"] = False
@@ -137,7 +149,13 @@ def _run_window(paths: PortablePaths) -> None:
         open_file=open_excel_file,
         save_file=save_excel_file,
     )
+    failures: list[str] = []
+
+    def check_window() -> None:
+        monitor_window(window, paths, ui_self_test=ui_self_test, failures=failures)
+
     webview.start(
+        check_window,
         gui="edgechromium",
         debug=False,
         http_server=True,
@@ -145,6 +163,8 @@ def _run_window(paths: PortablePaths) -> None:
         storage_path=str(paths.webview2_profile),
     )
     shutil.rmtree(paths.webview2_profile, ignore_errors=True)
+    if failures:
+        raise RuntimeError(failures[0])
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -152,6 +172,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--self-test", action="store_true", help="Validate release without opening UI"
     )
+    parser.add_argument("--ui-self-test", action="store_true", help="Open and test the real window")
     parser.add_argument("--self-test-report", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--root", type=Path, help=argparse.SUPPRESS)
     return parser
@@ -172,7 +193,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         lock = SingleInstanceLock(paths.root, paths.lock_file)
         with lock:
             backup_and_migrate(paths.database, paths.migrations, paths.backups, _version(paths))
-            _run_window(paths)
+            _run_window(paths, ui_self_test=arguments.ui_self_test)
+        if arguments.ui_self_test and arguments.self_test_report is not None:
+            arguments.self_test_report.write_text("ok\n", encoding="utf-8")
         return 0
     except AlreadyRunningError as exc:
         _show_error(str(exc))
@@ -183,7 +206,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             arguments.self_test_report.write_text(
                 f"{type(exc).__name__}: {exc}\n", encoding="utf-8"
             )
-        _show_error(f"Программа не может быть запущена:\n{exc}")
+        if not arguments.ui_self_test:
+            _show_error(f"Программа не может быть запущена:\n{exc}")
         return 1
 
 

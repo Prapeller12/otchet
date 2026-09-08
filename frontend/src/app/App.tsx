@@ -1,3 +1,5 @@
+import { ReferenceReport } from "../features/reference-reports/ReferenceReport";
+import type { ReferenceSummary } from "../shared/api/application-gateway";
 import { useCallback, useEffect, useState } from "react";
 import { UiIcon } from "../shared/ui/UiIcon";
 
@@ -21,6 +23,9 @@ export function App() {
   const [reportType, setReportType] = useState<ReportType>("DAILY_MOVEMENT");
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
   const [organizationId, setOrganizationId] = useState("");
+  const [referenceId, setReferenceId] = useState("");
+  const [references, setReferences] = useState<ReferenceSummary[]>([]);
+  const [referenceDirty, setReferenceDirty] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [cellStatus, setCellStatus] = useState("Готово");
@@ -51,7 +56,24 @@ export function App() {
     };
   }, [gateway]);
 
+  useEffect(() => {
+    let active = true;
+    setReferenceId("");
+    setReferences([]);
+    const refresh = (identity?: string) => {
+      if (!organizationId || !gateway.referenceReport) return;
+      void gateway.referenceReport({ action: "list", organization_id: organizationId })
+        .then(result => { if (active) { setReferences(result as ReferenceSummary[]); if (identity) { setReferenceId(identity); const found = (result as ReferenceSummary[]).find(r => r.id === identity); if (found) setReportType(found.report_type); } } })
+        .catch(e => { if (active) setLoadError(String(e)); });
+    };
+    const imported = (event: Event) => refresh((event as CustomEvent<{ id: string }>).detail.id);
+    refresh();
+    window.addEventListener("reference-report-imported", imported);
+    return () => { active = false; window.removeEventListener("reference-report-imported", imported); };
+  }, [gateway, organizationId]);
+
   const activeOrganization = organizations.find((item) => item.id === organizationId);
+  const activeReferences = references.filter((report) => report.report_type === reportType);
 
   return (
     <div className="app-shell">
@@ -70,7 +92,8 @@ export function App() {
               key={type}
               type="button"
               aria-current={type === reportType ? "page" : undefined}
-              onClick={() => setReportType(type)}
+              disabled={referenceDirty}
+              onClick={() => { setReferenceId(""); setReportType(type); }}
             >
               <UiIcon name={type === "DAILY_MOVEMENT" ? "calendar" : type === "HEAD_SITE" ? "factory" : "buildings"} />
               {REPORT_LABELS[type]}
@@ -79,7 +102,7 @@ export function App() {
         </nav>
         <label className="organization-switcher">
           <span>Организация</span>
-          <select value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>
+          <select disabled={referenceDirty} value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>
             {organizations.map((organization) => (
               <option key={organization.id} value={organization.id}>
                 {organization.name}
@@ -87,15 +110,23 @@ export function App() {
             ))}
           </select>
         </label>
-        <button className="header-settings-button" type="button" onClick={() => setSettingsOpen(true)}>
+        <button className="header-settings-button" type="button" disabled={referenceDirty || !!referenceId} onClick={() => setSettingsOpen(true)}>
           <UiIcon name="settings" />
           Настроить рабочее поле
         </button>
       </div>
 
+      {activeReferences.length > 0 && <label className="reference-selector">Сохранённые отчёты Excel
+        <select aria-label="Сохранённые отчёты Excel" disabled={referenceDirty} value={referenceId} onChange={e => setReferenceId(e.target.value)}>
+          <option value="">Рабочая форма</option>
+          {activeReferences.map(r => <option key={r.id} value={r.id}>{r.file_name}</option>)}
+        </select>
+      </label>}
       <main>
         {loadError !== null ? (
           <section className="load-state load-state-error" role="alert">{loadError}</section>
+        ) : referenceId ? (
+          <ReferenceReport gateway={gateway} organizationId={organizationId} identity={referenceId} onBack={() => setReferenceId("")} onDirty={setReferenceDirty} />
         ) : organizationId ? (
           <ReportMatrixPage
             reportType={reportType}

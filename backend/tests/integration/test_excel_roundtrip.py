@@ -112,7 +112,7 @@ def test_excel_import_rejects_foreign_workbook(
     assert result["ok"] is False
     error = cast(dict[str, Any], result["error"])
     assert error["code"] == "EXCEL_VALIDATION_ERROR"
-    assert "системная карта отсутствует" in str(error["message"])
+    assert "не соответствует приложенным образцам" in str(error["message"])
 
 
 def test_excel_formula_in_input_is_previewed_and_cannot_be_committed(

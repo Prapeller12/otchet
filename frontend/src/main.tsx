@@ -22,4 +22,13 @@ async function bootstrap(): Promise<void> {
   );
 }
 
-void bootstrap();
+void bootstrap().catch((error: unknown) => {
+  const root = document.getElementById("root");
+  if (root) {
+    const message = document.createElement("p");
+    message.setAttribute("role", "alert");
+    message.style.cssText = "padding:24px;font-family:Arial,sans-serif";
+    message.textContent = `Не удалось запустить интерфейс: ${error instanceof Error ? error.message : String(error)}. Закройте программу и распакуйте полный ZIP в новую локальную папку.`;
+    root.replaceChildren(message);
+  }
+});

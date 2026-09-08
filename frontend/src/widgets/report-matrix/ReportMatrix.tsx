@@ -1,3 +1,4 @@
+import { ReferenceGrid } from "../../features/reference-reports/ReferenceReport";
 import { MonthlyReportActions } from "./MonthlyReportActions";
 import {
   useEffect,
@@ -396,6 +397,11 @@ export function ReportMatrix({
     setExcelError(null);
     try {
       const result = await gateway.commitImport({ batch_id: importPreview.batch_id, ...(matrix.year ? { year: matrix.year } : {}) });
+      if (result.reference_workbook_id) {
+        window.dispatchEvent(new CustomEvent("reference-report-imported", { detail: { id: result.reference_workbook_id } }));
+        setImportPreview(null);
+        return;
+      }
       const refreshed = await gateway.getReportMatrix({
         ...query,
         report_type: matrix.report_type,
@@ -653,6 +659,12 @@ export function ReportMatrix({
           >
             <h3 id="excel-preview-title">Проверка импорта Excel</h3>
             <p className="excel-file-name">{importPreview.file_name}</p>
+            {importPreview.reference_workbook && <>
+              <p>Будет сохранён отдельный отчёт с исходными месяцами, неделями и формулами. Он появится в списке «Сохранённые отчёты Excel» выбранной организации.</p>
+              {importPreview.reference_workbook.warnings.map(w => <p key={w} className="reference-warning">{w}</p>)}
+              {importPreview.reference_workbook.sheets.map(sheet => <div key={sheet.name}><h3>{sheet.name}</h3><ReferenceGrid sheet={sheet} /></div>)}
+              {importPreview.already_imported && <button onClick={() => { window.dispatchEvent(new CustomEvent("reference-report-imported", { detail: { id: importPreview.reference_workbook!.id } })); setImportPreview(null); }}>Открыть сохранённый отчёт</button>}
+            </>}
             <div className="excel-preview-counts">
               <span><strong>{importPreview.new_count ?? 0}</strong> новых</span>
               <span><strong>{importPreview.changed_count ?? 0}</strong> изменённых</span>
