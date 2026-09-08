@@ -73,6 +73,7 @@ export function App() {
   }, [gateway, organizationId]);
 
   const activeOrganization = organizations.find((item) => item.id === organizationId);
+  const activeReferences = references.filter((report) => report.report_type === reportType);
 
   return (
     <div className="app-shell">
@@ -115,10 +116,10 @@ export function App() {
         </button>
       </div>
 
-      {references.length > 0 && <label className="reference-selector">Сохранённые отчёты Excel
-        <select aria-label="Сохранённые отчёты Excel" disabled={referenceDirty} value={referenceId} onChange={e => { setReferenceId(e.target.value); const found = references.find(r => r.id === e.target.value); if (found) setReportType(found.report_type); }}>
+      {activeReferences.length > 0 && <label className="reference-selector">Сохранённые отчёты Excel
+        <select aria-label="Сохранённые отчёты Excel" disabled={referenceDirty} value={referenceId} onChange={e => setReferenceId(e.target.value)}>
           <option value="">Рабочая форма</option>
-          {references.map(r => <option key={r.id} value={r.id}>{r.file_name}</option>)}
+          {activeReferences.map(r => <option key={r.id} value={r.id}>{r.file_name}</option>)}
         </select>
       </label>}
       <main>
