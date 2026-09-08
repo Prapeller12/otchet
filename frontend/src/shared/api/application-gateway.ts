@@ -67,6 +67,7 @@ export type ReportMatrixContract = {
   organization_id: string;
   title: string;
   subtitle: string;
+  calendar_notice?: string;
   form_status: FormStatus;
   source_notice: string;
   matrix_revision: string;
@@ -264,4 +265,5 @@ export type ReferenceCell = { value: string | null; kind: "n" | "s" | "f" | "d";
 export type ReferenceSheet = { name: string; rows: number; columns: number; merges: string[]; cells: Record<string, ReferenceCell> };
 export type ReferenceWorkbook = { id: string; file_name: string; report_type: ReportType; revision: number; warnings: string[]; errors: string[]; sheets: ReferenceSheet[] };
 export type ReferenceSummary = Pick<ReferenceWorkbook, "id" | "file_name" | "report_type">;
-export type ReferenceRequest = { action: "list" | "get" | "save" | "export"; organization_id: string; id?: string; revision?: number; changes?: { sheet: number; address: string; value: string | null }[] };
+export type ReferenceRequest = {
+  report_type?: ReportType; year?: number; mappings?: unknown[]; action: "list" | "get" | "save" | "export" | "transfer"; organization_id: string; id?: string; revision?: number; changes?: { sheet: number; address: string; value: string | null }[] };

@@ -24,6 +24,8 @@ from backend.application.excel_reports import (
     ExcelWorkbookValidationError,
 )
 from backend.application.monthly_report import monthly_snapshot
+from backend.application.reference_transfer import validate_transfer
+from backend.application.report_calendar import reporting_weeks
 from backend.application.report_cells import (
     ReportCellChange,
     ReportCellCoordinate,
@@ -390,7 +392,10 @@ class WorkingReferenceApplicationBridge:
                 if str(exc) != "Книга не создана этой программой: системная карта отсутствует":
                     raise
                 try:
-                    result = self._references.stage(source, organization_id)
+                    result = self._references.stage(source, organization_id, allow_errors=True)
+                    # Archiving a source workbook is not an import into working facts.
+                    result["already_imported"] = False
+                    result["status"] = "STAGED"
                 except (ValueError, zipfile.BadZipFile) as invalid:
                     raise ExcelWorkbookValidationError(str(invalid)) from invalid
             return {"ok": True, "data": result, "request_id": request_id}
@@ -405,14 +410,9 @@ class WorkingReferenceApplicationBridge:
             _reject_unknown(request, {"batch_id", "year"})
             identity = _required_string(request, "batch_id")
             if self._references.owns(identity):
-                backup_database(
-                    self._database_path, self._backups_directory, self._application_version
+                raise ExcelWorkbookValidationError(
+                    "Сначала сопоставьте исходные ячейки с рабочими полями и выполните проверку"
                 )
-                return {
-                    "ok": True,
-                    "data": self._references.commit(identity),
-                    "request_id": request_id,
-                }
             result = self._excel.commit_import(
                 _required_string(request, "batch_id"),
                 allowed_coordinates=lambda report, org: self._editable_coordinate_keys(
@@ -454,12 +454,54 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"action", "organization_id", "id", "revision", "changes"})
+            _reject_unknown(
+                request,
+                {
+                    "action",
+                    "organization_id",
+                    "id",
+                    "revision",
+                    "changes",
+                    "report_type",
+                    "year",
+                    "mappings",
+                },
+            )
             organization = self._organization_id(request.get("organization_id"))
             action = _required_string(request, "action")
             result: object
             if action == "list":
                 result = self._references.list_reports(organization)
+            elif action == "transfer":
+                document = self._references.get(
+                    _required_string(request, "id"), organization, staged=True
+                )
+                report_type = _required_string(request, "report_type")
+                matrix = self._build_matrix(report_type, organization, _year(request))
+                checked = validate_transfer(
+                    document, cast(dict[str, Any], matrix), request.get("mappings")
+                )
+                if checked["issues"]:
+                    result = {"issues": checked["issues"], "error_count": len(checked["issues"])}
+                else:
+                    result = self._excel.stage_transfer(
+                        source_document=document,
+                        report_type=report_type,
+                        organization_id=organization,
+                        changes=checked["changes"],
+                    )
+                    if not result.get("already_imported"):
+                        with closing(connect_sqlite(self._database_path)) as connection:
+                            connection.execute(
+                                "INSERT INTO reference_transfer_decisions"
+                                "(batch_id,workbook_id,decisions) VALUES(?,?,?)",
+                                (
+                                    result["batch_id"],
+                                    document["id"],
+                                    json.dumps(request["mappings"], ensure_ascii=False),
+                                ),
+                            )
+                            connection.commit()
             elif action == "get":
                 result = self._references.get(_required_string(request, "id"), organization)
             elif action == "save":
@@ -701,6 +743,45 @@ class WorkingReferenceApplicationBridge:
                 organization_id=str(organization_id),
             )
         }
+        period_labels: dict[str, str] = {}
+        calendar_notice = ""
+        if report_type != "DAILY_MOVEMENT":
+            calendar_year = year or date.today().year
+            with closing(connect_sqlite(self._database_path)) as connection:
+                mode = connection.execute(
+                    "SELECT mode FROM report_calendars WHERE organization_id=? "
+                    "AND report_type=? AND year=?",
+                    (organization_id, report_type, calendar_year),
+                ).fetchone()
+                if mode is None:
+                    has_facts = any(
+                        str(
+                            item.coordinate.operation_date or item.coordinate.period_start
+                        ).startswith(str(calendar_year))
+                        for item in stored.values()
+                    )
+                    selected_mode = "LEGACY" if has_facts else "CALENDAR_WEEKS"
+                    connection.execute(
+                        "INSERT INTO report_calendars VALUES(?,?,?,?)",
+                        (organization_id, report_type, calendar_year, selected_mode),
+                    )
+                    connection.commit()
+                else:
+                    selected_mode = str(mode[0])
+            if selected_mode == "CALENDAR_WEEKS":
+                weeks = [
+                    week
+                    for month in (range(1, 13) if year else [date.today().month])
+                    for week in reporting_weeks(calendar_year, month)
+                ]
+                periods = [(week.start.isoformat(), week.start.isoformat()) for week in weeks]
+                period_labels = {week.start.isoformat(): week.label for week in weeks}
+            else:
+                calendar_notice = (
+                    "В этом году есть ранее введённые данные. "
+                    "Их исходные периоды сохранены; новый календарь "
+                    "автоматически к ним не применяется."
+                )
         layout = _mapping(definition.get("layout"), "layout")
         identifier_columns = _sequence(layout.get("identifier_columns"), "identifier_columns")
         left_columns = [
@@ -828,6 +909,7 @@ class WorkingReferenceApplicationBridge:
             "presentation": presentation,
             "subtitle": "Сквозной локальный контур на обезличенных данных",
             "form_status": "WORKING_REFERENCE",
+            "calendar_notice": calendar_notice,
             "source_notice": (
                 "Значения сохраняются в SQLite как декларации рабочей формы; "
                 "они не проводятся как складские операции."
@@ -837,7 +919,7 @@ class WorkingReferenceApplicationBridge:
             "time_columns": [
                 {
                     "id": column_id,
-                    "label": period_start[8:10],
+                    "label": period_labels.get(period_start, period_start[8:10]),
                     "group_label": period_start[:7],
                     "width": widths.get(column_id, 76),
                 }

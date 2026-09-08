@@ -1,4 +1,4 @@
-import { ReferenceGrid } from "../../features/reference-reports/ReferenceReport";
+import { ReferenceTransfer } from "../../features/reference-reports/ReferenceTransfer";
 import { MonthlyReportActions } from "./MonthlyReportActions";
 import {
   useEffect,
@@ -500,6 +500,7 @@ export function ReportMatrix({
         </div>
       </div>
 
+      {matrix.calendar_notice && <p role="note">{matrix.calendar_notice}</p>}
       <MonthlyReportActions gateway={gateway} query={query} revision={matrix.matrix_revision} title={matrix.title} blocked={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} />
       <nav className="month-controls" aria-label="Месяцы отчёта">
         <button type="button" disabled={editing !== null} onClick={() => {
@@ -652,19 +653,16 @@ export function ReportMatrix({
       {importPreview !== null && (
         <div className="excel-dialog-backdrop" role="presentation">
           <section
-            className="excel-dialog"
+            className={importPreview.reference_workbook ? "excel-dialog excel-transfer-dialog" : "excel-dialog"}
             role="dialog"
             aria-modal="true"
             aria-labelledby="excel-preview-title"
           >
             <h3 id="excel-preview-title">Проверка импорта Excel</h3>
             <p className="excel-file-name">{importPreview.file_name}</p>
-            {importPreview.reference_workbook && <>
-              <p>Будет сохранён отдельный отчёт с исходными месяцами, неделями и формулами. Он появится в списке «Сохранённые отчёты Excel» выбранной организации.</p>
-              {importPreview.reference_workbook.warnings.map(w => <p key={w} className="reference-warning">{w}</p>)}
-              {importPreview.reference_workbook.sheets.map(sheet => <div key={sheet.name}><h3>{sheet.name}</h3><ReferenceGrid sheet={sheet} /></div>)}
-              {importPreview.already_imported && <button onClick={() => { window.dispatchEvent(new CustomEvent("reference-report-imported", { detail: { id: importPreview.reference_workbook!.id } })); setImportPreview(null); }}>Открыть сохранённый отчёт</button>}
-            </>}
+            {importPreview.reference_workbook && <ReferenceTransfer
+              book={importPreview.reference_workbook} matrix={matrix} gateway={gateway}
+              onReady={setImportPreview} />}
             <div className="excel-preview-counts">
               <span><strong>{importPreview.new_count ?? 0}</strong> новых</span>
               <span><strong>{importPreview.changed_count ?? 0}</strong> изменённых</span>
@@ -700,6 +698,7 @@ export function ReportMatrix({
                 className="button primary"
                 type="button"
                 disabled={
+                  !!importPreview.reference_workbook ||
                   excelBusy === "commit" ||
                   (importPreview.error_count ?? 0) > 0 ||
                   importPreview.already_imported

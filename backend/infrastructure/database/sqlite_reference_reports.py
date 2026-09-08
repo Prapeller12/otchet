@@ -22,7 +22,9 @@ class ReferenceReports:
     def __init__(self, database: Path) -> None:
         self.database = database
 
-    def stage(self, source: Path, organization: int) -> dict[str, Any]:
+    def stage(
+        self, source: Path, organization: int, *, allow_errors: bool = False
+    ) -> dict[str, Any]:
         if source.suffix.lower() != ".xlsx" or not 0 < source.stat().st_size <= 50 * 1024 * 1024:
             raise ValueError("Нужна книга .xlsx размером до 50 МБ")
         content = source.read_bytes()
@@ -36,7 +38,7 @@ class ReferenceReports:
                 result = self.get(old[0], organization, staged=True)
                 return self.preview(result, already=bool(old[1]))
             doc = read_reference(content)
-            if doc["errors"]:
+            if doc["errors"] and not allow_errors:
                 raise ValueError("Не удалось проверить формулы: " + "; ".join(doc["errors"][:5]))
             identity = uuid4().hex
             conn.execute(
