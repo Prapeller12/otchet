@@ -452,7 +452,9 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"report_type", "organization_id", "year"})
+            _reject_unknown(
+                request, {"report_type", "organization_id", "year", "visible_months", "stock_weeks"}
+            )
             report_type = _required_string(request, "report_type")
             organization_id = self._organization_id(request.get("organization_id"))
             if self._save_excel_file is None:
@@ -461,10 +463,33 @@ class WorkingReferenceApplicationBridge:
             destination = self._save_excel_file(suggested)
             if destination is None:
                 return {"ok": True, "data": {"cancelled": True}, "request_id": request_id}
-            result = self._excel.export(
-                destination,
-                self._build_matrix(report_type, organization_id, _year(request)),
+            matrix = cast(
+                dict[str, Any], self._build_matrix(report_type, organization_id, _year(request))
             )
+            months = request.get("visible_months")
+            known = {c["group_label"] for c in matrix["time_columns"]}
+            if months is not None:
+                if not isinstance(months, list) or any(
+                    not isinstance(m, str) or m not in known for m in months
+                ):
+                    raise ValueError("Неверные месяцы экспорта")
+                matrix["visible_months"] = months
+            weeks = request.get("stock_weeks", {})
+            if not isinstance(weeks, dict):
+                raise ValueError("Неверные недели экспорта")
+            for month, week in weeks.items():
+                if not any(
+                    c["group_label"] == month and c["id"] == week and c.get("kind") == "USED"
+                    for c in matrix["time_columns"]
+                ):
+                    raise ValueError("Неделя экспорта не принадлежит месяцу")
+                for row in matrix["rows"]:
+                    for cell in row["cells"]:
+                        if cell["column_id"] == month + "-STOCK" and week in row.get(
+                            "stock_by_week", {}
+                        ):
+                            cell["value"] = row["stock_by_week"][week]
+            result = self._excel.export(destination, matrix)
             return {"ok": True, "data": result, "request_id": request_id}
         except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
             code = error.code if isinstance(error, ExcelReportError) else "EXCEL_EXPORT_ERROR"

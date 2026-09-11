@@ -94,6 +94,8 @@ class OpenpyxlMatrixWorkbookAdapter:
             _header(sheet.cell(5, total_column, "Итого"), header_fill, border)
             sheet.column_dimensions[get_column_letter(total_column)].width = 14
 
+        visible_months = cast(list[str], matrix.get("visible_months") or [])
+        visible_columns = []
         for index, raw_column in enumerate(time_columns, start=first_time_column):
             column = _mapping(raw_column, "time column")
             top = sheet.cell(5, index, _string(column, "group_label"))
@@ -101,6 +103,10 @@ class OpenpyxlMatrixWorkbookAdapter:
             _header(top, header_fill, border)
             _header(bottom, header_fill, border)
             sheet.column_dimensions[get_column_letter(index)].width = 12
+            hidden = bool(visible_months) and column["group_label"] not in visible_months
+            sheet.column_dimensions[get_column_letter(index)].hidden = hidden
+            if not hidden:
+                visible_columns.append(index)
 
         mapping.append([_MARKER, _SCHEMA_VERSION])
         mapping.append(["report_type", report_type])
@@ -184,6 +190,14 @@ class OpenpyxlMatrixWorkbookAdapter:
                 validation.add(sheet[cell_reference])
 
         sheet.freeze_panes = cast(Cell, sheet.cell(7, first_time_column))
+        if visible_columns and sheet.sheet_view.pane is not None:
+            first_visible = get_column_letter(visible_columns[0])
+            sheet.sheet_view.pane.topLeftCell = f"{first_visible}7"
+            for selection in sheet.sheet_view.selection:
+                if selection.pane in {"topRight", "bottomRight"}:
+                    row_number = 7 if selection.pane == "bottomRight" else 5
+                    selection.activeCell = f"{first_visible}{row_number}"
+                    selection.sqref = selection.activeCell
         sheet.auto_filter.ref = f"A6:{get_column_letter(last_column)}{6 + len(rows)}"
         sheet.sheet_view.showGridLines = False
         sheet.page_setup.orientation = "landscape"
@@ -214,8 +228,35 @@ class OpenpyxlMatrixWorkbookAdapter:
                 for styled_cell in styled_row:
                     if isinstance(styled_cell, Cell):
                         styled_cell.fill = PatternFill("solid", fgColor="FFFFFF")
+            shared_columns = [
+                index
+                for index, raw in enumerate(left_columns, 1)
+                if _mapping(raw, "left column").get("shared")
+            ] + [
+                index
+                for index, raw in enumerate(time_columns, first_time_column)
+                if _mapping(raw, "time column").get("kind") in {"OPENING", "STOCK", "VARIANCE"}
+            ]
+            group_start = 0
+            while group_start < len(rows):
+                group_id = _mapping(rows[group_start], "row").get("group_id")
+                group_end = group_start + 1
+                while (
+                    group_end < len(rows)
+                    and _mapping(rows[group_end], "row").get("group_id") == group_id
+                ):
+                    group_end += 1
+                if group_end - group_start > 1:
+                    for column_index in shared_columns:
+                        sheet.merge_cells(
+                            start_row=group_start + 7,
+                            end_row=group_end + 6,
+                            start_column=column_index,
+                            end_column=column_index,
+                        )
+                group_start = group_end
             plan_sheet = workbook.create_sheet("Месячные планы")
-            plan_sheet.append(["Месяц", "План составной части (C6), шт."])
+            plan_sheet.append(["Месяц", "План выпуска, шт."])
             presentation = cast(dict[str, Any], matrix.get("presentation", {}))
             for period, value in sorted(presentation.get("plans", {}).items()):
                 plan_sheet.append([period, _excel_number(value) if value else None])

@@ -459,6 +459,8 @@ export function ReportMatrix({
         ...query,
         report_type: matrix.report_type,
         organization_id: matrix.organization_id,
+        visible_months: [...expandedMonths],
+        stock_weeks: stockWeeks,
       });
       if (!result.cancelled) {
         setExcelMessage(

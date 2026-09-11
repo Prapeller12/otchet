@@ -39,8 +39,8 @@ function newRow(layout: ReportLayoutContract): ReportLayoutRow | null {
   return {
     id: null,
     template_group_id: template.id,
-    party_name: "Изготовитель/поставщик",
-    position_name: template.label,
+    party_name: "",
+    position_name: "",
     configuration: { category: "UNSPECIFIED", image: "", norm: "", opening: "", indicators: template.indicators ?? [] },
   };
 }
@@ -170,6 +170,17 @@ export function WorkspaceSettingsDialog({
   }
 
   async function saveLayout(): Promise<void> {
+    for (const [index, row] of rows.entries()) {
+      if (!row.position_name.trim() || !row.party_name.trim()) {
+        setError(`Строка ${index + 1}: укажите наименование и производителя.`); return;
+      }
+      if (row.configuration?.subsidiary?.suppliers.some(s => !s.archived && !s.name.trim())) {
+        setError(`Строка ${index + 1}: укажите наименование каждого производителя.`); return;
+      }
+      if (row.configuration?.indicators.some(i => !i.label.trim())) {
+        setError(`Строка ${index + 1}: укажите название показателя.`); return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {

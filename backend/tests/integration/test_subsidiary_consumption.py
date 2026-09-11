@@ -297,3 +297,45 @@ def test_pdf_shared_detail_continues_across_pages(tmp_path: Path) -> None:
     pdf = render_monthly_pdf(snapshot, {}, ROOT / "resources/fonts/ReportingSerif.ttf")
     pages = re.search(rb"/Count (\d+)", pdf)
     assert pages is not None and int(pages.group(1)) > 1
+
+
+def test_export_opens_visible_month_and_keeps_values_and_import_map(tmp_path: Path) -> None:
+    from openpyxl import load_workbook
+    from openpyxl.utils import get_column_letter
+
+    app = app_at(tmp_path)
+    matrix = setup(app)
+    matrix = write(
+        app,
+        matrix,
+        [
+            (0, "2026-09-OPENING", "800"),
+            (0, "2026-09-RECEIVED", "500"),
+            (1, "2026-09-RECEIVED", "300"),
+            (0, "2026-09-01", "560"),
+            (1, "2026-09-01", "100"),
+        ],
+    )
+    path = tmp_path / "visible-month.xlsx"
+    app.configure_excel_dialogs(open_file=lambda: path, save_file=lambda _: path)
+    data(
+        app.export_report(
+            {**QUERY, "visible_months": ["2026-09"], "stock_weeks": {"2026-09": "2026-09-01"}}
+        )
+    )
+    workbook = load_workbook(path)
+    sheet = workbook["Отчёт"]
+    first = 7 + next(
+        i for i, c in enumerate(matrix["time_columns"]) if c["id"] == "2026-09-OPENING"
+    )
+    letter = get_column_letter(first)
+    assert sheet.sheet_view.pane is not None
+    assert sheet.sheet_view.pane.topLeftCell == f"{letter}7"
+    assert sheet.column_dimensions["G"].hidden
+    assert not sheet.column_dimensions[letter].hidden
+    assert sheet.cell(7, first).value == 800
+    assert sheet.cell(7, first + 2).value == 940
+    assert sheet.cell(7, first + 3).value == -2400
+    assert f"{letter}7:{letter}8" in sheet.merged_cells
+    assert workbook["Месячные планы"]["B2"].value == 1000
+    assert workbook["_Системная карта"].max_row > 100

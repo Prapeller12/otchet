@@ -155,6 +155,8 @@ export type CommitImportResult = {
 };
 
 export type ExportRequest = {
+  visible_months?: string[];
+  stock_weeks?: Record<string, string>;
   year?: number;
   report_type: ReportType;
   organization_id: string;
