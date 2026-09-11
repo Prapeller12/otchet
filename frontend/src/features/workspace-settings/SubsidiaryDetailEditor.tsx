@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import type { ReportLayoutRow, SubsidiaryDetail } from "../../shared/api/application-gateway";
 import { CATEGORY_LABELS } from "./PositionFieldsEditor";
 
@@ -6,6 +7,13 @@ export function SubsidiaryDetailEditor({ row, onChange, onRemove, onMove, disabl
 }) {
   const configuration = row.configuration ?? { category: "UNSPECIFIED", image: "", norm: "", opening: "", indicators: [] };
   const detail: SubsidiaryDetail = configuration.subsidiary ?? { number: "", designation: "", suppliers: [{ id: "PRIMARY", name: row.party_name, contract: "", archived: false }] };
+  const originalSuppliers = useRef(new Set(detail.suppliers.filter(s => s.name.trim()).map(s => s.id)));
+  function toggleSupplier(index: number) {
+    const supplier = detail.suppliers[index]!;
+    update({ suppliers: originalSuppliers.current.has(supplier.id)
+      ? detail.suppliers.map((s, i) => i === index ? { ...s, archived: !s.archived } : s)
+      : detail.suppliers.filter((_, i) => i !== index) });
+  }
   function update(patch: Partial<SubsidiaryDetail>) { onChange({ ...row, party_name: patch.suppliers?.find(s => !s.archived)?.name ?? row.party_name, configuration: { ...configuration, subsidiary: { ...detail, ...patch } } }); }
   return <fieldset disabled={disabled} className="layout-row-editor subsidiary-detail-editor">
     <legend>{row.position_name}</legend>
@@ -29,7 +37,7 @@ export function SubsidiaryDetailEditor({ row, onChange, onRemove, onMove, disabl
     {detail.suppliers.map((supplier, index) => <div className="subsidiary-supplier" key={supplier.id}>
       <label>Производитель<input placeholder="Введите производителя" disabled={supplier.archived} value={supplier.name} onChange={e => update({ suppliers: detail.suppliers.map((s, i) => i === index ? { ...s, name: e.target.value } : s) })} /></label>
       <label>По договору, шт.<input disabled={supplier.archived} inputMode="decimal" value={supplier.contract} onChange={e => update({ suppliers: detail.suppliers.map((s, i) => i === index ? { ...s, contract: e.target.value.replace(",", ".") } : s) })} /></label>
-      <button type="button" className="supplier-action" title={supplier.archived ? "Восстановить производителя" : "Убрать производителя"} aria-label={supplier.archived ? "Восстановить производителя" : "Убрать производителя"} onClick={() => update({ suppliers: detail.suppliers.map((s, i) => i === index ? { ...s, archived: !s.archived } : s) })}>{supplier.archived ? "↶" : "×"}</button>
+      <button type="button" className="supplier-action" title={supplier.archived ? "Восстановить производителя" : "Убрать производителя"} aria-label={supplier.archived ? "Восстановить производителя" : "Убрать производителя"} onClick={() => toggleSupplier(index)}>{supplier.archived ? "↶" : "×"}</button>
     </div>)}
     <div className="row-actions">
       <button type="button" onClick={() => update({ suppliers: [...detail.suppliers, { id: crypto.randomUUID().replaceAll("-", "").toUpperCase(), name: "", contract: "", archived: false }] })}>+ Добавить производителя</button>

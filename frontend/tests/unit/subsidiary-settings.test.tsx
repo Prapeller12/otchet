@@ -22,6 +22,9 @@ it("adds and archives a manufacturer without duplicating or deleting the detail"
   await user.type(added, "АО Завод");
   expect(added).toHaveValue("АО Завод");
   expect(screen.getAllByLabelText("Наименование")).toHaveLength(1);
+  await user.click(screen.getByRole("button", { name: "+ Добавить производителя" }));
+  await user.click(screen.getAllByRole("button", { name: "Убрать производителя" })[2]!);
+  expect(screen.getAllByLabelText("Производитель")).toHaveLength(2);
   await user.click(screen.getAllByRole("button", { name: "Убрать производителя" })[0]!);
   expect(remove).not.toHaveBeenCalled();
   expect(screen.getByRole("button", { name: "Восстановить производителя" })).toBeVisible();
