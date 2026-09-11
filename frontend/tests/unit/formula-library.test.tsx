@@ -6,7 +6,7 @@ import { DemoGateway } from "../../src/shared/api/demo-gateway";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-it.each(["DAILY_MOVEMENT", "HEAD_SITE", "SUBSIDIARY"] as const)("copies and inserts formulas without closing %s settings", async report_type => {
+it.each(["DAILY_MOVEMENT", "HEAD_SITE"] as const)("copies and inserts formulas without closing %s settings", async report_type => {
   const user = userEvent.setup();
   const clipboard = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
   const gateway = new DemoGateway();

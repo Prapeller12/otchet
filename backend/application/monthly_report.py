@@ -21,13 +21,66 @@ def aggregate(cells: list[dict[str, Any]], calculated: bool) -> str:
     return format(sum(quantities, Decimal(0)), "f") if quantities else ""
 
 
-def monthly_snapshot(matrix: dict[str, Any], month: int, organization: str) -> dict[str, Any]:
+def monthly_snapshot(
+    matrix: dict[str, Any], month: int, organization: str, week_start: object = None
+) -> dict[str, Any]:
     year = matrix["year"]
     if isinstance(month, bool) or not isinstance(month, int) or not 1 <= month <= 12:
         raise ValueError("Выберите месяц от 1 до 12")
     if not isinstance(year, int):
         raise ValueError("Год печатного отчёта не задан")
     period = f"{year:04d}-{month:02d}"
+    if matrix.get("subsidiary"):
+        indices = [i for i, c in enumerate(matrix["time_columns"]) if c["group_label"] == period]
+        weeks = [
+            c["id"]
+            for c in matrix["time_columns"]
+            if c["group_label"] == period and c.get("kind") == "USED"
+        ]
+        selected_week = weeks[-1] if week_start is None else week_start
+        if not isinstance(selected_week, str) or selected_week not in weeks:
+            raise ValueError("Неделя остатка не принадлежит выбранному месяцу")
+        from backend.application.report_calendar import reporting_weeks
+
+        as_of = next(
+            w.end.isoformat()
+            for w in reporting_weeks(year, month)
+            if w.start.isoformat() == selected_week
+        )
+        return {
+            "as_of": as_of,
+            "schema": 2,
+            "report_type": matrix["report_type"],
+            "subsidiary": True,
+            "organization_id": matrix["organization_id"],
+            "organization": organization,
+            "title": matrix["title"],
+            "period": period,
+            "revision": matrix["matrix_revision"],
+            "plan": matrix["presentation"].get("plans", {}).get(period, ""),
+            "left_columns": matrix["left_columns"],
+            "columns": [matrix["time_columns"][i] for i in indices],
+            "rows": [
+                {
+                    "group_id": row["group_id"],
+                    "left_values": row["left_values"],
+                    "image": row.get("image", ""),
+                    "values": [
+                        str(row["stock_by_week"][selected_week].get("quantity", ""))
+                        if matrix["time_columns"][i].get("kind") == "STOCK"
+                        and selected_week in row.get("stock_by_week", {})
+                        else aggregate([row["cells"][i]], True)
+                        for i in indices
+                    ],
+                    "errors": [
+                        row["cells"][i].get("issue", {}).get("message", "Ошибка")
+                        for i in indices
+                        if row["cells"][i]["state"].get("persistence") == "error"
+                    ],
+                }
+                for row in matrix["rows"]
+            ],
+        }
     days = [f"{period}-{day:02d}" for day in range(1, calendar.monthrange(year, month)[1] + 1)]
     prior = [f"{year:04d}-{m:02d}" for m in range(1, month)]
     rows = []

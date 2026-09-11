@@ -239,13 +239,6 @@ def test_year_excel_roundtrip(
             "20",
         ),
         (
-            "SUBSIDIARY",
-            "Поставка и отклонение от договора",
-            "WRK_SUBSIDIARY_SUPPLY",
-            "CONTRACT_VARIANCE",
-            "-80",
-        ),
-        (
             "DAILY_MOVEMENT",
             "Наличие и комплектность — как в Excel",
             "AVAILABLE_QTY",

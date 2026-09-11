@@ -1,3 +1,4 @@
+import { SubsidiaryDetailEditor } from "./SubsidiaryDetailEditor";
 import { useEffect, useMemo, useState } from "react";
 
 import type {
@@ -270,14 +271,14 @@ export function WorkspaceSettingsDialog({
                       if (row !== null) setRows((current) => [...current, row]);
                     }}
                   >
-                    + Добавить строку
+                    {reportType === "SUBSIDIARY" ? "+ Добавить деталь" : "+ Добавить строку"}
                   </button>
                 </div>
                 <div className="layout-row-list">
                   {rows.length === 0 && (
                     <div className="settings-empty">Добавьте первую строку отчёта.</div>
                   )}
-                  {rows.map((row, index) => (
+                  {rows.map((row, index) => reportType === "SUBSIDIARY" ? <SubsidiaryDetailEditor key={row.id ?? `new-${index}`} row={row} onBusy={setSaving} disabled={saving} onChange={next => updateRow(index, next)} onRemove={() => setRows(current => current.filter((_, i) => i !== index))} onMove={direction => moveRow(index, direction)} /> : (
                     <fieldset disabled={saving} className="layout-row-editor" key={row.id ?? `new-${index}`}>
                       <label>Категория позиции<select aria-label="Категория позиции" value={row.configuration?.category ?? "UNSPECIFIED"} onChange={(event) => updateRow(index, { configuration: { image: "", norm: "", opening: "", indicators: [], ...row.configuration, category: event.target.value } })}>
                         {Object.entries(CATEGORY_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}

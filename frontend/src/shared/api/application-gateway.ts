@@ -18,12 +18,14 @@ export type MatrixCapabilities = {
 };
 
 export type MatrixLeftColumn = {
+  shared?: boolean;
   id: string;
   label: string;
   width: number;
 };
 
 export type MatrixTimeColumn = {
+  kind?: string;
   id: string;
   label: string;
   group_label: string;
@@ -37,12 +39,16 @@ export type CellIssue = {
 
 export type MatrixCellContract = ReportCellContract & {
   column_id: string;
+  tone?: string;
   issue?: CellIssue;
   lock_reason?: string;
   formula?: string;
 };
 
 export type MatrixRowContract = {
+  workspace_id?: string; supplier_id?: string;
+  stock_by_week?: Record<string, ReportCellValue>;
+  archived?: boolean;
   id: string;
   group_id: string;
   group_label: string;
@@ -61,6 +67,8 @@ export type MatrixNavigation = {
 };
 
 export type ReportMatrixContract = {
+  subsidiary?: boolean;
+  legacy_cells?: {coordinate: ReportCellCoordinate; value: ReportCellValue}[];
   year?: number | null;
   presentation?: ReportPresentation;
   report_type: ReportType;
@@ -183,7 +191,9 @@ export type ReportLayoutTemplate = {
 
 export type FieldIndicator = { code: string; label: string; formula: string };
 export type FieldPreset = { label: string; required_codes: string[]; indicators: FieldIndicator[] };
+export type SubsidiaryDetail = { number: string; designation: string; suppliers: { id: string; name: string; contract: string; archived: boolean }[] };
 export type FieldConfiguration = {
+  subsidiary?: SubsidiaryDetail;
   category: string;
   image: string;
   norm: string;
@@ -217,8 +227,8 @@ export type SaveReportLayoutRequest = ReportLayoutQuery & {
   rows: ReportLayoutRow[];
 };
 
-export type ReportPresentation = { title?: string; widths?: Record<string, number> };
-export type SaveReportPresentationRequest = ReportLayoutQuery & ReportPresentation;
+export type ReportPresentation = { title?: string; widths?: Record<string, number>; plans?: Record<string, string> };
+export type SaveReportPresentationRequest = ReportLayoutQuery & ReportPresentation & { expected_revision?: string };
 
 export type ApplicationError = {
   code: string;
@@ -253,7 +263,7 @@ export interface ApplicationGateway {
   saveReportLayout(request: SaveReportLayoutRequest): Promise<ReportLayoutContract>;
 }
 
-export type MonthlyReportQuery = ExportRequest & { month: number; expected_revision?: string };
+export type MonthlyReportQuery = ExportRequest & { month: number; week_start?: string; expected_revision?: string };
 export type ReportVerification = {
   status: "UNVERIFIED" | "VERIFIED" | "STALE";
   snapshot_sha256: string; verified_sha256?: string;

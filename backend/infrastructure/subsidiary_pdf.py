@@ -1,0 +1,104 @@
+"""Weekly subsidiary report on landscape A4 with repeating column headers."""
+
+from __future__ import annotations
+
+import importlib
+import io
+from pathlib import Path
+from typing import Any
+from xml.sax.saxutils import escape
+
+
+def render_subsidiary_pdf(
+    snapshot: dict[str, Any], verification: dict[str, Any], font_path: Path
+) -> bytes:
+    metrics = importlib.import_module("reportlab.pdfbase.pdfmetrics")
+    fonts = importlib.import_module("reportlab.pdfbase.ttfonts")
+    layout = importlib.import_module("reportlab.platypus")
+    styles = importlib.import_module("reportlab.lib.styles")
+    colors = importlib.import_module("reportlab.lib.colors")
+    metrics.registerFont(fonts.TTFont("SubsidiaryFont", str(font_path)))
+    stream = io.BytesIO()
+    document = layout.SimpleDocTemplate(
+        stream,
+        pagesize=(841.89, 595.28),
+        leftMargin=18,
+        rightMargin=18,
+        topMargin=24,
+        bottomMargin=45,
+        title=f"{snapshot['title']} - {snapshot['period']}",
+    )
+    style = styles.ParagraphStyle(
+        "cell", fontName="SubsidiaryFont", fontSize=6.5, leading=8, wordWrap="CJK"
+    )
+    title_style = styles.ParagraphStyle(
+        "title", parent=style, fontSize=11, leading=14, spaceAfter=10
+    )
+
+    def p(value: object) -> Any:
+        return layout.Paragraph(escape(str(value)), style)
+
+    left = snapshot["left_columns"]
+    columns = snapshot["columns"]
+    # Identify the common stock and variance fields separately from supplier receipts.
+    ordering = [0, 1, 2, 3, 4, 6, 8, 5, 7, 9] + list(range(10, len(left) + len(columns)))
+    labels = [c["label"] for c in left] + [
+        c["label"] if c.get("kind") != "USED" else "Расход " + c["label"] for c in columns
+    ]
+    widths: list[float] = [29, 66, 88, 48, 83, 53, 51, 55, 53, 60] + [45.0] * (len(columns) - 4)
+    total = sum(widths)
+    widths = [w * (841.89 - 36) / total for w in widths]
+    data = [[p(labels[i]) for i in ordering]]
+    commands: list[Any] = [
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#bbbbbb")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e9ecef")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]
+    for r, row in enumerate(snapshot["rows"], 1):
+        values = [row["left_values"].get(c["id"], "") for c in left] + row["values"]
+        data.append([p(values[i]) for i in ordering])
+        for c, original in enumerate(ordering):
+            if original >= len(left) and columns[original - len(left)].get("kind") in {
+                "STOCK",
+                "VARIANCE",
+            }:
+                commands.append(("BACKGROUND", (c, r), (c, r), colors.HexColor("#f2f3f4")))
+                if columns[original - len(left)]["kind"] == "VARIANCE" and str(
+                    values[original]
+                ).startswith("-"):
+                    commands.append(("BACKGROUND", (c, r), (c, r), colors.HexColor("#fde8e8")))
+    table = layout.LongTable(
+        data, colWidths=[widths[i] for i in ordering], repeatRows=1, hAlign="LEFT"
+    )
+    table.setStyle(layout.TableStyle(commands))
+    story = [
+        layout.Paragraph(
+            escape(f"{snapshot['title']} | {snapshot['organization']} | {snapshot['period']}"),
+            title_style,
+        ),
+        p(
+            f"План составной части (C6): {snapshot['plan'] or 'не задан'} шт. "
+            f"Недельные значения — расход. Остаток на {snapshot['as_of']}."
+        ),
+        layout.Spacer(1, 10),
+        table,
+    ]
+
+    def footer(canvas: Any, doc: Any) -> None:
+        canvas.saveState()
+        canvas.setFont("SubsidiaryFont", 7)
+        caption = (
+            f"Проверено: {verification.get('signer_name', '')}, {verification.get('signed_at', '')}"
+            if verification.get("status") == "VERIFIED"
+            else "Данные не подтверждены"
+        )
+        canvas.drawString(18, 24, caption)
+        canvas.drawRightString(824, 24, f"Лист {doc.page}")
+        canvas.restoreState()
+
+    document.build(story, onFirstPage=footer, onLaterPages=footer)
+    return stream.getvalue()

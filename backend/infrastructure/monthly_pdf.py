@@ -27,6 +27,10 @@ MONTHS = (
 def render_monthly_pdf(
     snapshot: dict[str, Any], verification: dict[str, Any], font_path: Path
 ) -> bytes:
+    if snapshot.get("subsidiary"):
+        from backend.infrastructure.subsidiary_pdf import render_subsidiary_pdf
+
+        return render_subsidiary_pdf(snapshot, verification, font_path)
     pdfmetrics = importlib.import_module("reportlab.pdfbase.pdfmetrics")
     ttfonts = importlib.import_module("reportlab.pdfbase.ttfonts")
     canvas_module = importlib.import_module("reportlab.pdfgen.canvas")

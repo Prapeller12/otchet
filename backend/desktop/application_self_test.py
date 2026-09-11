@@ -120,6 +120,8 @@ def run_application_self_test(database: Path, migrations: Path, definitions: Pat
         preview = checked(app.validate_import(query))
         checked(app.commit_import({"batch_id": preview["batch_id"]}))
 
+    prepare_subsidiary_window_test(app)
+
     publication_query = {**calendar_query, "month": 9}
     verification = checked(app.get_report_verification(publication_query))
     checked(
@@ -167,3 +169,70 @@ def prepare_reference_window_test(database: Path, directory: Path) -> None:
     service = ReferenceReports(database)
     preview = service.stage(source, 1)
     service.commit(preview["batch_id"])
+
+
+def prepare_subsidiary_window_test(app: WorkingReferenceApplicationBridge) -> None:
+    """Exercise the approved supplier calculation in disposable desktop self-tests."""
+    from datetime import date
+
+    from backend.application.report_calendar import reporting_weeks
+
+    def checked(response: dict[str, Any]) -> Any:
+        if not response.get("ok"):
+            raise RuntimeError(f"Subsidiary self-test: {response}")
+        return response["data"]
+
+    today = date.today()
+    period = today.strftime("%Y-%m")
+    query = {"report_type": "SUBSIDIARY", "organization_id": "1"}
+    layout = checked(app.get_report_layout(query))
+    row = layout["rows"][0]
+    row["position_name"] = "Контрольная ДСЕ"
+    row["configuration"]["norm"] = "4"
+    row["configuration"]["category"] = "DSE"
+    row["configuration"]["subsidiary"] = {
+        "number": "1.1",
+        "designation": "000.01",
+        "suppliers": [
+            {"id": "PRIMARY", "name": "Производитель А", "contract": "2500", "archived": False},
+            {"id": "SECOND", "name": "Производитель Б", "contract": "2000", "archived": False},
+        ],
+    }
+    checked(app.save_report_layout({**query, "rows": [row]}))
+    annual = {**query, "year": today.year}
+    matrix = checked(app.get_report_matrix(annual))
+    checked(
+        app.save_report_presentation(
+            {**query, "expected_revision": matrix["matrix_revision"], "plans": {period: "1000"}}
+        )
+    )
+    matrix = checked(app.get_report_matrix(annual))
+    weeks = reporting_weeks(today.year, today.month)
+    indices = {c["id"]: i for i, c in enumerate(matrix["time_columns"])}
+    changes = [
+        {
+            "coordinate": matrix["rows"][r]["cells"][indices[column]]["coordinate"],
+            "value": {"kind": "QUANTITY", "quantity": value},
+        }
+        for r, column, value in [
+            (0, period + "-OPENING", "500"),
+            (0, period + "-RECEIVED", "2000"),
+            (1, period + "-RECEIVED", "1000"),
+            (0, weeks[0].start.isoformat(), "100"),
+            (1, weeks[1].start.isoformat(), "200"),
+        ]
+    ]
+    checked(
+        app.save_report_cells(
+            {
+                **annual,
+                "base_revision": matrix["matrix_revision"],
+                "idempotency_key": uuid4().hex,
+                "changes": changes,
+            }
+        )
+    )
+    matrix = checked(app.get_report_matrix(annual))
+    values = {c["column_id"]: c["value"].get("quantity") for c in matrix["rows"][0]["cells"]}
+    if values[period + "-STOCK"] != "3200" or values[period + "-VARIANCE"] != "-500":
+        raise RuntimeError("Subsidiary self-test: expected stock 3200 and variance -500")

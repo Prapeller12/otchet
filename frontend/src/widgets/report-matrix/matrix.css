@@ -418,3 +418,22 @@
 }
 .position-category { display: block; color: var(--pk-secondary); font-weight: normal; margin-top: 4px; }
 .matrix-position-image { display: block; width: 90px; height: 64px; object-fit: contain; margin: 6px 0; background: white; }
+
+/* Subsidiary worksheet: neutral input/calculation groups, deficit is the only alert colour. */
+.subsidiary-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; padding: 16px; border-bottom: 1px solid #ccc; }
+.subsidiary-controls label { display: grid; gap: 6px; }
+.subsidiary-controls input, .subsidiary-controls select, .subsidiary-supplier input, .subsidiary-detail-fields input, .subsidiary-detail-fields select { min-height: 40px; padding: 8px; border: 1px solid #bbb; border-radius: 4px; }
+.subsidiary-controls p { width: 100%; margin: 0; }
+.subsidiary-detail-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.subsidiary-detail-fields label, .subsidiary-supplier label { display: grid; gap: 4px; }
+.subsidiary-supplier { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; padding: 12px 0; border-bottom: 1px solid #ddd; }
+.subsidiary-detail-editor .row-actions { flex-wrap: wrap; }
+.subsidiary-detail-editor button { min-height: 40px; padding: 8px 12px; }
+.subsidiary-matrix .matrix-group-cell, .subsidiary-matrix .matrix-indicator-cell { background: #fff; }
+.subsidiary-matrix .matrix-value-cell { background: #fff; }
+.subsidiary-matrix .matrix-value-cell:has(.is-calculated) { background: #f2f3f4; }
+.subsidiary-matrix .is-deficit, .subsidiary-matrix .is-deficit button { background: #fde8e8 !important; color: #a31515 !important; }
+.subsidiary-matrix td, .subsidiary-matrix th { border-color: #d6d6d6; }
+.legacy-facts { padding: 12px; max-height: 300px; overflow: auto; }
+
+.subsidiary-matrix .matrix-cell-button.is-calculated { background: #f2f3f4; }

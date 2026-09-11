@@ -39,6 +39,17 @@ def monitor_window(
                 if time.monotonic() >= deadline:
                     raise RuntimeError("Не загрузились таблица, оформление или связь с базой")
                 time.sleep(0.25)
+            if ui_self_test and tab == 2:
+                if not window.evaluate_js("""(() => {
+                    const table = document.querySelector('.subsidiary-matrix');
+                    return !!table && table.textContent.includes('Обозначение') &&
+                        table.textContent.includes('3200') && table.textContent.includes('-500') &&
+                        table.textContent.includes('Производитель Б') &&
+                        !!document.querySelector('.subsidiary-controls');
+                })()"""):
+                    raise RuntimeError(
+                        "Не отображается недельный отчёт с остатком 3200 и дефицитом -500"
+                    )
             if ui_self_test:
                 grab = importlib.import_module("PIL.ImageGrab")
                 grab.grab().save(paths.temp / f"window-{tab + 1}.png")

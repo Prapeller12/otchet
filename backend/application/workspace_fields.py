@@ -24,13 +24,17 @@ CATEGORIES = {"UNSPECIFIED", "PKI", "DSE", "PART", "PRODUCT", "ASSEMBLY"}
 def validate_configuration(raw: object) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError("Настройки позиции должны быть объектом")
-    allowed = {"category", "image", "norm", "opening", "opening_date", "indicators"}
+    allowed = {"category", "image", "norm", "opening", "opening_date", "indicators", "subsidiary"}
     if raw.keys() - allowed:
         raise ValueError("Неизвестные настройки позиции")
     category = raw.get("category", "UNSPECIFIED")
     if not isinstance(category, str) or category not in CATEGORIES:
         raise ValueError("Выберите ПКИ, ДСЕ, составную часть, изделие или комплект")
     result: dict[str, Any] = {"category": category}
+    if "subsidiary" in raw:
+        from backend.application.subsidiary_report import validate_detail
+
+        result["subsidiary"] = validate_detail(raw["subsidiary"])
     if "opening_date" in raw:
         opening_date = raw["opening_date"]
         if not isinstance(opening_date, str) or (

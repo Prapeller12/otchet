@@ -352,6 +352,15 @@ class SqliteReportWorkspaceRepository:
                     or not template_map[existing[draft.id]].repeatable
                 ):
                     raise ValueError("Строка не принадлежит выбранной форме")
+                if report_type == "SUBSIDIARY" and draft.configuration_json is not None:
+                    old_detail = json.loads(configurations[draft.id]).get("subsidiary", {})
+                    new_detail = json.loads(draft.configuration_json).get("subsidiary", {})
+                    old_ids = {item["id"] for item in old_detail.get("suppliers", [])}
+                    new_ids = {item["id"] for item in new_detail.get("suppliers", [])}
+                    if not old_ids <= new_ids:
+                        raise ValueError(
+                            "Производителя нужно архивировать, сохранив его идентификатор"
+                        )
                 connection.execute(
                     """
                     UPDATE report_workspace_groups

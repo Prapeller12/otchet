@@ -19,8 +19,15 @@ def test_transfer_into_real_workspace_with_validation_restart_and_duplicate(
     preview = unwrap(app.validate_import(query))
     document = preview["reference_workbook"]
     matrix = unwrap(app.get_report_matrix(query))
-    assert matrix["time_columns"][0]["label"] == "01–04"
+    weekly = [c for c in matrix["time_columns"] if c.get("kind", "USED") == "USED"]
+    assert weekly[0]["label"] == "01–04"
     row = next(r for r in matrix["rows"] if r["cells"][0]["state"]["access"] == "editable")
+    targets = [
+        c
+        for c in row["cells"]
+        if c["state"]["access"] == "editable"
+        and (kind != "SUBSIDIARY" or c["coordinate"]["metric_code"].startswith("SUB_USED_"))
+    ]
     request = {"action": "transfer", "id": document["id"], **query, "mappings": []}
     assert unwrap(app.reference_report(request))["error_count"] > 0
     mappings: list[dict[str, Any]] = []
@@ -37,7 +44,7 @@ def test_transfer_into_real_workspace_with_validation_restart_and_duplicate(
             mappings.append(
                 {
                     "source": source_key,
-                    "coordinate": row["cells"][index]["coordinate"],
+                    "coordinate": targets[index]["coordinate"],
                     "quantity": ["375", "300", "0"][index],
                     "confirmed": True,
                 }
@@ -57,7 +64,12 @@ def test_transfer_into_real_workspace_with_validation_restart_and_duplicate(
     assert "reference_workbook_id" not in result
     reopened = unwrap(bridge(tmp_path).get_report_matrix(query))
     saved = next(r for r in reopened["rows"] if r["id"] == row["id"])
-    assert [c["value"]["quantity"] for c in saved["cells"][:3]] == ["375", "300", "0"]
+    assert [
+        c["value"]["quantity"]
+        for c in [
+            c for c in saved["cells"] if c["coordinate"] in [t["coordinate"] for t in targets[:3]]
+        ]
+    ] == ["375", "300", "0"]
     assert unwrap(app.reference_report(request))["already_imported"]
     assert unwrap(app.commit_import({"batch_id": checked["batch_id"], "year": 2026}))[
         "already_committed"
