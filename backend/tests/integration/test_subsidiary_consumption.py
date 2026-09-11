@@ -254,3 +254,46 @@ def test_missing_supplier_receipt_explained_then_zero_recalculates(tmp_path: Pat
     assert value(matrix, "2026-09-VARIANCE") == "-3711"
     cells = {c["column_id"]: c for c in matrix["rows"][0]["cells"]}
     assert "issue" not in cells["2026-09-STOCK"]
+
+
+@pytest.mark.parametrize("format_name", ["PNG", "JPEG"])
+def test_subsidiary_pdf_embeds_detail_picture(tmp_path: Path, format_name: str) -> None:
+    import base64
+    import io
+
+    from PIL import Image
+
+    app = app_at(tmp_path)
+    matrix = setup(app)
+    picture = io.BytesIO()
+    Image.new("RGB", (160, 80), "#21634e").save(picture, format=format_name)
+    encoded = base64.b64encode(picture.getvalue()).decode("ascii")
+    layout = data(app.get_report_layout({"report_type": "SUBSIDIARY", "organization_id": "1"}))
+    layout["rows"][0]["configuration"]["image"] = (
+        f"data:image/{'png' if format_name == 'PNG' else 'jpeg'};base64,{encoded}"
+    )
+    data(
+        app.save_report_layout(
+            {"report_type": "SUBSIDIARY", "organization_id": "1", "rows": layout["rows"]}
+        )
+    )
+    matrix = data(app.get_report_matrix(QUERY))
+    snapshot = monthly_snapshot(matrix, 9, "Организация")
+    pdf = render_monthly_pdf(snapshot, {}, ROOT / "resources/fonts/ReportingSerif.ttf")
+    assert b"/Subtype /Image" in pdf
+    assert b"/Width 160" in pdf and b"/Height 80" in pdf
+
+
+def test_pdf_shared_detail_continues_across_pages(tmp_path: Path) -> None:
+    import copy
+    import re
+
+    app = app_at(tmp_path)
+    matrix = setup(app)
+    snapshot = monthly_snapshot(matrix, 9, "Организация")
+    snapshot["rows"] = [snapshot["rows"][0]] + [
+        copy.deepcopy(snapshot["rows"][1]) for _ in range(49)
+    ]
+    pdf = render_monthly_pdf(snapshot, {}, ROOT / "resources/fonts/ReportingSerif.ttf")
+    pages = re.search(rb"/Count (\d+)", pdf)
+    assert pages is not None and int(pages.group(1)) > 1

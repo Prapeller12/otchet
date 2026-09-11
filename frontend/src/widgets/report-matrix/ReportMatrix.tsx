@@ -168,10 +168,25 @@ export function ReportMatrix({
 
   useEffect(() => () => { previewSequence.current += 1; }, []);
 
+  function sharedColumn(column: number) {
+    return matrix.subsidiary && ["OPENING", "STOCK", "VARIANCE"].includes(matrix.time_columns[column]?.kind ?? "");
+  }
+  function groupStart(row: number) {
+    while (row > 0 && matrix.rows[row - 1]?.group_id === matrix.rows[row]?.group_id) row--;
+    return row;
+  }
   function navigate(position: MatrixPosition, move: (source: ReportMatrixContract, position: MatrixPosition) => MatrixPosition) {
     const projected = { row: position.row, column: Math.max(0, visibleIndices.indexOf(position.column)) };
-    const next = move(visibleMatrix, projected);
-    setActive({ row: next.row, column: visibleIndices[next.column] ?? 0 });
+    let next = move(visibleMatrix, projected);
+    const column = visibleIndices[next.column] ?? 0;
+    if (sharedColumn(column)) {
+      // A merged cell is a single keyboard target. Down jumps to the next detail.
+      if (next.row > position.row && groupStart(next.row) === groupStart(position.row)) {
+        const end = groupStart(position.row) + (spans.get(groupStart(position.row)) ?? 1);
+        next = { ...next, row: end < matrix.rows.length ? end : groupStart(position.row) };
+      } else next = { ...next, row: groupStart(next.row) };
+    }
+    setActive({ row: next.row, column });
   }
 
   function toggleMonth(month: string) {
@@ -634,12 +649,16 @@ export function ReportMatrix({
                 ))}
                 {row.cells.map((cell, columnIndex) => {
                   if (!visibleSet.has(columnIndex)) return null;
+                  const shared = sharedColumn(columnIndex);
+                  if (shared && !spans.has(rowIndex)) return null;
                   const position = { row: rowIndex, column: columnIndex };
                   const isEditing =
                     editing?.row === rowIndex && editing.column === columnIndex;
                   return (
                     <td
                       key={cell.column_id}
+                      rowSpan={shared ? spans.get(rowIndex) : undefined}
+                      data-shared={shared ? "detail" : undefined}
                       className={`${isEditing ? "matrix-value-cell is-editing" : "matrix-value-cell"} ${cell.tone === "deficit" ? "is-deficit" : ""}`}
                       style={{ width: timeColumns[columnIndex]?.width }}
                     >

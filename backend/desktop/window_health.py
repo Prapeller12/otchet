@@ -45,7 +45,9 @@ def monitor_window(
                     return !!table && table.textContent.includes('Обозначение') &&
                         table.textContent.includes('3200') && table.textContent.includes('-500') &&
                         table.textContent.includes('Производитель Б') &&
-                        !!document.querySelector('.subsidiary-controls');
+                        !!document.querySelector('.subsidiary-controls') &&
+                        [...table.querySelectorAll('td[data-shared="detail"]')]
+                            .filter(c => c.rowSpan === 2).length === 3;
                 })()"""):
                     raise RuntimeError(
                         "Не отображается недельный отчёт с остатком 3200 и дефицитом -500"
