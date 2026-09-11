@@ -26,7 +26,7 @@ it("adds and archives a manufacturer without duplicating or deleting the detail"
 
 it("saves C6 by month with revision and selects an actual fifth calendar week", async () => {
   const user = userEvent.setup(); const change = vi.fn(); const week = vi.fn(); const busy = vi.fn();
-  const matrix = { report_type: "SUBSIDIARY", organization_id: "1", year: 2026, matrix_revision: "r1", presentation: { plans: { "2026-08": "500" } }, time_columns: [{ id: "2026-09-01", group_label: "2026-09", kind: "USED", label: "01–06" }, { id: "2026-09-28", group_label: "2026-09", kind: "USED", label: "28–30" }] } as ReportMatrixContract;
+  const matrix: ReportMatrixContract = { title: "Дочерние общества", subtitle: "", source_notice: "", form_status: "WORKING_REFERENCE", left_columns: [], rows: [], capabilities: { save: {enabled: true}, import: {enabled: true}, export: {enabled: true} }, navigation: {enter_direction: "down"}, report_type: "SUBSIDIARY", organization_id: "1", year: 2026, matrix_revision: "r1", presentation: { plans: { "2026-08": "500" } }, time_columns: [{ id: "2026-09-01", group_label: "2026-09", kind: "USED", width: 64, label: "01–06" }, { id: "2026-09-28", group_label: "2026-09", kind: "USED", width: 64, label: "28–30" }] };
   const save = vi.fn().mockResolvedValue({});
   const gateway = { saveReportPresentation: save, getReportMatrix: vi.fn().mockResolvedValue(matrix) } as unknown as ApplicationGateway;
   render(<SubsidiaryControls matrix={matrix} gateway={gateway} blocked={false} month="2026-09" onMonth={vi.fn()} week="" onWeek={week} onChange={change} onBusy={busy} />);
