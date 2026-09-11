@@ -199,6 +199,12 @@ def build_rows(
                 if opening_value is None or any(v is None for v in incoming)
                 else opening_value + sum((v for v in incoming if v is not None), Decimal(0))
             )
+            missing = []
+            if opening_value is None:
+                missing.append("остаток на начало месяца")
+            for i, receipt in enumerate(receipts):
+                if not suppliers[i]["archived"] and number(receipt) is None:
+                    missing.append("поступление: " + suppliers[i]["name"])
             plan = plans.get(period, "")
             norm = config.get("norm", "")
             variance = (
@@ -247,11 +253,26 @@ def build_rows(
                 )
                 delta["value"] = result_value(variance if common else None)
                 delta["formula"] = (
-                    "Начальный остаток + поступления всех производителей − C6 × входимость"
+                    "Начальный остаток + поступления всех производителей "
+                    "− план выпуска × входимость"
                 )
                 delta["tone"] = (
                     "deficit" if common and variance is not None and variance < 0 else ""
                 )
+                if common:
+                    missing_plan = [*missing]
+                    if not plan:
+                        missing_plan.append("план выпуска")
+                    if not norm:
+                        missing_plan.append("входимость детали")
+                    for calculated, fields in [(stock, missing), (delta, missing_plan)]:
+                        if fields:
+                            calculated["issue"] = {
+                                "code": "MISSING_INPUT",
+                                "message": "Заполните: "
+                                + "; ".join(fields)
+                                + ". Если поступлений не было, введите 0.",
+                            }
                 row["cells"].extend([opening_cell, receipts[index], stock, delta, *used[index]])
                 if common:
                     row["stock_by_week"].update(balances)

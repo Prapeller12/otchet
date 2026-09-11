@@ -158,7 +158,7 @@ export function ReportMatrix({
   const visibleIndices = matrix.time_columns.flatMap((column, index) => expandedMonths.has(column.group_label) ? [index] : []);
   const visibleSet = new Set(visibleIndices);
   const leftColumns = matrix.left_columns.map((column) => ({ ...column, width: widths[column.id] ?? column.width }));
-  const timeColumns = matrix.time_columns.map((column) => ({ ...column, width: Math.max(64, widths[column.id] ?? (matrix.subsidiary && column.kind !== "USED" ? 110 : 64)) }));
+  const timeColumns = matrix.time_columns.map((column) => ({ ...column, width: Math.max(matrix.subsidiary && column.kind !== "USED" ? 110 : 64, widths[column.id] ?? (matrix.subsidiary && column.kind !== "USED" ? 110 : 64)) }));
   const visibleMatrix = { ...matrix, left_columns: leftColumns, time_columns: timeColumns.filter((_, index) => visibleSet.has(index)), rows: matrix.rows.map((row) => ({ ...row, cells: row.cells.filter((_, index) => visibleSet.has(index)) })) };
   const query = { report_type: matrix.report_type, organization_id: matrix.organization_id, ...(matrix.year ? { year: matrix.year } : {}) };
 
@@ -234,7 +234,7 @@ export function ReportMatrix({
     const identifiers = matrix.left_columns
       .map((item) => row.left_values[item.id])
       .filter((value): value is string => Boolean(value && value !== "—"));
-    onStatusChange(`${identifiers.join(" · ")} · ${column.label}`);
+    onStatusChange(`${identifiers.join(" · ")} · ${column.label}${row.cells[active.column]?.issue ? " · " + row.cells[active.column]!.issue!.message : ""}`);
   }, [active, matrix, onStatusChange]);
 
   function beginEdit(position: MatrixPosition): void {
@@ -522,7 +522,7 @@ export function ReportMatrix({
       <MonthlyReportActions weeks={stockWeeks} gateway={gateway} query={query} revision={matrix.matrix_revision} title={matrix.title} blocked={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} />
       <nav className="month-controls" aria-label="Месяцы отчёта">
         <button type="button" disabled={editing !== null} onClick={() => {
-          const next = { ...widths, ...Object.fromEntries(matrix.time_columns.map(column => [column.id, 64])) };
+          const next = { ...widths, ...Object.fromEntries(matrix.time_columns.map(column => [column.id, matrix.subsidiary && column.kind !== "USED" ? 110 : 64])) };
           setWidths(next); persistWidths(next);
         }}>Компактные столбцы: 5 цифр</button>
         {matrix.year && <strong>{matrix.year}</strong>}
@@ -583,7 +583,7 @@ export function ReportMatrix({
             </tr>
             <tr className="matrix-header-leaf-row">
               {visibleMatrix.time_columns.map((column) => (
-                <th key={column.id} scope="col">{column.label}{resizeHandle(column.id, `${column.group_label} ${column.label}`, column.width)}</th>
+                <th key={column.id} scope="col">{matrix.subsidiary && column.kind === "USED" ? <button type="button" className="week-heading" title="Показать остаток на конец этой недели" aria-pressed={(stockWeeks[column.group_label] ?? matrix.time_columns.filter(c => c.group_label === column.group_label && c.kind === "USED").at(-1)?.id) === column.id} onClick={() => { setSubsidiaryMonth(column.group_label); setStockWeeks(current => ({ ...current, [column.group_label]: column.id })); }}>Расход<br />{column.label}</button> : column.label}{resizeHandle(column.id, `${column.group_label} ${column.label}`, column.width)}</th>
               ))}
             </tr>
           </thead>
@@ -612,7 +612,7 @@ export function ReportMatrix({
                     scope="row"
                   >
                     <span>{row.left_values[column.id]}</span>
-                    {matrix.subsidiary && column.id === "party" && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button" disabled={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} onClick={() => void removeSupplier(row.workspace_id!, row.supplier_id!)}>Убрать производителя</button>}
+                    {matrix.subsidiary && column.id === "party" && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button supplier-remove" title="Убрать производителя" aria-label="Убрать производителя" disabled={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} onClick={() => void removeSupplier(row.workspace_id!, row.supplier_id!)}>×</button>}
                     {(matrix.subsidiary ? column.id === "position" : leftIndex === 0) && row.category && row.category !== "UNSPECIFIED" && (
                       <small className="position-category">{CATEGORY_LABELS[row.category] ?? row.category}</small>
                     )}

@@ -50,6 +50,37 @@ def monitor_window(
                     raise RuntimeError(
                         "Не отображается недельный отчёт с остатком 3200 и дефицитом -500"
                     )
+            if ui_self_test and tab == 2:
+                if not window.evaluate_js("""(() => {
+                    const button = document.querySelector('.supplier-remove');
+                    const headers = [...document.querySelectorAll('.matrix-header-leaf-row th')];
+                    return button?.getBoundingClientRect().width <= 36 &&
+                        headers.slice(0, 4).every(h => h.getBoundingClientRect().width >= 109) &&
+                        !document.querySelector('.subsidiary-controls')
+                            .textContent.includes('C6') &&
+                        !!document.querySelector('.week-heading[aria-pressed="true"]');
+                })()"""):
+                    raise RuntimeError("Неверные размеры или подписи дочернего отчёта")
+                window.evaluate_js("document.querySelector('.header-settings-button').click()")
+                deadline = time.monotonic() + 10
+                while not window.evaluate_js(
+                    "!!document.querySelector('.subsidiary-detail-editor')"
+                ):
+                    if time.monotonic() > deadline:
+                        raise RuntimeError("Настройки детали не открылись")
+                    time.sleep(0.25)
+                if not window.evaluate_js("""(() => {
+                    const editor = document.querySelector('.subsidiary-detail-editor');
+                    const rows = [...editor.querySelectorAll('.subsidiary-supplier')];
+                    return getComputedStyle(editor).display === 'block' &&
+                        rows[1].getBoundingClientRect().top >=
+                            rows[0].getBoundingClientRect().bottom;
+                })()"""):
+                    raise RuntimeError("Производители в настройках не выровнены")
+                importlib.import_module("PIL.ImageGrab").grab().save(
+                    paths.temp / "window-settings.png"
+                )
+                window.evaluate_js("document.querySelector('.settings-header button').click()")
             if ui_self_test:
                 grab = importlib.import_module("PIL.ImageGrab")
                 grab.grab().save(paths.temp / f"window-{tab + 1}.png")

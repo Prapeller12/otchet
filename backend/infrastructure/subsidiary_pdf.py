@@ -81,7 +81,7 @@ def render_subsidiary_pdf(
             title_style,
         ),
         p(
-            f"План составной части (C6): {snapshot['plan'] or 'не задан'} шт. "
+            f"План выпуска: {snapshot['plan'] or 'не задан'} шт. "
             f"Недельные значения — расход. Остаток на {snapshot['as_of']}."
         ),
         layout.Spacer(1, 10),

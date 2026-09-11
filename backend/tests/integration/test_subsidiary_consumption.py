@@ -230,3 +230,27 @@ def test_invalid_plan(tmp_path: Path, plan: str) -> None:
             "plans": {"2026-09": plan},
         }
     )["ok"]
+
+
+def test_missing_supplier_receipt_explained_then_zero_recalculates(tmp_path: Path) -> None:
+    app = app_at(tmp_path)
+    matrix = setup(app)
+    matrix = write(
+        app,
+        matrix,
+        [
+            (0, "2026-09-OPENING", "234"),
+            (0, "2026-09-RECEIVED", "55"),
+            (0, "2026-09-01", "3"),
+            (0, "2026-09-07", "45"),
+            (0, "2026-09-14", "65"),
+        ],
+    )
+    cells = {c["column_id"]: c for c in matrix["rows"][0]["cells"]}
+    assert "Производитель Б" in cells["2026-09-STOCK"]["issue"]["message"]
+    assert cells["2026-09-STOCK"]["value"]["kind"] == "DATA_NOT_PROVIDED"
+    matrix = write(app, matrix, [(1, "2026-09-RECEIVED", "0")])
+    assert value(matrix, "2026-09-STOCK") == "176"
+    assert value(matrix, "2026-09-VARIANCE") == "-3711"
+    cells = {c["column_id"]: c for c in matrix["rows"][0]["cells"]}
+    assert "issue" not in cells["2026-09-STOCK"]

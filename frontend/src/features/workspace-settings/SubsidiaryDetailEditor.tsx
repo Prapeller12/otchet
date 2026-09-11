@@ -11,7 +11,7 @@ export function SubsidiaryDetailEditor({ row, onChange, onRemove, onMove, disabl
     <legend>{row.position_name}</legend>
     <div className="subsidiary-detail-fields">
       <label>№ п/п<input value={detail.number} onChange={e => update({ number: e.target.value })} /></label>
-      <label>Обозначение (код детали)<input value={detail.designation} onChange={e => update({ designation: e.target.value })} /></label>
+      <label>Код детали<input value={detail.designation} onChange={e => update({ designation: e.target.value })} /></label>
       <label>Наименование<input value={row.position_name} onChange={e => onChange({ ...row, position_name: e.target.value })} /></label>
       <label>Категория<select value={configuration.category} onChange={e => onChange({ ...row, configuration: { ...configuration, subsidiary: detail, category: e.target.value } })}>{Object.entries(CATEGORY_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       <label>Входимость, шт.<input inputMode="decimal" value={configuration.norm} onChange={e => onChange({ ...row, configuration: { ...configuration, subsidiary: detail, norm: e.target.value.replace(",", ".") } })} /></label>
@@ -28,8 +28,8 @@ export function SubsidiaryDetailEditor({ row, onChange, onRemove, onMove, disabl
     <h4>Производители этой детали</h4>
     {detail.suppliers.map((supplier, index) => <div className="subsidiary-supplier" key={supplier.id}>
       <label>Производитель<input disabled={supplier.archived} value={supplier.name} onChange={e => update({ suppliers: detail.suppliers.map((s, i) => i === index ? { ...s, name: e.target.value } : s) })} /></label>
-      <label>Объём поставок по договору<input disabled={supplier.archived} inputMode="decimal" value={supplier.contract} onChange={e => update({ suppliers: detail.suppliers.map((s, i) => i === index ? { ...s, contract: e.target.value.replace(",", ".") } : s) })} /></label>
-      <button type="button" onClick={() => update({ suppliers: detail.suppliers.map((s, i) => i === index ? { ...s, archived: !s.archived } : s) })}>{supplier.archived ? "Восстановить производителя" : "Убрать производителя"}</button>
+      <label>По договору, шт.<input disabled={supplier.archived} inputMode="decimal" value={supplier.contract} onChange={e => update({ suppliers: detail.suppliers.map((s, i) => i === index ? { ...s, contract: e.target.value.replace(",", ".") } : s) })} /></label>
+      <button type="button" className="supplier-action" title={supplier.archived ? "Восстановить производителя" : "Убрать производителя"} aria-label={supplier.archived ? "Восстановить производителя" : "Убрать производителя"} onClick={() => update({ suppliers: detail.suppliers.map((s, i) => i === index ? { ...s, archived: !s.archived } : s) })}>{supplier.archived ? "↶" : "×"}</button>
     </div>)}
     <div className="row-actions">
       <button type="button" onClick={() => update({ suppliers: [...detail.suppliers, { id: crypto.randomUUID().replaceAll("-", "").toUpperCase(), name: "Новый производитель", contract: "", archived: false }] })}>+ Добавить производителя</button>

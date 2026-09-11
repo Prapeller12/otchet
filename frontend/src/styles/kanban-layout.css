@@ -135,3 +135,31 @@ main { min-width: 0; padding: 12px 12px 16px; }
 .monthly-report-actions p { margin: 0; }
 .verification-form label { display: block; margin: 12px 0; }
 .verification-form input[type="text"] { width: 100%; min-height: 44px; padding: 8px; }
+
+/* Subsidiary worksheet: fixed typography and one vertical settings flow. */
+.subsidiary-detail-editor.layout-row-editor { display: block; }
+.subsidiary-detail-editor > h4 { margin: 20px 0 8px; font-size: 14px; }
+.subsidiary-detail-fields { grid-template-columns: minmax(100px, .6fr) minmax(180px, 1.4fr); max-width: 720px; }
+.subsidiary-detail-fields input, .subsidiary-detail-fields select { width: 100%; box-sizing: border-box; }
+.subsidiary-detail-editor .subsidiary-supplier { display: grid; grid-template-columns: minmax(180px, 1fr) 180px 36px; align-items: end; gap: 12px; padding: 10px 0; }
+.subsidiary-supplier input { width: 100%; box-sizing: border-box; }
+.subsidiary-detail-editor .supplier-action, .subsidiary-matrix .supplier-remove { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 0; font: 20px/1 var(--pk-font); border: 1px solid var(--pk-border); background: white; border-radius: 4px; }
+.subsidiary-matrix .supplier-remove { margin-left: 6px; vertical-align: middle; }
+.subsidiary-detail-editor .row-actions { margin-top: 16px; display: flex; gap: 8px; }
+.subsidiary-detail-editor > p { color: var(--pk-secondary); margin: 12px 0 0; font-size: 12px; }
+.subsidiary-controls { gap: 12px; padding: 12px 16px; }
+.subsidiary-controls input { width: 140px; }
+.subsidiary-controls input, .subsidiary-controls select { font: inherit; box-sizing: border-box; }
+.subsidiary-controls p, .plan-save-status { font-size: 12px; color: var(--pk-secondary); }
+.plan-save-status { align-self: center; }
+.subsidiary-matrix th, .subsidiary-matrix td, .subsidiary-matrix .matrix-cell-button, .subsidiary-matrix .matrix-cell-editor { font-family: var(--pk-font); font-size: 13px; font-weight: 400; line-height: 1.35; font-variant-numeric: tabular-nums; }
+.subsidiary-matrix thead th, .subsidiary-matrix thead .sticky-left { text-transform: none; letter-spacing: 0; overflow-wrap: normal; word-break: normal; padding: 8px; font-size: 12px; }
+.subsidiary-matrix tbody th { vertical-align: middle; }
+.subsidiary-matrix .matrix-position-image { width: 48px; height: 36px; }
+.subsidiary-matrix .matrix-cell-button { min-height: 40px; }
+.week-heading { border: 0; background: transparent; color: inherit; font: inherit; padding: 4px 0; width: 100%; cursor: pointer; border-radius: 3px; }
+.week-heading[aria-pressed="true"] { background: var(--pk-primary-soft); box-shadow: inset 0 -2px var(--pk-primary); }
+.subsidiary-matrix .matrix-group-cell { border-left-width: 1px; }
+@media (max-width: 1000px) {
+  .subsidiary-detail-editor .subsidiary-supplier { grid-template-columns: minmax(120px, 1fr) 130px 32px; }
+}

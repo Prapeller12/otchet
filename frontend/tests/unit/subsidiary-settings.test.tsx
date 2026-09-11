@@ -1,4 +1,4 @@
-import { render, screen, cleanup, within, waitFor } from "@testing-library/react";
+import { render, screen, cleanup, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { useState } from "react";
@@ -24,17 +24,16 @@ it("adds and archives a manufacturer without duplicating or deleting the detail"
   expect(screen.getAllByRole("button", { name: "Убрать производителя" })).toHaveLength(2);
 });
 
-it("saves C6 by month with revision and selects an actual fifth calendar week", async () => {
+it("automatically saves the monthly plan on blur without technical labels", async () => {
   const user = userEvent.setup(); const change = vi.fn(); const week = vi.fn(); const busy = vi.fn();
   const matrix: ReportMatrixContract = { title: "Дочерние общества", subtitle: "", source_notice: "", form_status: "WORKING_REFERENCE", left_columns: [], rows: [], capabilities: { save: {enabled: true}, import: {enabled: true}, export: {enabled: true} }, navigation: {enter_direction: "down"}, report_type: "SUBSIDIARY", organization_id: "1", year: 2026, matrix_revision: "r1", presentation: { plans: { "2026-08": "500" } }, time_columns: [{ id: "2026-09-01", group_label: "2026-09", kind: "USED", width: 64, label: "01–06" }, { id: "2026-09-28", group_label: "2026-09", kind: "USED", width: 64, label: "28–30" }] };
   const save = vi.fn().mockResolvedValue({});
   const gateway = { saveReportPresentation: save, getReportMatrix: vi.fn().mockResolvedValue(matrix) } as unknown as ApplicationGateway;
   render(<SubsidiaryControls matrix={matrix} gateway={gateway} blocked={false} month="2026-09" onMonth={vi.fn()} week="" onWeek={week} onChange={change} onBusy={busy} />);
-  await user.type(screen.getByLabelText("План составной части, шт. (C6)"), "1000");
-  await user.click(screen.getByRole("button", { name: "Сохранить план" }));
+  await user.type(screen.getByLabelText("План выпуска, шт."), "1000");
+  await user.tab();
   await waitFor(() => expect(change).toHaveBeenCalledWith(matrix));
   expect(save).toHaveBeenCalledWith(expect.objectContaining({ expected_revision: "r1", plans: { "2026-08": "500", "2026-09": "1000" } }));
-  const select = screen.getByLabelText("Остаток на конец недели");
-  expect(within(select).getByRole("option", { name: "28–30" })).toBeInTheDocument();
-  await user.selectOptions(select, "2026-09-01"); expect(week).toHaveBeenCalledWith("2026-09-01");
+  expect(screen.queryByText(/C6/)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Остаток на конец недели")).not.toBeInTheDocument();
 });
