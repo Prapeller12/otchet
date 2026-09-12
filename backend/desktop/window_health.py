@@ -13,7 +13,7 @@ _READY = """(() => {
   const header = document.querySelector('.app-header');
   return !!(window.pywebview && window.pywebview.api && table &&
     table.querySelector('tbody tr') && table.getBoundingClientRect().width > 500 &&
-    header && getComputedStyle(header).backgroundColor === 'rgb(36, 41, 47)' &&
+    header && getComputedStyle(header).backgroundColor === 'rgb(17, 26, 34)' &&
     document.querySelector('.status-database')?.textContent.includes('SQLite'));
 })()"""
 
