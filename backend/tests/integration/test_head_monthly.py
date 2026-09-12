@@ -118,6 +118,21 @@ def test_head_monthly_links_calculations_and_exports(tmp_path: Path) -> None:
     m = data(app.get_report_matrix(QUERY))
     assert any(row["errors"] for row in monthly_snapshot(m, 9, "Головная площадка")["rows"])
 
+    errors = "\n".join(
+        e for row in monthly_snapshot(m, 9, "Головная площадка")["rows"] for e in row["errors"]
+    )
+    for expected in [
+        "2026-09",
+        "Общество А: 500",
+        "Общество Б: 500",
+        "1001",
+        "1000",
+        "Превышение: 1",
+        "Факт",
+        row["position_name"],
+    ]:
+        assert expected in errors
+
 
 def query_without_year(query: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in query.items() if k != "year"}

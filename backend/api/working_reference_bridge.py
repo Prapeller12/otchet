@@ -234,7 +234,12 @@ class WorkingReferenceApplicationBridge:
                 raise ValueError("Сохранение PDF доступно в desktop-версии")
             snapshot = self._monthly_snapshot(request)
             if any(row["errors"] for row in snapshot["rows"]):
-                raise ValueError("Сначала исправьте ошибки расчёта")
+                raise ValueError(
+                    "Печать невозможна. Исправьте расхождения:\n"
+                    + "\n".join(
+                        dict.fromkeys(error for row in snapshot["rows"] for error in row["errors"])
+                    )
+                )
             destination = self._save_pdf_file(
                 f"{snapshot['report_type'].lower()}-{snapshot['period']}.pdf"
             )
@@ -895,7 +900,10 @@ class WorkingReferenceApplicationBridge:
                 from backend.application.head_site_report import build_head_rows
 
                 subsidiaries = {
-                    str(org.id): self._workspace.get_presentation(org.id, "SUBSIDIARY")
+                    str(org.id): {
+                        **self._workspace.get_presentation(org.id, "SUBSIDIARY"),
+                        "name": org.name,
+                    }
                     for org in self._workspace.list_organizations()
                 }
                 structure = build_head_rows(

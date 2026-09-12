@@ -79,7 +79,10 @@ def monthly_snapshot(
                         for i in indices
                     ],
                     "errors": [
-                        row["cells"][i].get("issue", {}).get("message", "Ошибка")
+                        f"{matrix['title']} / {organization} / {row['group_label']} / "
+                        f"{row['left_values'].get('party', '')} / {period} / "
+                        f"{matrix['time_columns'][i]['label']}: "
+                        + row["cells"][i].get("issue", {}).get("message", "Ошибка")
                         for i in indices
                         if row["cells"][i]["state"].get("persistence") == "error"
                         or row["cells"][i].get("issue", {}).get("code") == "PRODUCTION_MISMATCH"
@@ -101,6 +104,7 @@ def monthly_snapshot(
             {
                 "group_id": row["group_id"],
                 "position": row["group_label"],
+                "category": row.get("category", "UNSPECIFIED"),
                 "party": identifiers[0],
                 "label": identifiers[-1],
                 "metric_code": row.get("metric_code", ""),
@@ -119,7 +123,13 @@ def monthly_snapshot(
                     for m in range(1, 13)
                 ],
                 "errors": [
-                    str(c.get("error", c.get("lock_reason", "Ошибка расчёта")))
+                    f"{matrix['title']} / {organization} / {row['group_label']} / "
+                    f"{identifiers[-1]} / {c['column_id']}: "
+                    + str(
+                        c.get("issue", {}).get(
+                            "message", c.get("error", c.get("lock_reason", "Ошибка расчёта"))
+                        )
+                    )
                     for c in cells
                     if c["state"].get("access") == "error"
                     or c.get("state", {}).get("persistence") == "error"

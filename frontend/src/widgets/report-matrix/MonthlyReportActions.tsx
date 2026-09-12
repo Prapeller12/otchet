@@ -53,14 +53,14 @@ export function MonthlyReportActions({ gateway, query, revision, title, blocked,
     <button className="button secondary" disabled={blocked || busy} onClick={() => void pdf()}>Печать / PDF А4</button>
     <button className="button secondary" disabled={blocked || busy || !verification} onClick={() => { setOpened(true); setConfirmed(false); }}>Подтвердить данные</button>
     <p role="status">{blocked ? "Сначала завершите ввод и сохраните изменения." : verification?.status === "VERIFIED" ? `Подтверждено: ${verification.signer_name}, ${verification.signed_at}` : verification?.status === "STALE" ? "Данные изменились — требуется повторная проверка." : "Данные не подтверждены."} {message}</p>
-    {error && !opened && <p role="alert">{error}</p>}
+    {error && !opened && <p role="alert" style={{ whiteSpace: "pre-wrap", maxHeight: "35vh", overflowY: "auto" }}>{error}</p>}
     {opened && <div className="excel-dialog-backdrop"><section className="excel-dialog verification-form" role="dialog" aria-modal="true" aria-labelledby="verification-title">
       <h3 id="verification-title">Подтверждение данных — {months[month - 1]}</h3>
       <p>Подтверждается сохранённый отчёт за выбранный месяц вместе со сводными данными с начала года.</p>
       <label>ФИО руководителя<input type="text" autoFocus maxLength={120} value={signer} disabled={busy} onChange={e => setSigner(e.target.value)} /></label>
       <label><input type="checkbox" checked={confirmed} disabled={busy} onChange={e => setConfirmed(e.target.checked)} /> Я проверил данные и подтверждаю их верность.</label>
       <p>Локальная отметка с ФИО, введёнными вручную. Личность не проверяется; электронная подпись не создаётся.</p>
-      {error && <p role="alert">{error}</p>}
+      {error && <p role="alert" style={{ whiteSpace: "pre-wrap", maxHeight: "35vh", overflowY: "auto" }}>{error}</p>}
       <div className="excel-dialog-actions">
         <button className="button secondary" disabled={busy} onClick={() => setOpened(false)}>Отмена</button>
         <button className="button primary" disabled={busy || !confirmed || !signer.trim() || blocked} onClick={() => void verify()}>{busy ? "Подтверждение…" : "Подтверждаю верность данных"}</button>

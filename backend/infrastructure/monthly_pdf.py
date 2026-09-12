@@ -144,15 +144,35 @@ def render_monthly_pdf(
         if not groups or groups[-1][0]["group_id"] != row["group_id"]:
             groups.append([])
         groups[-1].append(row)
-    y = start_page("Движение и остатки")
-    production_started = False
-    for group_index, group in enumerate(groups):
-        is_production = any(
+
+    def section(group: list[dict[str, Any]]) -> str:
+        category = group[0].get("category", "UNSPECIFIED")
+        if category == "PART":
+            return "Составные части дочерних обществ — движение и остатки"
+        if category == "PKI":
+            return "ПКИ — движение и остатки"
+        if category in {"PRODUCT", "ASSEMBLY"} or any(
             "ASSEMBLY" in r["metric_code"] or "PRODUCT" in r["metric_code"] for r in group
-        )
-        if is_production and not production_started:
-            y = start_page("Выпуск и движение изделий")
-            production_started = True
+        ):
+            return "Выпуск и движение изделий"
+        return "Прочие позиции — уточните категорию в настройках"
+
+    order = {
+        "ПКИ — движение и остатки": 0,
+        "Прочие позиции — уточните категорию в настройках": 1,
+        "Выпуск и движение изделий": 2,
+        "Составные части дочерних обществ — движение и остатки": 3,
+    }
+    groups.sort(key=lambda group: order[section(group)])
+    if not groups:
+        start_page("Нет строк для печати")
+    active_section = ""
+    y = 0.0
+    for group_index, group in enumerate(groups):
+        current_section = section(group)
+        if current_section != active_section:
+            y = start_page(current_section)
+            active_section = current_section
         chunks: list[list[tuple[dict[str, Any], float]]] = [[]]
         chunk_height = 0.0
         for row in group:
@@ -165,7 +185,7 @@ def render_monthly_pdf(
         for chunk in chunks:
             block_height = sum(h for _, h in chunk)
             if y - block_height < 48:
-                y = start_page("Продолжение")
+                y = start_page(active_section + " — продолжение")
             canvas.setFillGray(0.92 if group_index % 2 == 0 else 1)
             canvas.rect(margin, y - block_height, fixed[0], block_height, fill=1)
             canvas.setFillGray(0)
@@ -193,6 +213,8 @@ def render_monthly_pdf(
     # Source sheet 3: monthly received/used/balance table, in batches of 3 positions.
     summaries = []
     for group in groups:
+        if group[0].get("category") != "PART":
+            continue
         by_code = {r["metric_code"]: r for r in group}
         codes = ["WRK_DAILY_RECEIVED", "WRK_DAILY_USED", "WRK_DAILY_BALANCE"]
         if all(code in by_code for code in codes):
@@ -205,7 +227,14 @@ def render_monthly_pdf(
         summary_width = min(620.0, usable)
         sx = margin + usable - summary_width
         cw = summary_width / (1 + len(block) * 3)
-        text("Получение изделий — месячная сводка", sx, y, summary_width, 8, center=True)
+        text(
+            "Составные части дочерних обществ — месячная сводка",
+            sx,
+            y,
+            summary_width,
+            8,
+            center=True,
+        )
         y -= 6
         canvas.setFillGray(0.92)
         canvas.rect(sx, y - 34, cw, 34, fill=1)
@@ -214,7 +243,7 @@ def render_monthly_pdf(
             canvas.setFillGray(0.92)
             canvas.rect(x, y - 16, cw * 3, 16, fill=1)
             canvas.setFillGray(0)
-            text(trio[0]["position"], x + 2, y - 11, cw * 3 - 4, 6)
+            text(trio[0]["party"] + " / " + trio[0]["position"], x + 2, y - 11, cw * 3 - 4, 6)
             for j, label in enumerate(["Получено", "Использовано", "Остаток"]):
                 canvas.rect(x + j * cw, y - 34, cw, 18)
                 text(label, x + j * cw + 2, y - 28, cw - 4, 6)

@@ -117,18 +117,32 @@ def build_head_rows(
             ]
             issue = ""
             if links:
+                sources = [
+                    f"{subsidiaries.get(link, {}).get('name', 'Общество ' + link)}: "
+                    + (str(value) + " шт." if value != "" else "выпуск не указан")
+                    for link, value in zip(links, linked_values, strict=True)
+                ]
+                location = f"Составная часть «{group.position_name}», месяц {period}. "
                 if any(v == "" for v in linked_values):
                     issue = (
-                        "В связанном отчёте дочернего общества "
-                        "не указан фактический выпуск за месяц."
+                        location
+                        + "Нельзя проверить факт головной площадки. "
+                        + "; ".join(sources)
+                        + ". Заполните поле «Выпущено, шт.» "
+                        "в указанных дочерних отчётах за этот месяц."
                     )
-                elif total is not None and total > sum(
-                    (Decimal(v) for v in linked_values), Decimal(0)
-                ):
-                    issue = (
-                        "Факт головной площадки превышает суммарный выпуск "
-                        "связанных дочерних обществ."
-                    )
+                elif total is not None:
+                    linked_total = sum((Decimal(v) for v in linked_values), Decimal(0))
+                    if total > linked_total:
+                        issue = (
+                            location
+                            + f"Факт головной площадки: {total} шт.; "
+                            + "; ".join(sources)
+                            + f"; всего у дочерних обществ: {linked_total} шт. "
+                            + f"Превышение: {total - linked_total} шт. "
+                            + "Проверьте столбец «Факт» этой части и поле «Выпущено, шт.» "
+                            "связанных обществ за тот же месяц."
+                        )
             for i, row in enumerate(group_rows):
                 cells = [
                     opening
