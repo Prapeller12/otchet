@@ -166,3 +166,22 @@ main { min-width: 0; padding: 12px 12px 16px; }
 
 .subsidiary-matrix td[data-shared="detail"] { vertical-align: middle; }
 .subsidiary-matrix td[data-shared="detail"] .matrix-cell-button { min-height: 44px; font-weight: 600; }
+
+/* Production Cycle presentation adapted to the reporting matrix. */
+body { font-size: 14px; }
+.app-header { min-height: 44px; padding: 8px 16px; }
+.app-header h1 { font-size: 17px; }
+main { padding: 14px 16px 28px; }
+.report-workspace { border-radius: 8px; }
+.matrix-toolbar { padding: 12px 16px; }
+.matrix-toolbar h2 { font-size: 20px; }
+.button { border-radius: 6px; box-shadow: var(--pk-shadow); }
+.report-tab.is-active { color: var(--pk-text); border-bottom-color: var(--pk-text); }
+.report-matrix thead th, .report-matrix thead .sticky-left { text-transform: none; letter-spacing: 0; font-size: 12px; color: #46515b; background: #f7f8fa; }
+.matrix-cell-button, .matrix-cell-editor { font-family: var(--pk-font); font-variant-numeric: tabular-nums; }
+.settings-dialog, .excel-dialog { border-radius: 10px; box-shadow: 0 18px 50px rgb(16 24 40 / 22%); }
+.settings-header, .settings-footer { padding: 14px 16px; }
+.settings-header h2 { font-size: 18px; }
+.layout-row-editor { border: 1px solid var(--pk-border); border-radius: 8px; }
+.organization-settings input, .organization-settings select, .layout-settings input, .layout-settings select { border-radius: 5px; color: var(--pk-text); background: white; }
+.position-category { background: #eef2f4; color: #46515b; }

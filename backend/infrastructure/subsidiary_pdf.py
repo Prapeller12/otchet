@@ -18,7 +18,12 @@ def render_subsidiary_pdf(
     layout = importlib.import_module("reportlab.platypus")
     styles = importlib.import_module("reportlab.lib.styles")
     colors = importlib.import_module("reportlab.lib.colors")
-    metrics.registerFont(fonts.TTFont("SubsidiaryFont", str(font_path)))
+    metrics.registerFont(
+        fonts.TTFont("SubsidiaryFont", str(font_path.with_name("ReportingSans.ttf")))
+    )
+    metrics.registerFont(
+        fonts.TTFont("SubsidiaryBold", str(font_path.with_name("ReportingSansBold.ttf")))
+    )
     stream = io.BytesIO()
     document = layout.SimpleDocTemplate(
         stream,
@@ -29,15 +34,20 @@ def render_subsidiary_pdf(
         bottomMargin=45,
         title=f"{snapshot['title']} - {snapshot['period']}",
     )
-    style = styles.ParagraphStyle(
-        "cell", fontName="SubsidiaryFont", fontSize=6.5, leading=8, wordWrap="CJK"
-    )
+    style = styles.ParagraphStyle("cell", fontName="SubsidiaryFont", fontSize=9, leading=12)
     title_style = styles.ParagraphStyle(
-        "title", parent=style, fontSize=11, leading=14, spaceAfter=10
+        "title", parent=style, fontName="SubsidiaryBold", fontSize=14, leading=18, spaceAfter=10
     )
+    header_style = styles.ParagraphStyle(
+        "header", parent=style, fontName="SubsidiaryBold", fontSize=7, leading=10
+    )
+    number_style = styles.ParagraphStyle(
+        "number", parent=style, fontName="SubsidiaryBold", alignment=2
+    )
+    name_style = styles.ParagraphStyle("name", parent=style, fontName="SubsidiaryBold")
 
-    def p(value: object) -> Any:
-        return layout.Paragraph(escape(str(value)), style)
+    def p(value: object, cell_style: Any = style) -> Any:
+        return layout.Paragraph(escape(str(value)), cell_style)
 
     left = snapshot["left_columns"]
     columns = snapshot["columns"]
@@ -51,10 +61,10 @@ def render_subsidiary_pdf(
         else "Расход " + c["label"]
         for c in columns
     ]
-    widths: list[float] = [29, 66, 88, 48, 83, 53, 51, 55, 53, 60] + [45.0] * (len(columns) - 4)
+    widths: list[float] = [29, 78, 95, 62, 90, 53, 51, 55, 53, 60] + [45.0] * (len(columns) - 4)
     total = sum(widths)
     widths = [w * (841.89 - 36) / total for w in widths]
-    data = [[p(labels[i]) for i in ordering]]
+    data = [[p(labels[i], header_style) for i in ordering]]
     commands: list[Any] = [
         ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#bbbbbb")),
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e9ecef")),
@@ -66,7 +76,17 @@ def render_subsidiary_pdf(
     ]
     for r, row in enumerate(snapshot["rows"], 1):
         values = [row["left_values"].get(c["id"], "") for c in left] + row["values"]
-        rendered = [p(values[i]) for i in ordering]
+        rendered = [
+            p(
+                values[i],
+                number_style
+                if i >= len(left)
+                else name_style
+                if left[i]["id"] == "position"
+                else style,
+            )
+            for i in ordering
+        ]
         if row.get("image"):
             # Images are validated PNG/JPEG data URLs in the stored configuration.
             # Embed bytes directly: printing must not depend on files or network URLs.
@@ -77,7 +97,11 @@ def render_subsidiary_pdf(
             picture.drawWidth = picture.imageWidth * scale
             picture.drawHeight = picture.imageHeight * scale
             picture.hAlign = "LEFT"
-            rendered[ordering.index(position)] = [p(values[position]), layout.Spacer(1, 3), picture]
+            rendered[ordering.index(position)] = [
+                p(values[position], name_style),
+                layout.Spacer(1, 3),
+                picture,
+            ]
         data.append(rendered)
         for c, original in enumerate(ordering):
             if original >= len(left) and columns[original - len(left)].get("kind") in {
@@ -181,7 +205,7 @@ def render_subsidiary_pdf(
 
     def footer(canvas: Any, doc: Any) -> None:
         canvas.saveState()
-        canvas.setFont("SubsidiaryFont", 7)
+        canvas.setFont("SubsidiaryFont", 9)
         caption = (
             f"Проверено: {verification.get('signer_name', '')}, {verification.get('signed_at', '')}"
             if verification.get("status") == "VERIFIED"

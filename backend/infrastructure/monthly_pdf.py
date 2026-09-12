@@ -34,7 +34,12 @@ def render_monthly_pdf(
     pdfmetrics = importlib.import_module("reportlab.pdfbase.pdfmetrics")
     ttfonts = importlib.import_module("reportlab.pdfbase.ttfonts")
     canvas_module = importlib.import_module("reportlab.pdfgen.canvas")
-    pdfmetrics.registerFont(ttfonts.TTFont("ReportingSerif", str(font_path)))
+    pdfmetrics.registerFont(
+        ttfonts.TTFont("ReportingSerif", str(font_path.with_name("ReportingSans.ttf")))
+    )
+    pdfmetrics.registerFont(
+        ttfonts.TTFont("ReportingBold", str(font_path.with_name("ReportingSansBold.ttf")))
+    )
     stream = io.BytesIO()
     width, height = 841.8898, 595.2756
     canvas = canvas_module.Canvas(stream, pagesize=(width, height), pageCompression=1)
@@ -53,12 +58,19 @@ def render_monthly_pdf(
     page = 0
 
     def text(
-        value: str, x: float, y: float, max_width: float, size: float = 6.5, center: bool = False
+        value: str,
+        x: float,
+        y: float,
+        max_width: float,
+        size: float = 8,
+        center: bool = False,
+        bold: bool = False,
     ) -> None:
-        measured = pdfmetrics.stringWidth(value, "ReportingSerif", size)
+        font = "ReportingBold" if bold else "ReportingSerif"
+        measured = pdfmetrics.stringWidth(value, font, size)
         if measured > max_width and measured:
             size *= max_width / measured
-        canvas.setFont("ReportingSerif", size)
+        canvas.setFont(font, size)
         if center:
             canvas.drawCentredString(x + max_width / 2, y, value)
         else:
@@ -70,7 +82,7 @@ def render_monthly_pdf(
         line = ""
         for word in words:
             candidate = (line + " " + word).strip()
-            if line and pdfmetrics.stringWidth(candidate, "ReportingSerif", 6) > w - 6:
+            if line and pdfmetrics.stringWidth(candidate, "ReportingSerif", 9) > w - 6:
                 lines.append(line)
                 line = word
             else:
@@ -81,8 +93,8 @@ def render_monthly_pdf(
 
     def paragraph(value: str, x: float, y: float, w: float, h: float) -> None:
         lines = wrap(value, w)
-        step = min(8.0, (h - 4) / max(1, len(lines)))
-        size = min(6.0, step)
+        step = min(11.0, (h - 4) / max(1, len(lines)))
+        size = min(9.0, step - 1)
         for i, line in enumerate(lines):
             text(line, x + 3, y - 3 - (i + 1) * step, w - 6, size)
 
@@ -96,8 +108,8 @@ def render_monthly_pdf(
             status = "Данные изменены после подтверждения. Требуется повторная проверка."
         else:
             status = "Данные не подтверждены"
-        text(status, margin, 28, usable - 80, 7)
-        text(f"Лист {page}", width - 75, 28, 55, 7)
+        text(status, margin, 28, usable - 80, 9)
+        text(f"Лист {page}", width - 75, 28, 55, 9)
         text(f"Версия данных SHA-256: {verification['snapshot_sha256']}", margin, 17, usable, 5.5)
 
     def start_page(section: str) -> float:
@@ -110,11 +122,12 @@ def render_monthly_pdf(
             f"{snapshot['title']} | {snapshot['organization']} | "
             f"{MONTHS[month - 1]} {year} | {section}",
             margin,
-            height - 16,
+            height - 20,
             usable,
-            8,
+            11,
+            bold=True,
         )
-        top, header = height - 25, 58.0
+        top, header = height - 32, 70.0
         canvas.setLineWidth(0.5)
         canvas.setFillGray(1)
         canvas.rect(margin, top - header, sum(fixed), header, fill=1)
@@ -130,10 +143,10 @@ def render_monthly_pdf(
             canvas.translate(x + number_width / 2 + 2, top - header + 4)
             canvas.rotate(90)
             if index == 0:
-                text("Сводные данные", 0, 0, header - 8, 6)
-                text("по году", 0, -7, header - 8, 6)
+                text("Сводные данные", 0, 0, header - 8, 7)
+                text("по году", 0, -9, header - 8, 7)
             else:
-                text(label, 0, 0, header - 8, 6.2)
+                text(label, 0, 0, header - 8, 8)
             canvas.restoreState()
             x += number_width
         canvas.setFillGray(0)
@@ -176,8 +189,8 @@ def render_monthly_pdf(
         chunks: list[list[tuple[dict[str, Any], float]]] = [[]]
         chunk_height = 0.0
         for row in group:
-            row_height = max(12.0, len(wrap(row["label"], fixed[1])) * 8.0 + 4)
-            if chunk_height + row_height > 440 and chunks[-1]:
+            row_height = max(18.0, len(wrap(row["label"], fixed[1])) * 11.0 + 6)
+            if chunk_height + row_height > 420 and chunks[-1]:
                 chunks.append([])
                 chunk_height = 0
             chunks[-1].append((row, row_height))
@@ -203,7 +216,15 @@ def render_monthly_pdf(
                     if index == 0:
                         paragraph(str(value), x, y, cell_width, row_height)
                     else:
-                        text(str(value), x + 1.5, y - 8, cell_width - 3, 6.1, center=True)
+                        text(
+                            str(value),
+                            x + 1.5,
+                            y - row_height / 2 - 2.5,
+                            cell_width - 3,
+                            8,
+                            center=True,
+                            bold=True,
+                        )
                     x += cell_width
                 y -= row_height
             canvas.setLineWidth(0.8)
@@ -219,12 +240,12 @@ def render_monthly_pdf(
         codes = ["WRK_DAILY_RECEIVED", "WRK_DAILY_USED", "WRK_DAILY_BALANCE"]
         if all(code in by_code for code in codes):
             summaries.append([by_code[code] for code in codes])
-    for offset in range(0, len(summaries), 3):
-        block = summaries[offset : offset + 3]
-        if y - 220 < 48:
+    for offset in range(0, len(summaries), 2):
+        block = summaries[offset : offset + 2]
+        if y - 370 < 48:
             y = start_page("Месячная сводка")
         y -= 15
-        summary_width = min(620.0, usable)
+        summary_width = usable
         sx = margin + usable - summary_width
         cw = summary_width / (1 + len(block) * 3)
         text(
@@ -232,8 +253,9 @@ def render_monthly_pdf(
             sx,
             y,
             summary_width,
-            8,
+            12,
             center=True,
+            bold=True,
         )
         y -= 6
         canvas.setFillGray(0.92)
@@ -243,22 +265,29 @@ def render_monthly_pdf(
             canvas.setFillGray(0.92)
             canvas.rect(x, y - 16, cw * 3, 16, fill=1)
             canvas.setFillGray(0)
-            text(trio[0]["party"] + " / " + trio[0]["position"], x + 2, y - 11, cw * 3 - 4, 6)
+            text(
+                trio[0]["party"] + " / " + trio[0]["position"],
+                x + 2,
+                y - 11,
+                cw * 3 - 4,
+                11,
+                bold=True,
+            )
             for j, label in enumerate(["Получено", "Использовано", "Остаток"]):
                 canvas.rect(x + j * cw, y - 34, cw, 18)
-                text(label, x + j * cw + 2, y - 28, cw - 4, 6)
+                text(label, x + j * cw + 2, y - 28, cw - 4, 11, bold=True)
         y -= 34
         for m in range(12):
             values = [MONTHS[m]] + [r["monthly"][m] for trio in block for r in trio]
             for i, value in enumerate(values):
-                canvas.rect(sx + i * cw, y - 11, cw, 11)
-                text(value, sx + i * cw + 2, y - 8, cw - 4, 6)
-            y -= 11
+                canvas.rect(sx + i * cw, y - 20, cw, 20)
+                text(value, sx + i * cw + 2, y - 14, cw - 4, 11, bold=True)
+            y -= 20
         values = ["Итого"] + [r["summary"] for trio in block for r in trio]
         for i, value in enumerate(values):
-            canvas.rect(sx + i * cw, y - 11, cw, 11)
-            text(value, sx + i * cw + 2, y - 8, cw - 4, 6)
-        y -= 11
+            canvas.rect(sx + i * cw, y - 20, cw, 20)
+            text(value, sx + i * cw + 2, y - 14, cw - 4, 11, bold=True)
+        y -= 20
     footer()
     canvas.save()
     return stream.getvalue()
