@@ -68,6 +68,7 @@ export type MatrixNavigation = {
 
 export type ReportMatrixContract = {
   subsidiary?: boolean;
+  head_site?: boolean;
   legacy_cells?: {coordinate: ReportCellCoordinate; value: ReportCellValue}[];
   year?: number | null;
   presentation?: ReportPresentation;
@@ -196,6 +197,7 @@ export type FieldPreset = { label: string; required_codes: string[]; indicators:
 export type SubsidiaryDetail = { number: string; designation: string; suppliers: { id: string; name: string; contract: string; archived: boolean }[] };
 export type FieldConfiguration = {
   subsidiary?: SubsidiaryDetail;
+  head_links?: string[];
   category: string;
   image: string;
   norm: string;
@@ -229,7 +231,7 @@ export type SaveReportLayoutRequest = ReportLayoutQuery & {
   rows: ReportLayoutRow[];
 };
 
-export type ReportPresentation = { title?: string; widths?: Record<string, number>; plans?: Record<string, string> };
+export type ReportPresentation = { title?: string; widths?: Record<string, number>; plans?: Record<string, string>; actuals?: Record<string, string>; completion?: Record<string, string> };
 export type SaveReportPresentationRequest = ReportLayoutQuery & ReportPresentation & { expected_revision?: string };
 
 export type ApplicationError = {

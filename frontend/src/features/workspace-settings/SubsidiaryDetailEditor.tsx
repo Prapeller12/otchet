@@ -1,8 +1,9 @@
 import { useRef } from "react";
-import type { ReportLayoutRow, SubsidiaryDetail } from "../../shared/api/application-gateway";
+import type { ReportLayoutRow, SubsidiaryDetail, OrganizationOption } from "../../shared/api/application-gateway";
 import { CATEGORY_LABELS } from "./PositionFieldsEditor";
 
-export function SubsidiaryDetailEditor({ row, onChange, onRemove, onMove, disabled, onBusy }: {
+export function SubsidiaryDetailEditor({ row, onChange, onRemove, onMove, disabled, onBusy, linkOptions, usedLinks = [] }: {
+  linkOptions?: OrganizationOption[] | undefined; usedLinks?: string[];
   row: ReportLayoutRow; onChange(row: ReportLayoutRow): void; onRemove(): void; onMove(direction: -1 | 1): void; disabled: boolean; onBusy(busy: boolean): void;
 }) {
   const configuration = row.configuration ?? { category: "UNSPECIFIED", image: "", norm: "", opening: "", indicators: [] };
@@ -33,6 +34,12 @@ export function SubsidiaryDetailEditor({ row, onChange, onRemove, onMove, disabl
       }} /></label>
       {configuration.image && <><img width={64} src={configuration.image} alt={row.position_name} /><button type="button" onClick={() => onChange({ ...row, configuration: { ...configuration, subsidiary: detail, image: "" } })}>Убрать изображение</button></>}
     </div>
+    {linkOptions && <section aria-label="Связанные отчёты">
+      <h4>Отчёты дочерних обществ</h4>
+      {(configuration.head_links ?? []).map(id => <div className="row-actions" key={id}><span>{linkOptions.find(o => o.id === id)?.name ?? "Недоступный отчёт"}</span><button type="button" aria-label="Убрать связь" onClick={() => onChange({ ...row, configuration: { ...configuration, head_links: (configuration.head_links ?? []).filter(v => v !== id) } })}>×</button></div>)}
+      <label>Связать отчёт<select value="" onChange={e => { if (e.target.value) onChange({ ...row, configuration: { ...configuration, head_links: [...(configuration.head_links ?? []), e.target.value] } }); }}><option value="">Выберите дочернее общество</option>{linkOptions.filter(o => !(configuration.head_links ?? []).includes(o.id)).map(o => <option key={o.id} value={o.id} disabled={usedLinks.includes(o.id)}>{o.name}{usedLinks.includes(o.id) ? " — уже связан" : ""}</option>)}</select></label>
+      <p>Факт этой составной части проверяется по суммарному выпуску связанных обществ за месяц.</p>
+    </section>}
     <h4>Производители этой детали</h4>
     {detail.suppliers.map((supplier, index) => <div className="subsidiary-supplier" key={supplier.id}>
       <label>Производитель<input placeholder="Введите производителя" disabled={supplier.archived} value={supplier.name} onChange={e => update({ suppliers: detail.suppliers.map((s, i) => i === index ? { ...s, name: e.target.value } : s) })} /></label>

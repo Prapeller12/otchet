@@ -169,7 +169,7 @@ export function ReportMatrix({
   useEffect(() => () => { previewSequence.current += 1; }, []);
 
   function sharedColumn(column: number) {
-    return matrix.subsidiary && ["OPENING", "STOCK", "VARIANCE"].includes(matrix.time_columns[column]?.kind ?? "");
+    return matrix.subsidiary && ["OPENING", "STOCK", "VARIANCE", ...(matrix.head_site ? ["USED"] : [])].includes(matrix.time_columns[column]?.kind ?? "");
   }
   function groupStart(row: number) {
     while (row > 0 && matrix.rows[row - 1]?.group_id === matrix.rows[row]?.group_id) row--;
@@ -534,7 +534,7 @@ export function ReportMatrix({
 
       {matrix.subsidiary && <SubsidiaryControls matrix={matrix} gateway={gateway} onBusy={setPresentationBusy} blocked={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || excelBusy !== null} onChange={onChange} month={subsidiaryMonth}
         onMonth={month => { setSubsidiaryMonth(month); setExpandedMonths(new Set([month])); }} week={stockWeeks[subsidiaryMonth] ?? ""} onWeek={week => setStockWeeks(current => ({ ...current, [subsidiaryMonth]: week }))} />}
-      {!!matrix.legacy_cells?.length && <details className="legacy-facts"><summary>Прежние данные «Поставка» — {matrix.legacy_cells.length} ячеек (не включены в расход)</summary><p>Значения сохранены в исходном смысле. Для переноса в новую структуру используйте проверку импорта.</p><table><thead><tr><th>Позиция / ID</th><th>Показатель</th><th>Период</th><th>Значение</th></tr></thead><tbody>{matrix.legacy_cells.map((cell, i) => <tr key={i}><td>{cell.coordinate.component_id ?? cell.coordinate.product_id}</td><td>{cell.coordinate.metric_code}</td><td>{cell.coordinate.period_start}</td><td>{inputValue(cell.value)}</td></tr>)}</tbody></table></details>}
+      {!!matrix.legacy_cells?.length && <details className="legacy-facts"><summary>Данные прежней формы — {matrix.legacy_cells.length} ячеек (не включены в расход)</summary><p>Значения сохранены в исходном смысле. Для переноса в новую структуру используйте проверку импорта.</p><table><thead><tr><th>Позиция / ID</th><th>Показатель</th><th>Период</th><th>Значение</th></tr></thead><tbody>{matrix.legacy_cells.map((cell, i) => <tr key={i}><td>{cell.coordinate.component_id ?? cell.coordinate.product_id}</td><td>{cell.coordinate.metric_code}</td><td>{cell.coordinate.period_start}</td><td>{inputValue(cell.value)}</td></tr>)}</tbody></table></details>}
       {matrix.calendar_notice && <p role="note">{matrix.calendar_notice}</p>}
       <MonthlyReportActions weeks={stockWeeks} gateway={gateway} query={query} revision={matrix.matrix_revision} title={matrix.title} blocked={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} />
       <nav className="month-controls" aria-label="Месяцы отчёта">
@@ -600,7 +600,7 @@ export function ReportMatrix({
             </tr>
             <tr className="matrix-header-leaf-row">
               {visibleMatrix.time_columns.map((column) => (
-                <th key={column.id} scope="col">{matrix.subsidiary && column.kind === "USED" ? <button type="button" className="week-heading" title="Показать остаток на конец этой недели" aria-pressed={(stockWeeks[column.group_label] ?? matrix.time_columns.filter(c => c.group_label === column.group_label && c.kind === "USED").at(-1)?.id) === column.id} onClick={() => { setSubsidiaryMonth(column.group_label); setStockWeeks(current => ({ ...current, [column.group_label]: column.id })); }}>Расход<br />{column.label}</button> : column.label}{resizeHandle(column.id, `${column.group_label} ${column.label}`, column.width)}</th>
+                <th key={column.id} scope="col">{matrix.subsidiary && !matrix.head_site && column.kind === "USED" ? <button type="button" className="week-heading" title="Показать остаток на конец этой недели" aria-pressed={(stockWeeks[column.group_label] ?? matrix.time_columns.filter(c => c.group_label === column.group_label && c.kind === "USED").at(-1)?.id) === column.id} onClick={() => { setSubsidiaryMonth(column.group_label); setStockWeeks(current => ({ ...current, [column.group_label]: column.id })); }}>Расход<br />{column.label}</button> : column.label}{resizeHandle(column.id, `${column.group_label} ${column.label}`, column.width)}</th>
               ))}
             </tr>
           </thead>

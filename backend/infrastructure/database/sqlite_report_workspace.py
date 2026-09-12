@@ -352,7 +352,10 @@ class SqliteReportWorkspaceRepository:
                     or not template_map[existing[draft.id]].repeatable
                 ):
                     raise ValueError("Строка не принадлежит выбранной форме")
-                if report_type == "SUBSIDIARY" and draft.configuration_json is not None:
+                if (
+                    report_type in {"SUBSIDIARY", "HEAD_SITE"}
+                    and draft.configuration_json is not None
+                ):
                     old_detail = json.loads(configurations[draft.id]).get("subsidiary", {})
                     new_detail = json.loads(draft.configuration_json).get("subsidiary", {})
                     old_ids = {item["id"] for item in old_detail.get("suppliers", [])}
@@ -406,6 +409,29 @@ class SqliteReportWorkspaceRepository:
                     "WHERE organization_id = ? AND report_type = ? AND template_group_id = ?",
                     (len(drafts) + index, organization_id, report_type, template.template_group_id),
                 )
+            if report_type == "HEAD_SITE":
+                connection.execute(
+                    "DELETE FROM head_report_links WHERE head_group_id IN "
+                    "(SELECT id FROM report_workspace_groups "
+                    "WHERE organization_id=? AND report_type='HEAD_SITE')",
+                    (organization_id,),
+                )
+                for record in connection.execute(
+                    "SELECT id, configuration_json FROM report_workspace_groups "
+                    "WHERE organization_id=? AND report_type='HEAD_SITE' AND is_active=1",
+                    (organization_id,),
+                ).fetchall():
+                    for link in json.loads(record[1]).get("head_links", []):
+                        try:
+                            connection.execute(
+                                "INSERT INTO head_report_links VALUES (?, ?)",
+                                (int(link), record[0]),
+                            )
+                        except sqlite3.IntegrityError as exc:
+                            raise ValueError(
+                                "Отчёт дочернего общества уже связан "
+                                "с другой составной частью или недоступен"
+                            ) from exc
             _audit(
                 connection,
                 entity_type="report_workspace",

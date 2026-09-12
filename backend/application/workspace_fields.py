@@ -24,13 +24,32 @@ CATEGORIES = {"UNSPECIFIED", "PKI", "DSE", "PART", "PRODUCT", "ASSEMBLY"}
 def validate_configuration(raw: object) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError("Настройки позиции должны быть объектом")
-    allowed = {"category", "image", "norm", "opening", "opening_date", "indicators", "subsidiary"}
+    allowed = {
+        "category",
+        "image",
+        "norm",
+        "opening",
+        "opening_date",
+        "indicators",
+        "subsidiary",
+        "head_links",
+    }
     if raw.keys() - allowed:
         raise ValueError("Неизвестные настройки позиции")
     category = raw.get("category", "UNSPECIFIED")
     if not isinstance(category, str) or category not in CATEGORIES:
         raise ValueError("Выберите ПКИ, ДСЕ, составную часть, изделие или комплект")
     result: dict[str, Any] = {"category": category}
+    if "head_links" in raw:
+        links = raw["head_links"]
+        if (
+            not isinstance(links, list)
+            or len(links) > 50
+            or any(not isinstance(v, str) or not v.isdigit() for v in links)
+            or len(set(links)) != len(links)
+        ):
+            raise ValueError("Выберите разные отчёты дочерних обществ")
+        result["head_links"] = links
     if "subsidiary" in raw:
         from backend.application.subsidiary_report import validate_detail
 

@@ -25,7 +25,6 @@ from backend.application.excel_reports import (
 )
 from backend.application.monthly_report import monthly_snapshot
 from backend.application.reference_transfer import validate_transfer
-from backend.application.report_calendar import reporting_weeks
 from backend.application.report_cells import (
     ReportCellChange,
     ReportCellCoordinate,
@@ -729,27 +728,38 @@ class WorkingReferenceApplicationBridge:
             request = _mapping(payload, "payload")
             _reject_unknown(
                 request,
-                {"report_type", "organization_id", "title", "widths", "plans", "expected_revision"},
+                {
+                    "report_type",
+                    "organization_id",
+                    "title",
+                    "widths",
+                    "plans",
+                    "actuals",
+                    "expected_revision",
+                },
             )
             report_type = _required_string(request, "report_type")
             self._definition(report_type)
             organization_id = self._organization_id(request.get("organization_id"))
             patch: dict[str, object] = {}
-            if "plans" in request:
-                if report_type != "SUBSIDIARY":
-                    raise ValueError("Месячный план C6 доступен в отчёте дочерних обществ")
+            if "plans" in request or "actuals" in request:
+                if report_type not in {"SUBSIDIARY", "HEAD_SITE"}:
+                    raise ValueError("План и выпуск доступны в месячных отчётах")
                 if request.get("expected_revision") != self._matrix_revision(
                     report_type, organization_id
                 ):
                     raise ValueError(
                         "Форма изменилась. Перезагрузите данные перед сохранением плана"
                     )
-                plans = _mapping(request["plans"], "plans")
-                if len(plans) > 1200 or any(
-                    re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", key) is None for key in plans
-                ):
-                    raise ValueError("Неверные месяцы плана")
-                patch["plans"] = {key: quantity(value) for key, value in plans.items()}
+                for field in ("plans", "actuals"):
+                    if field not in request:
+                        continue
+                    values = _mapping(request[field], field)
+                    if len(values) > 1200 or any(
+                        re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", key) is None for key in values
+                    ):
+                        raise ValueError("Неверные месяцы выпуска")
+                    patch[field] = {key: quantity(value) for key, value in values.items()}
 
             if "title" in request:
                 title = _required_string(request, "title").strip()
@@ -783,6 +793,14 @@ class WorkingReferenceApplicationBridge:
         definition = self._definition(report_type)
         periods = self._periods(report_type, year)
         presentation = self._workspace.get_presentation(organization_id, report_type)
+        if report_type in {"SUBSIDIARY", "HEAD_SITE"}:
+            from backend.application.production_progress import completion
+
+            presentation["completion"] = completion(
+                cast(dict[str, str], presentation.get("plans", {})),
+                cast(dict[str, str], presentation.get("actuals", {})),
+            )
+
         widths = cast(dict[str, int], presentation.get("widths", {}))
         previews: dict[str, ReportCellValue] = {}
         if preview_changes is not None:
@@ -809,43 +827,6 @@ class WorkingReferenceApplicationBridge:
         }
         period_labels: dict[str, str] = {}
         calendar_notice = ""
-        if report_type == "HEAD_SITE":
-            calendar_year = year or date.today().year
-            with closing(connect_sqlite(self._database_path)) as connection:
-                mode = connection.execute(
-                    "SELECT mode FROM report_calendars WHERE organization_id=? "
-                    "AND report_type=? AND year=?",
-                    (organization_id, report_type, calendar_year),
-                ).fetchone()
-                if mode is None:
-                    has_facts = any(
-                        str(
-                            item.coordinate.operation_date or item.coordinate.period_start
-                        ).startswith(str(calendar_year))
-                        for item in stored.values()
-                    )
-                    selected_mode = "LEGACY" if has_facts else "CALENDAR_WEEKS"
-                    connection.execute(
-                        "INSERT INTO report_calendars VALUES(?,?,?,?)",
-                        (organization_id, report_type, calendar_year, selected_mode),
-                    )
-                    connection.commit()
-                else:
-                    selected_mode = str(mode[0])
-            if selected_mode == "CALENDAR_WEEKS":
-                weeks = [
-                    week
-                    for month in (range(1, 13) if year else [date.today().month])
-                    for week in reporting_weeks(calendar_year, month)
-                ]
-                periods = [(week.start.isoformat(), week.start.isoformat()) for week in weeks]
-                period_labels = {week.start.isoformat(): week.label for week in weeks}
-            else:
-                calendar_notice = (
-                    "В этом году есть ранее введённые данные. "
-                    "Их исходные периоды сохранены; новый календарь "
-                    "автоматически к ним не применяется."
-                )
         layout = _mapping(definition.get("layout"), "layout")
         identifier_columns = _sequence(layout.get("identifier_columns"), "identifier_columns")
         left_columns = [
@@ -873,7 +854,7 @@ class WorkingReferenceApplicationBridge:
             self._group_templates(report_type),
         )
 
-        if report_type == "SUBSIDIARY":
+        if report_type in {"SUBSIDIARY", "HEAD_SITE"}:
 
             def read(
                 group: WorkspaceGroup, code: str, day: str, column: str, editable: bool
@@ -906,21 +887,35 @@ class WorkingReferenceApplicationBridge:
                     },
                 }
 
-            structure = build_rows(
-                [
-                    (group, self._field_configuration(report_type, group))
-                    for group in configured_groups
-                ],
-                year or date.today().year,
-                read,
-                cast(dict[str, str], presentation.get("plans", {})),
-            )
+            groups = [
+                (group, self._field_configuration(report_type, group))
+                for group in configured_groups
+            ]
+            if report_type == "HEAD_SITE":
+                from backend.application.head_site_report import build_head_rows
+
+                subsidiaries = {
+                    str(org.id): self._workspace.get_presentation(org.id, "SUBSIDIARY")
+                    for org in self._workspace.list_organizations()
+                }
+                structure = build_head_rows(
+                    groups, year or date.today().year, read, presentation, subsidiaries
+                )
+            else:
+                structure = build_rows(
+                    groups,
+                    year or date.today().year,
+                    read,
+                    cast(dict[str, str], presentation.get("plans", {})),
+                )
             if previews:
                 raise ValueError("Ячейка вне действующей формы")
             legacy = [
                 {"coordinate": item.coordinate.to_dict(), "value": item.value.to_dict()}
                 for item in stored.values()
-                if not (item.coordinate.metric_code or "").startswith("SUB_")
+                if not (item.coordinate.metric_code or "").startswith(
+                    "HEAD_" if report_type == "HEAD_SITE" else "SUB_"
+                )
             ]
             return {
                 "report_type": report_type,
@@ -933,6 +928,7 @@ class WorkingReferenceApplicationBridge:
                 "form_status": "WORKING_REFERENCE",
                 "matrix_revision": self._matrix_revision(report_type, organization_id),
                 "subsidiary": True,
+                "head_site": report_type == "HEAD_SITE",
                 "legacy_cells": legacy,
                 **structure,
                 "capabilities": {
@@ -1178,16 +1174,25 @@ class WorkingReferenceApplicationBridge:
                 "WHERE entity_type = 'report_workspace' AND entity_id = ?",
                 (f"{organization_id}:{report_type}",),
             ).fetchone()[0]
-            if report_type == "SUBSIDIARY":
+            if report_type in {"SUBSIDIARY", "HEAD_SITE"}:
                 layout_revision = max(
                     layout_revision,
                     connection.execute(
                         "SELECT coalesce(max(id), 0) FROM audit_events "
                         "WHERE entity_type = 'report_presentation' AND entity_id = ? "
-                        "AND json_extract(before_json, '$.plans') IS NOT "
-                        "json_extract(after_json, '$.plans')",
+                        "AND (json_extract(before_json, '$.plans') IS NOT "
+                        "json_extract(after_json, '$.plans') OR "
+                        "json_extract(before_json, '$.actuals') IS NOT "
+                        "json_extract(after_json, '$.actuals'))",
                         (f"{organization_id}:{report_type}",),
                     ).fetchone()[0],
+                )
+            if report_type == "HEAD_SITE":
+                layout_revision = max(
+                    layout_revision,
+                    connection.execute("SELECT coalesce(max(id), 0) FROM audit_events").fetchone()[
+                        0
+                    ],
                 )
         finally:
             connection.close()
@@ -1200,7 +1205,7 @@ class WorkingReferenceApplicationBridge:
         config.setdefault("image", "")
         config.setdefault("norm", "")
         config.setdefault("opening", "")
-        if report_type == "SUBSIDIARY":
+        if report_type in {"SUBSIDIARY", "HEAD_SITE"}:
             config.setdefault("subsidiary", default_detail(group.party_name))
         if "indicators" not in config:
             config["indicators"] = self._default_indicators(report_type, group.template_group_id)

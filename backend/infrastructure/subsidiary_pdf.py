@@ -43,8 +43,13 @@ def render_subsidiary_pdf(
     columns = snapshot["columns"]
     # Identify the common stock and variance fields separately from supplier receipts.
     ordering = [0, 1, 2, 3, 4, 6, 8, 5, 7, 9] + list(range(10, len(left) + len(columns)))
+    if snapshot.get("head_site"):
+        ordering = list(range(len(left) + len(columns)))
     labels = [c["label"] for c in left] + [
-        c["label"] if c.get("kind") != "USED" else "Расход " + c["label"] for c in columns
+        c["label"]
+        if c.get("kind") != "USED" or snapshot.get("head_site")
+        else "Расход " + c["label"]
+        for c in columns
     ]
     widths: list[float] = [29, 66, 88, 48, 83, 53, 51, 55, 53, 60] + [45.0] * (len(columns) - 4)
     total = sum(widths)
@@ -93,7 +98,8 @@ def render_subsidiary_pdf(
     shared = [ordering.index(i) for i, column in enumerate(left) if column.get("shared")] + [
         ordering.index(len(left) + i)
         for i, column in enumerate(columns)
-        if column.get("kind") in {"OPENING", "STOCK", "VARIANCE"}
+        if column.get("kind")
+        in {"OPENING", "STOCK", "VARIANCE", *(["USED"] if snapshot.get("head_site") else [])}
     ]
     group_first: dict[str, int] = {}
     for index, row in enumerate(snapshot["rows"], 1):
@@ -157,7 +163,13 @@ def render_subsidiary_pdf(
                 ),
                 p(
                     f"План выпуска: {snapshot['plan'] or 'не задан'} шт. "
-                    f"Недельные значения — расход. Остаток на {snapshot['as_of']}."
+                    f"Выпущено: {snapshot.get('actual') or '—'} шт. "
+                    f"Выполнение: {snapshot.get('completion') or '—'} %. "
+                    + (
+                        f"Месячный план/факт. Остаток на {snapshot['as_of']}."
+                        if snapshot.get("head_site")
+                        else f"Недельные значения — расход. Остаток на {snapshot['as_of']}."
+                    )
                 ),
                 layout.Spacer(1, 10),
                 table,

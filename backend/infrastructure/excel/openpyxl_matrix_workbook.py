@@ -235,7 +235,8 @@ class OpenpyxlMatrixWorkbookAdapter:
             ] + [
                 index
                 for index, raw in enumerate(time_columns, first_time_column)
-                if _mapping(raw, "time column").get("kind") in {"OPENING", "STOCK", "VARIANCE"}
+                if _mapping(raw, "time column").get("kind")
+                in {"OPENING", "STOCK", "VARIANCE", *(["USED"] if matrix.get("head_site") else [])}
             ]
             group_start = 0
             while group_start < len(rows):
@@ -256,15 +257,31 @@ class OpenpyxlMatrixWorkbookAdapter:
                         )
                 group_start = group_end
             plan_sheet = workbook.create_sheet("Месячные планы")
-            plan_sheet.append(["Месяц", "План выпуска, шт."])
+            plan_sheet.append(["Месяц", "План выпуска, шт.", "Выпущено, шт.", "Выполнение, %"])
             presentation = cast(dict[str, Any], matrix.get("presentation", {}))
-            for period, value in sorted(presentation.get("plans", {}).items()):
-                plan_sheet.append([period, _excel_number(value) if value else None])
+            plans = presentation.get("plans", {})
+            actuals = presentation.get("actuals", {})
+            for period in sorted(plans.keys() | actuals.keys()):
+                value = plans.get(period, "")
+                actual = actuals.get(period, "")
+                percent = presentation.get("completion", {}).get(period, "")
+                plan_sheet.append(
+                    [
+                        period,
+                        _excel_number(value) if value else None,
+                        _excel_number(actual) if actual else None,
+                        _excel_number(percent) if percent else None,
+                    ]
+                )
             plan_sheet.column_dimensions["A"].width = 16
             plan_sheet.column_dimensions["B"].width = 42
+            plan_sheet.column_dimensions["C"].width = 22
+            plan_sheet.column_dimensions["D"].width = 22
             plan_sheet.protection.sheet = True
             plan_sheet.cell(
-                15, 1, "Планы изменяются в программе. Расчёты — снимок на момент экспорта."
+                plan_sheet.max_row + 2,
+                1,
+                "План и выпуск изменяются в программе. Расчёты — снимок на момент экспорта.",
             )
         workbook.calculation.fullCalcOnLoad = True
         workbook.calculation.forceFullCalc = True

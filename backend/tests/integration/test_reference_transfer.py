@@ -20,7 +20,10 @@ def test_transfer_into_real_workspace_with_validation_restart_and_duplicate(
     document = preview["reference_workbook"]
     matrix = unwrap(app.get_report_matrix(query))
     weekly = [c for c in matrix["time_columns"] if c.get("kind", "USED") == "USED"]
-    assert weekly[0]["label"] == "01–04"
+    if kind == "SUBSIDIARY":
+        assert weekly[0]["label"] == "01–04"
+    else:
+        assert matrix["head_site"] is True
     row = next(r for r in matrix["rows"] if r["cells"][0]["state"]["access"] == "editable")
     targets = [
         c

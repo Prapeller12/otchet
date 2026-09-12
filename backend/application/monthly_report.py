@@ -37,27 +37,33 @@ def monthly_snapshot(
             for c in matrix["time_columns"]
             if c["group_label"] == period and c.get("kind") == "USED"
         ]
-        selected_week = weeks[-1] if week_start is None else week_start
-        if not isinstance(selected_week, str) or selected_week not in weeks:
-            raise ValueError("Неделя остатка не принадлежит выбранному месяцу")
-        from backend.application.report_calendar import reporting_weeks
+        selected_week = ""
+        as_of = f"{period}-{calendar.monthrange(year, month)[1]:02d}"
+        if not matrix.get("head_site"):
+            selected_week = weeks[-1] if week_start is None else str(week_start)
+            if not isinstance(selected_week, str) or selected_week not in weeks:
+                raise ValueError("Неделя остатка не принадлежит выбранному месяцу")
+            from backend.application.report_calendar import reporting_weeks
 
-        as_of = next(
-            w.end.isoformat()
-            for w in reporting_weeks(year, month)
-            if w.start.isoformat() == selected_week
-        )
+            as_of = next(
+                w.end.isoformat()
+                for w in reporting_weeks(year, month)
+                if w.start.isoformat() == selected_week
+            )
         return {
             "as_of": as_of,
             "schema": 2,
             "report_type": matrix["report_type"],
             "subsidiary": True,
+            "head_site": matrix.get("head_site", False),
             "organization_id": matrix["organization_id"],
             "organization": organization,
             "title": matrix["title"],
             "period": period,
             "revision": matrix["matrix_revision"],
             "plan": matrix["presentation"].get("plans", {}).get(period, ""),
+            "actual": matrix["presentation"].get("actuals", {}).get(period, ""),
+            "completion": matrix["presentation"].get("completion", {}).get(period, ""),
             "left_columns": matrix["left_columns"],
             "columns": [matrix["time_columns"][i] for i in indices],
             "rows": [
@@ -76,6 +82,7 @@ def monthly_snapshot(
                         row["cells"][i].get("issue", {}).get("message", "Ошибка")
                         for i in indices
                         if row["cells"][i]["state"].get("persistence") == "error"
+                        or row["cells"][i].get("issue", {}).get("code") == "PRODUCTION_MISMATCH"
                     ],
                 }
                 for row in matrix["rows"]

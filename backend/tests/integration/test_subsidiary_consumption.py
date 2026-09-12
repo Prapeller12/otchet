@@ -339,3 +339,40 @@ def test_export_opens_visible_month_and_keeps_values_and_import_map(tmp_path: Pa
     assert f"{letter}7:{letter}8" in sheet.merged_cells
     assert workbook["Месячные планы"]["B2"].value == 1000
     assert workbook["_Системная карта"].max_row > 100
+
+
+def test_actual_production_progress_persists_and_invalidates_verification(tmp_path: Path) -> None:
+    app = app_at(tmp_path)
+    matrix = setup(app)
+    status = data(app.get_report_verification({**QUERY, "month": 9}))
+    data(
+        app.verify_report(
+            {
+                **QUERY,
+                "month": 9,
+                "signer_name": "Тест",
+                "confirmed": True,
+                "snapshot_sha256": status["snapshot_sha256"],
+            }
+        )
+    )
+    data(
+        app.save_report_presentation(
+            {
+                "report_type": "SUBSIDIARY",
+                "organization_id": "1",
+                "expected_revision": matrix["matrix_revision"],
+                "actuals": {"2026-09": "500"},
+            }
+        )
+    )
+    updated = data(app_at(tmp_path).get_report_matrix(QUERY))
+    assert updated["presentation"]["completion"]["2026-09"] == "50.00"
+    assert updated["presentation"]["actuals"]["2026-09"] == "500"
+    assert updated["matrix_revision"] != matrix["matrix_revision"]
+    assert data(app.get_report_verification({**QUERY, "month": 9}))["status"] == "STALE"
+    assert value(updated, "2026-09-VARIANCE") is None
+    from backend.application.production_progress import completion
+
+    assert completion({"2026-09": "0"}, {"2026-09": "10"}) == {}
+    assert completion({"2026-09": "500"}, {"2026-09": "0"}) == {"2026-09": "0.00"}

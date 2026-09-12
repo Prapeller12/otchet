@@ -274,6 +274,11 @@ export function WorkspaceSettingsDialog({
               <>
                 <div className="layout-list-header">
                   <strong>Строки рабочего поля</strong>
+                  {reportType === "DAILY_MOVEMENT" && <button type="button" className="button secondary" onClick={() => {
+                    const template = layout.templates.find(t => t.group_kind === "COMPONENT_POSITION");
+                    if (template) setRows(current => [...current, { id: null, template_group_id: template.id, party_name: "", position_name: "", configuration: { category: "PART", image: "", norm: "", opening: "", indicators: template.indicators ?? [] } }]);
+                  }}>+ Расход составной части</button>}
+
                   <button
                     className="button secondary"
                     type="button"
@@ -289,7 +294,7 @@ export function WorkspaceSettingsDialog({
                   {rows.length === 0 && (
                     <div className="settings-empty">Добавьте первую строку отчёта.</div>
                   )}
-                  {rows.map((row, index) => reportType === "SUBSIDIARY" ? <SubsidiaryDetailEditor key={row.id ?? `new-${index}`} row={row} onBusy={setSaving} disabled={saving} onChange={next => updateRow(index, next)} onRemove={() => setRows(current => current.filter((_, i) => i !== index))} onMove={direction => moveRow(index, direction)} /> : (
+                  {rows.map((row, index) => (reportType === "SUBSIDIARY" || reportType === "HEAD_SITE") ? <SubsidiaryDetailEditor key={row.id ?? `new-${index}`} row={row} linkOptions={reportType === "HEAD_SITE" ? organizations.filter(o => o.kind === "SUBSIDIARY") : undefined} usedLinks={rows.filter((_, i) => i !== index).flatMap(r => r.configuration?.head_links ?? [])} onBusy={setSaving} disabled={saving} onChange={next => updateRow(index, next)} onRemove={() => setRows(current => current.filter((_, i) => i !== index))} onMove={direction => moveRow(index, direction)} /> : (
                     <fieldset disabled={saving} className="layout-row-editor" key={row.id ?? `new-${index}`}>
                       <label>Категория позиции<select aria-label="Категория позиции" value={row.configuration?.category ?? "UNSPECIFIED"} onChange={(event) => updateRow(index, { configuration: { image: "", norm: "", opening: "", indicators: [], ...row.configuration, category: event.target.value } })}>
                         {Object.entries(CATEGORY_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}
