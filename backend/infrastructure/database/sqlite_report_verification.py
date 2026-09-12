@@ -40,7 +40,12 @@ class SqliteReportVerificationRepository:
         if snapshot_hash(snapshot) != expected_hash:
             raise ValueError("Данные изменились. Повторно откройте подтверждение и проверьте отчёт")
         if any(row["errors"] for row in snapshot["rows"]):
-            raise ValueError("Сначала исправьте ошибки расчёта")
+            raise ValueError(
+                "Подтверждение невозможно. Исправьте расхождения:\n"
+                + "\n".join(
+                    dict.fromkeys(error for row in snapshot["rows"] for error in row["errors"])
+                )
+            )
         connection = connect_sqlite(self.database_path)
         try:
             connection.execute("BEGIN IMMEDIATE")

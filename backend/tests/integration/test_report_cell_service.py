@@ -217,7 +217,19 @@ def test_bridge_exposes_health_bootstrap_and_safe_revision_error(database_path: 
     assert bootstrap["ok"] is True
     assert bootstrap["data"] == {
         "database_ready": True,
-        "schema_versions": ["0001", "0002", "0003", "0004", "0005", "0006", "0007", "0008", "0009"],
+        "schema_versions": [
+            "0001",
+            "0002",
+            "0003",
+            "0004",
+            "0005",
+            "0006",
+            "0007",
+            "0008",
+            "0009",
+            "0010",
+            "0011",
+        ],
         "newly_applied": [],
         "contract_status": "WORKING_REFERENCE",
     }

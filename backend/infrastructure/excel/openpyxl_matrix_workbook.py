@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.cell import Cell
@@ -58,8 +58,9 @@ class OpenpyxlMatrixWorkbookAdapter:
         time_columns = _sequence(matrix.get("time_columns"), "time_columns")
         rows = _sequence(matrix.get("rows"), "rows")
         left_count = len(left_columns)
+        subsidiary = matrix.get("subsidiary") is True
         total_column = left_count + 1
-        first_time_column = total_column + 1
+        first_time_column = total_column if subsidiary else total_column + 1
         last_column = first_time_column + len(time_columns) - 1
 
         sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_column)
@@ -86,12 +87,15 @@ class OpenpyxlMatrixWorkbookAdapter:
             raw_width = column.get("width", 180)
             width = int(raw_width) if isinstance(raw_width, (int, float, str)) else 180
             sheet.column_dimensions[get_column_letter(index)].width = max(14, min(42, width / 8))
-        sheet.merge_cells(
-            start_row=5, start_column=total_column, end_row=6, end_column=total_column
-        )
-        _header(sheet.cell(5, total_column, "Итого"), header_fill, border)
-        sheet.column_dimensions[get_column_letter(total_column)].width = 14
+        if not subsidiary:
+            sheet.merge_cells(
+                start_row=5, start_column=total_column, end_row=6, end_column=total_column
+            )
+            _header(sheet.cell(5, total_column, "Итого"), header_fill, border)
+            sheet.column_dimensions[get_column_letter(total_column)].width = 14
 
+        visible_months = cast(list[str], matrix.get("visible_months") or [])
+        visible_columns = []
         for index, raw_column in enumerate(time_columns, start=first_time_column):
             column = _mapping(raw_column, "time column")
             top = sheet.cell(5, index, _string(column, "group_label"))
@@ -99,6 +103,10 @@ class OpenpyxlMatrixWorkbookAdapter:
             _header(top, header_fill, border)
             _header(bottom, header_fill, border)
             sheet.column_dimensions[get_column_letter(index)].width = 12
+            hidden = bool(visible_months) and column["group_label"] not in visible_months
+            sheet.column_dimensions[get_column_letter(index)].hidden = hidden
+            if not hidden:
+                visible_columns.append(index)
 
         mapping.append([_MARKER, _SCHEMA_VERSION])
         mapping.append(["report_type", report_type])
@@ -120,14 +128,15 @@ class OpenpyxlMatrixWorkbookAdapter:
             indicator_detail = row.get("indicator_detail")
             detail = indicator_detail if isinstance(indicator_detail, Mapping) else {}
             cells = _sequence(row.get("cells"), "row.cells")
-            total = cast(Cell, sheet.cell(row_offset, total_column))
-            if detail.get("kind") == "SUM" and cells:
-                start = get_column_letter(first_time_column)
-                end = get_column_letter(first_time_column + len(cells) - 1)
-                total.value = f"=SUM({start}{row_offset}:{end}{row_offset})"
-            elif detail.get("kind") == "CALCULATION":
-                total.value = "Расчёт"
-            _body(total, border, PatternFill("solid", fgColor=_CALCULATED))
+            if not subsidiary:
+                total = cast(Cell, sheet.cell(row_offset, total_column))
+                if detail.get("kind") == "SUM" and cells:
+                    start = get_column_letter(first_time_column)
+                    end = get_column_letter(first_time_column + len(cells) - 1)
+                    total.value = f"=SUM({start}{row_offset}:{end}{row_offset})"
+                elif detail.get("kind") == "CALCULATION":
+                    total.value = "Расчёт"
+                _body(total, border, PatternFill("solid", fgColor=_CALCULATED))
 
             for column_offset, raw_cell in enumerate(cells, start=first_time_column):
                 contract = _mapping(raw_cell, "matrix cell")
@@ -137,7 +146,12 @@ class OpenpyxlMatrixWorkbookAdapter:
                 target = cast(Cell, sheet.cell(row_offset, column_offset))
                 if value.get("kind") == "QUANTITY":
                     target.value = _excel_number(_string(value, "quantity"))
-                fill = PatternFill("solid", fgColor=_INPUT if access == "editable" else _CALCULATED)
+                fill = PatternFill(
+                    "solid",
+                    fgColor=("FFFFFF" if access == "editable" else "F2F3F4")
+                    if subsidiary
+                    else (_INPUT if access == "editable" else _CALCULATED),
+                )
                 _body(target, border, fill)
                 target.number_format = "0.###############"
                 target.protection = Protection(locked=access != "editable")
@@ -176,6 +190,14 @@ class OpenpyxlMatrixWorkbookAdapter:
                 validation.add(sheet[cell_reference])
 
         sheet.freeze_panes = cast(Cell, sheet.cell(7, first_time_column))
+        if visible_columns and sheet.sheet_view.pane is not None:
+            first_visible = get_column_letter(visible_columns[0])
+            sheet.sheet_view.pane.topLeftCell = f"{first_visible}7"
+            for selection in sheet.sheet_view.selection:
+                if selection.pane in {"topRight", "bottomRight"}:
+                    row_number = 7 if selection.pane == "bottomRight" else 5
+                    selection.activeCell = f"{first_visible}{row_number}"
+                    selection.sqref = selection.activeCell
         sheet.auto_filter.ref = f"A6:{get_column_letter(last_column)}{6 + len(rows)}"
         sheet.sheet_view.showGridLines = False
         sheet.page_setup.orientation = "landscape"
@@ -196,6 +218,71 @@ class OpenpyxlMatrixWorkbookAdapter:
                 operator="lessThan", formula=["0"], fill=PatternFill("solid", fgColor=_ERROR)
             ),
         )
+        if subsidiary:
+            for styled_row in sheet.iter_rows(min_row=5, max_row=6):
+                for styled_cell in styled_row:
+                    if isinstance(styled_cell, Cell):
+                        styled_cell.fill = PatternFill("solid", fgColor="E9ECEF")
+                        styled_cell.font = Font(name="Arial", size=10, color="222222")
+            for styled_row in sheet.iter_rows(min_row=7, max_col=left_count):
+                for styled_cell in styled_row:
+                    if isinstance(styled_cell, Cell):
+                        styled_cell.fill = PatternFill("solid", fgColor="FFFFFF")
+            shared_columns = [
+                index
+                for index, raw in enumerate(left_columns, 1)
+                if _mapping(raw, "left column").get("shared")
+            ] + [
+                index
+                for index, raw in enumerate(time_columns, first_time_column)
+                if _mapping(raw, "time column").get("kind")
+                in {"OPENING", "STOCK", "VARIANCE", *(["USED"] if matrix.get("head_site") else [])}
+            ]
+            group_start = 0
+            while group_start < len(rows):
+                group_id = _mapping(rows[group_start], "row").get("group_id")
+                group_end = group_start + 1
+                while (
+                    group_end < len(rows)
+                    and _mapping(rows[group_end], "row").get("group_id") == group_id
+                ):
+                    group_end += 1
+                if group_end - group_start > 1:
+                    for column_index in shared_columns:
+                        sheet.merge_cells(
+                            start_row=group_start + 7,
+                            end_row=group_end + 6,
+                            start_column=column_index,
+                            end_column=column_index,
+                        )
+                group_start = group_end
+            plan_sheet = workbook.create_sheet("Месячные планы")
+            plan_sheet.append(["Месяц", "План выпуска, шт.", "Выпущено, шт.", "Выполнение, %"])
+            presentation = cast(dict[str, Any], matrix.get("presentation", {}))
+            plans = presentation.get("plans", {})
+            actuals = presentation.get("actuals", {})
+            for period in sorted(plans.keys() | actuals.keys()):
+                value = plans.get(period, "")
+                actual = actuals.get(period, "")
+                percent = presentation.get("completion", {}).get(period, "")
+                plan_sheet.append(
+                    [
+                        period,
+                        _excel_number(value) if value else None,
+                        _excel_number(actual) if actual else None,
+                        _excel_number(percent) if percent else None,
+                    ]
+                )
+            plan_sheet.column_dimensions["A"].width = 16
+            plan_sheet.column_dimensions["B"].width = 42
+            plan_sheet.column_dimensions["C"].width = 22
+            plan_sheet.column_dimensions["D"].width = 22
+            plan_sheet.protection.sheet = True
+            plan_sheet.cell(
+                plan_sheet.max_row + 2,
+                1,
+                "План и выпуск изменяются в программе. Расчёты — снимок на момент экспорта.",
+            )
         workbook.calculation.fullCalcOnLoad = True
         workbook.calculation.forceFullCalc = True
         workbook.calculation.calcMode = "auto"

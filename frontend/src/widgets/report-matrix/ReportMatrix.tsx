@@ -1,4 +1,5 @@
-import { ReferenceGrid } from "../../features/reference-reports/ReferenceReport";
+import { SubsidiaryControls } from "./SubsidiaryControls";
+import { ReferenceTransfer } from "../../features/reference-reports/ReferenceTransfer";
 import { MonthlyReportActions } from "./MonthlyReportActions";
 import {
   useEffect,
@@ -152,10 +153,12 @@ export function ReportMatrix({
     const current = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
     return new Set([matrix.time_columns.find((column) => column.group_label === current)?.group_label ?? matrix.time_columns[0]?.group_label ?? ""]);
   });
+  const [subsidiaryMonth, setSubsidiaryMonth] = useState([...expandedMonths][0] ?? "");
+  const [stockWeeks, setStockWeeks] = useState<Record<string, string>>({});
   const visibleIndices = matrix.time_columns.flatMap((column, index) => expandedMonths.has(column.group_label) ? [index] : []);
   const visibleSet = new Set(visibleIndices);
   const leftColumns = matrix.left_columns.map((column) => ({ ...column, width: widths[column.id] ?? column.width }));
-  const timeColumns = matrix.time_columns.map((column) => ({ ...column, width: Math.max(64, widths[column.id] ?? 64) }));
+  const timeColumns = matrix.time_columns.map((column) => ({ ...column, width: Math.max(matrix.subsidiary && column.kind !== "USED" ? 110 : 64, widths[column.id] ?? (matrix.subsidiary && column.kind !== "USED" ? 110 : 64)) }));
   const visibleMatrix = { ...matrix, left_columns: leftColumns, time_columns: timeColumns.filter((_, index) => visibleSet.has(index)), rows: matrix.rows.map((row) => ({ ...row, cells: row.cells.filter((_, index) => visibleSet.has(index)) })) };
   const query = { report_type: matrix.report_type, organization_id: matrix.organization_id, ...(matrix.year ? { year: matrix.year } : {}) };
 
@@ -165,10 +168,25 @@ export function ReportMatrix({
 
   useEffect(() => () => { previewSequence.current += 1; }, []);
 
+  function sharedColumn(column: number) {
+    return matrix.subsidiary && ["OPENING", "STOCK", "VARIANCE", ...(matrix.head_site ? ["USED"] : [])].includes(matrix.time_columns[column]?.kind ?? "");
+  }
+  function groupStart(row: number) {
+    while (row > 0 && matrix.rows[row - 1]?.group_id === matrix.rows[row]?.group_id) row--;
+    return row;
+  }
   function navigate(position: MatrixPosition, move: (source: ReportMatrixContract, position: MatrixPosition) => MatrixPosition) {
     const projected = { row: position.row, column: Math.max(0, visibleIndices.indexOf(position.column)) };
-    const next = move(visibleMatrix, projected);
-    setActive({ row: next.row, column: visibleIndices[next.column] ?? 0 });
+    let next = move(visibleMatrix, projected);
+    const column = visibleIndices[next.column] ?? 0;
+    if (sharedColumn(column)) {
+      // A merged cell is a single keyboard target. Down jumps to the next detail.
+      if (next.row > position.row && groupStart(next.row) === groupStart(position.row)) {
+        const end = groupStart(position.row) + (spans.get(groupStart(position.row)) ?? 1);
+        next = { ...next, row: end < matrix.rows.length ? end : groupStart(position.row) };
+      } else next = { ...next, row: groupStart(next.row) };
+    }
+    setActive({ row: next.row, column });
   }
 
   function toggleMonth(month: string) {
@@ -215,7 +233,7 @@ export function ReportMatrix({
       if (sequence !== previewSequence.current) return;
       const calculated = new Map(result.rows.flatMap((row) => row.cells.filter((cell) => cell.state.access === "calculated").map((cell) => [cellKey(cell), cell] as const)));
       const current = latestMatrix.current;
-      onChange({ ...current, rows: current.rows.map((row) => ({ ...row, cells: row.cells.map((cell) => calculated.get(cellKey(cell)) ?? cell) })) });
+      onChange({ ...current, rows: current.rows.map((row) => ({ ...row, stock_by_week: result.rows.find(r => r.id === row.id)?.stock_by_week ?? {}, cells: row.cells.map((cell) => calculated.get(cellKey(cell)) ?? cell) })) });
     } catch (error) {
       if (sequence === previewSequence.current) setSaveError(error instanceof Error ? error.message : "Не удалось пересчитать форму");
     } finally { if (sequence === previewSequence.current) setPreviewBusy(false); }
@@ -231,12 +249,12 @@ export function ReportMatrix({
     const identifiers = matrix.left_columns
       .map((item) => row.left_values[item.id])
       .filter((value): value is string => Boolean(value && value !== "—"));
-    onStatusChange(`${identifiers.join(" · ")} · ${column.label}`);
+    onStatusChange(`${identifiers.join(" · ")} · ${column.label}${row.cells[active.column]?.issue ? " · " + row.cells[active.column]!.issue!.message : ""}`);
   }, [active, matrix, onStatusChange]);
 
   function beginEdit(position: MatrixPosition): void {
     const cell = matrix.rows[position.row]?.cells[position.column];
-    if (cell?.state.access !== "editable" || saving) return;
+    if (cell?.state.access !== "editable" || saving || presentationBusy || excelBusy !== null) return;
     setActive(position);
     setEditing({ ...position, draft: inputValue(cell.value) });
   }
@@ -420,6 +438,18 @@ export function ReportMatrix({
     }
   }
 
+  async function removeSupplier(workspaceId: string, supplierId: string) {
+    if (!window.confirm("Убрать производителя из рабочего поля? Сохранённая история останется доступна.")) return;
+    setPresentationBusy(true); setSaveError(null);
+    try {
+      const layout = await gateway.getReportLayout({ report_type: matrix.report_type, organization_id: matrix.organization_id });
+      const rows = layout.rows.map(row => row.id === workspaceId && row.configuration?.subsidiary ? { ...row, configuration: { ...row.configuration, subsidiary: { ...row.configuration.subsidiary, suppliers: row.configuration.subsidiary.suppliers.map(s => s.id === supplierId ? { ...s, archived: true } : s) } } } : row);
+      await gateway.saveReportLayout({ report_type: matrix.report_type, organization_id: matrix.organization_id, rows });
+      onChange(await gateway.getReportMatrix(query));
+    } catch (e) { setSaveError(e instanceof Error ? e.message : String(e)); }
+    finally { setPresentationBusy(false); }
+  }
+
   async function exportExcel(): Promise<void> {
     setExcelBusy("export");
     setExcelError(null);
@@ -429,6 +459,8 @@ export function ReportMatrix({
         ...query,
         report_type: matrix.report_type,
         organization_id: matrix.organization_id,
+        visible_months: [...expandedMonths],
+        stock_weeks: stockWeeks,
       });
       if (!result.cancelled) {
         setExcelMessage(
@@ -500,10 +532,14 @@ export function ReportMatrix({
         </div>
       </div>
 
-      <MonthlyReportActions gateway={gateway} query={query} revision={matrix.matrix_revision} title={matrix.title} blocked={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} />
+      {matrix.subsidiary && <SubsidiaryControls matrix={matrix} gateway={gateway} onBusy={setPresentationBusy} blocked={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || excelBusy !== null} onChange={onChange} month={subsidiaryMonth}
+        onMonth={month => { setSubsidiaryMonth(month); setExpandedMonths(new Set([month])); }} week={stockWeeks[subsidiaryMonth] ?? ""} onWeek={week => setStockWeeks(current => ({ ...current, [subsidiaryMonth]: week }))} />}
+      {!!matrix.legacy_cells?.length && <details className="legacy-facts"><summary>Данные прежней формы — {matrix.legacy_cells.length} ячеек (не включены в расход)</summary><p>Значения сохранены в исходном смысле. Для переноса в новую структуру используйте проверку импорта.</p><table><thead><tr><th>Позиция / ID</th><th>Показатель</th><th>Период</th><th>Значение</th></tr></thead><tbody>{matrix.legacy_cells.map((cell, i) => <tr key={i}><td>{cell.coordinate.component_id ?? cell.coordinate.product_id}</td><td>{cell.coordinate.metric_code}</td><td>{cell.coordinate.period_start}</td><td>{inputValue(cell.value)}</td></tr>)}</tbody></table></details>}
+      {matrix.calendar_notice && <p role="note">{matrix.calendar_notice}</p>}
+      <MonthlyReportActions weeks={stockWeeks} gateway={gateway} query={query} revision={matrix.matrix_revision} title={matrix.title} blocked={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} />
       <nav className="month-controls" aria-label="Месяцы отчёта">
         <button type="button" disabled={editing !== null} onClick={() => {
-          const next = { ...widths, ...Object.fromEntries(matrix.time_columns.map(column => [column.id, 64])) };
+          const next = { ...widths, ...Object.fromEntries(matrix.time_columns.map(column => [column.id, matrix.subsidiary && column.kind !== "USED" ? 110 : 64])) };
           setWidths(next); persistWidths(next);
         }}>Компактные столбцы: 5 цифр</button>
         {matrix.year && <strong>{matrix.year}</strong>}
@@ -528,7 +564,7 @@ export function ReportMatrix({
 
       <div className="matrix-scroll" data-testid="matrix-scroll">
         <table
-          className="report-matrix"
+          className={matrix.subsidiary ? "report-matrix subsidiary-matrix" : "report-matrix"}
           style={{ width: leftColumns.reduce((sum, column) => sum + column.width, 0) + visibleMatrix.time_columns.reduce((sum, column) => sum + column.width, 0), minWidth: 0 }}
           aria-label={matrix.title}
           aria-rowcount={matrix.rows.length + 2}
@@ -564,7 +600,7 @@ export function ReportMatrix({
             </tr>
             <tr className="matrix-header-leaf-row">
               {visibleMatrix.time_columns.map((column) => (
-                <th key={column.id} scope="col">{column.label}{resizeHandle(column.id, `${column.group_label} ${column.label}`, column.width)}</th>
+                <th key={column.id} scope="col">{matrix.subsidiary && !matrix.head_site && column.kind === "USED" ? <button type="button" className="week-heading" title="Показать остаток на конец этой недели" aria-pressed={(stockWeeks[column.group_label] ?? matrix.time_columns.filter(c => c.group_label === column.group_label && c.kind === "USED").at(-1)?.id) === column.id} onClick={() => { setSubsidiaryMonth(column.group_label); setStockWeeks(current => ({ ...current, [column.group_label]: column.id })); }}>Расход<br />{column.label}</button> : column.label}{resizeHandle(column.id, `${column.group_label} ${column.label}`, column.width)}</th>
               ))}
             </tr>
           </thead>
@@ -581,9 +617,10 @@ export function ReportMatrix({
                     {row.left_values[matrix.left_columns[0].id]}
                   </th>
                 )}
-                {leftColumns.slice(1).map((column, leftIndex) => (
+                {leftColumns.slice(1).map((column, leftIndex) => column.shared && !spans.has(rowIndex) ? null : (
                   <th
                     key={column.id}
+                    rowSpan={column.shared ? spans.get(rowIndex) : undefined}
                     className="sticky-left matrix-indicator-cell"
                     style={{
                       left: offsets[leftIndex + 1],
@@ -592,10 +629,11 @@ export function ReportMatrix({
                     scope="row"
                   >
                     <span>{row.left_values[column.id]}</span>
-                    {leftIndex === 0 && row.category && row.category !== "UNSPECIFIED" && (
+                    {matrix.subsidiary && column.id === "party" && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button supplier-remove" title="Убрать производителя" aria-label="Убрать производителя" disabled={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} onClick={() => void removeSupplier(row.workspace_id!, row.supplier_id!)}>×</button>}
+                    {(matrix.subsidiary ? column.id === "position" : leftIndex === 0) && row.category && row.category !== "UNSPECIFIED" && (
                       <small className="position-category">{CATEGORY_LABELS[row.category] ?? row.category}</small>
                     )}
-                    {leftIndex === 0 && row.image && (
+                    {(matrix.subsidiary ? column.id === "position" : leftIndex === 0) && row.image && (
                       <img className="matrix-position-image" src={row.image} alt={`Изображение: ${row.group_label}`} />
                     )}
                     {leftIndex === matrix.left_columns.length - 2 &&
@@ -613,13 +651,17 @@ export function ReportMatrix({
                 ))}
                 {row.cells.map((cell, columnIndex) => {
                   if (!visibleSet.has(columnIndex)) return null;
+                  const shared = sharedColumn(columnIndex);
+                  if (shared && !spans.has(rowIndex)) return null;
                   const position = { row: rowIndex, column: columnIndex };
                   const isEditing =
                     editing?.row === rowIndex && editing.column === columnIndex;
                   return (
                     <td
                       key={cell.column_id}
-                      className={isEditing ? "matrix-value-cell is-editing" : "matrix-value-cell"}
+                      rowSpan={shared ? spans.get(rowIndex) : undefined}
+                      data-shared={shared ? "detail" : undefined}
+                      className={`${isEditing ? "matrix-value-cell is-editing" : "matrix-value-cell"} ${cell.tone === "deficit" ? "is-deficit" : ""}`}
                       style={{ width: timeColumns[columnIndex]?.width }}
                     >
                       {isEditing ? (
@@ -632,7 +674,7 @@ export function ReportMatrix({
                         />
                       ) : (
                         <ReportCellView
-                          cell={cell}
+                          cell={matrix.subsidiary && matrix.time_columns[columnIndex]?.kind === "STOCK" && row.stock_by_week?.[stockWeeks[cell.column_id.slice(0, 7)] ?? ""] ? { ...cell, value: row.stock_by_week[stockWeeks[cell.column_id.slice(0, 7)]!]! } : cell}
                           position={position}
                           active={active.row === rowIndex && active.column === columnIndex}
                           onActivate={setActive}
@@ -652,19 +694,16 @@ export function ReportMatrix({
       {importPreview !== null && (
         <div className="excel-dialog-backdrop" role="presentation">
           <section
-            className="excel-dialog"
+            className={importPreview.reference_workbook ? "excel-dialog excel-transfer-dialog" : "excel-dialog"}
             role="dialog"
             aria-modal="true"
             aria-labelledby="excel-preview-title"
           >
             <h3 id="excel-preview-title">Проверка импорта Excel</h3>
             <p className="excel-file-name">{importPreview.file_name}</p>
-            {importPreview.reference_workbook && <>
-              <p>Будет сохранён отдельный отчёт с исходными месяцами, неделями и формулами. Он появится в списке «Сохранённые отчёты Excel» выбранной организации.</p>
-              {importPreview.reference_workbook.warnings.map(w => <p key={w} className="reference-warning">{w}</p>)}
-              {importPreview.reference_workbook.sheets.map(sheet => <div key={sheet.name}><h3>{sheet.name}</h3><ReferenceGrid sheet={sheet} /></div>)}
-              {importPreview.already_imported && <button onClick={() => { window.dispatchEvent(new CustomEvent("reference-report-imported", { detail: { id: importPreview.reference_workbook!.id } })); setImportPreview(null); }}>Открыть сохранённый отчёт</button>}
-            </>}
+            {importPreview.reference_workbook && <ReferenceTransfer
+              book={importPreview.reference_workbook} matrix={matrix} gateway={gateway}
+              onReady={setImportPreview} />}
             <div className="excel-preview-counts">
               <span><strong>{importPreview.new_count ?? 0}</strong> новых</span>
               <span><strong>{importPreview.changed_count ?? 0}</strong> изменённых</span>
@@ -700,6 +739,7 @@ export function ReportMatrix({
                 className="button primary"
                 type="button"
                 disabled={
+                  !!importPreview.reference_workbook ||
                   excelBusy === "commit" ||
                   (importPreview.error_count ?? 0) > 0 ||
                   importPreview.already_imported

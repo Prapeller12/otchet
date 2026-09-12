@@ -120,7 +120,64 @@ def test_verification_migration_from_dev7(tmp_path: Path) -> None:
     connection = connect_sqlite(tmp_path / "old.db")
     try:
         apply_migrations(connection, old)
-        assert apply_migrations(connection, ROOT / "backend/migrations") == ("0008", "0009")
+        assert apply_migrations(connection, ROOT / "backend/migrations") == (
+            "0008",
+            "0009",
+            "0010",
+            "0011",
+        )
         assert apply_migrations(connection, ROOT / "backend/migrations") == ()
     finally:
         connection.close()
+
+
+def test_daily_pdf_separates_pki_and_component_summary(
+    app: WorkingReferenceApplicationBridge, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import copy
+    import importlib
+
+    from backend.infrastructure.monthly_pdf import render_monthly_pdf
+
+    snap = monthly_snapshot(data(app.get_report_matrix(QUERY)), 2, "Завод")
+    source = snap["rows"][:3]
+    rows = []
+    for group, category, label in [
+        ("pki-a", "PKI", "ПКИ Альфа"),
+        ("part", "PART", "Крыло"),
+        ("pki-b", "PKI", "ПКИ Бета"),
+    ]:
+        for original in source:
+            row = copy.deepcopy(original)
+            row.update(group_id=group, category=category, position=label, party="Общество А")
+            rows.append(row)
+    snap["rows"] = rows
+    module = importlib.import_module("reportlab.pdfgen.canvas")
+    original_canvas = module.Canvas
+    drawn: list[str] = []
+
+    class RecordingCanvas(original_canvas):  # type: ignore[misc,valid-type]
+        def drawString(self, x: float, y: float, text: str, *args: Any, **kwargs: Any) -> None:
+            drawn.append(text)
+            super().drawString(x, y, text, *args, **kwargs)
+
+        def drawCentredString(
+            self, x: float, y: float, text: str, *args: Any, **kwargs: Any
+        ) -> None:
+            drawn.append(text)
+            super().drawCentredString(x, y, text, *args, **kwargs)
+
+    monkeypatch.setattr(module, "Canvas", RecordingCanvas)
+    pdf = render_monthly_pdf(
+        snap,
+        {"status": "UNVERIFIED", "snapshot_sha256": "test"},
+        ROOT / "resources/fonts/ReportingSerif.ttf",
+    )
+    assert pdf.startswith(b"%PDF")
+    index = drawn.index("Составные части дочерних обществ — месячная сводка")
+    summary = " ".join(drawn[index:])
+    assert "Общество А / Крыло" in summary
+    assert "ПКИ Альфа" not in summary and "ПКИ Бета" not in summary
+    headers = [t for t in drawn if "2024 |" in t]
+    assert "ПКИ — движение и остатки" in headers[0]
+    assert any("Составные части дочерних обществ — движение и остатки" in t for t in headers)

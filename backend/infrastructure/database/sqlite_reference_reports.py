@@ -22,7 +22,9 @@ class ReferenceReports:
     def __init__(self, database: Path) -> None:
         self.database = database
 
-    def stage(self, source: Path, organization: int) -> dict[str, Any]:
+    def stage(
+        self, source: Path, organization: int, *, allow_errors: bool = False
+    ) -> dict[str, Any]:
         if source.suffix.lower() != ".xlsx" or not 0 < source.stat().st_size <= 50 * 1024 * 1024:
             raise ValueError("Нужна книга .xlsx размером до 50 МБ")
         content = source.read_bytes()
@@ -33,10 +35,10 @@ class ReferenceReports:
                 (organization, digest),
             ).fetchone()
             if old:
-                result = self.get(old[0], organization, staged=True)
+                result = self.get(old[0], organization, staged=True, original=allow_errors)
                 return self.preview(result, already=bool(old[1]))
             doc = read_reference(content)
-            if doc["errors"]:
+            if doc["errors"] and not allow_errors:
                 raise ValueError("Не удалось проверить формулы: " + "; ".join(doc["errors"][:5]))
             identity = uuid4().hex
             conn.execute(
@@ -111,7 +113,9 @@ class ReferenceReports:
                 )
             ]
 
-    def get(self, identity: str, organization: int, *, staged: bool = False) -> dict[str, Any]:
+    def get(
+        self, identity: str, organization: int, *, staged: bool = False, original: bool = False
+    ) -> dict[str, Any]:
         with closing(connect_sqlite(self.database)) as conn:
             row = conn.execute(
                 "SELECT file_name,sha256,document,committed FROM "
@@ -124,8 +128,8 @@ class ReferenceReports:
             revision = 0
             for saved_revision, changes in conn.execute(
                 "SELECT revision,changes FROM reference_workbook_revisions WHERE "
-                "workbook_id=? ORDER BY revision",
-                (identity,),
+                "workbook_id=? AND ? = 0 ORDER BY revision",
+                (identity, int(original)),
             ):
                 revision = saved_revision
                 for change in json.loads(changes):

@@ -66,7 +66,7 @@ export function PositionFieldsEditor({ value, presets = [], onChange, onBusyChan
         if (index >= 0) edit(index, { formula });
       }} />
       {value.indicators.map((item, index) => <div className="field-indicator" key={index}>
-        <label>Название показателя<input value={item.label} onChange={(event) => edit(index, { label: event.target.value })} /></label>
+        <label>Название показателя<input placeholder="Введите название показателя" value={item.label} onChange={(event) => edit(index, { label: event.target.value })} /></label>
         <p className="calculation-description">{item.formula.startsWith("=BALANCE(") ? "Начальный остаток + получено − использовано, накопительно" : item.formula ? presets.find((preset) => preset.indicators.some((candidate) => candidate.code === item.code && candidate.formula === item.formula))?.label ?? "Пользовательский расчёт" : "Ввод вручную"}</p>
         <details className="advanced-formula"><summary>Расширенная настройка формулы</summary>
           <label>Код для формул<input value={item.code} readOnly title="Постоянный код сохраняет связь с ранее введёнными данными" /></label>
@@ -83,7 +83,7 @@ export function PositionFieldsEditor({ value, presets = [], onChange, onBusyChan
       <div className="compact-actions">
         <button type="button" className="button secondary" disabled={value.indicators.length >= 40} onClick={() => {
           const code = `FIELD_${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
-          onChange({ ...value, indicators: [...value.indicators, { code, label: "Новый показатель", formula: "" }] });
+          onChange({ ...value, indicators: [...value.indicators, { code, label: "", formula: "" }] });
         }}>+ Показатель</button>
       </div>
       <p className="field-help">Готовые комплекты внизу отчёта — наименьшая обеспеченность среди позиций, для которых включён расчёт комплектности. Пустая норма означает, что комплектность пока не рассчитана.</p>

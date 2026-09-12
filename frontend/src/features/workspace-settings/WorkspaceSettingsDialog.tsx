@@ -1,3 +1,4 @@
+import { SubsidiaryDetailEditor } from "./SubsidiaryDetailEditor";
 import { useEffect, useMemo, useState } from "react";
 
 import type {
@@ -38,8 +39,8 @@ function newRow(layout: ReportLayoutContract): ReportLayoutRow | null {
   return {
     id: null,
     template_group_id: template.id,
-    party_name: "Изготовитель/поставщик",
-    position_name: template.label,
+    party_name: "",
+    position_name: "",
     configuration: { category: "UNSPECIFIED", image: "", norm: "", opening: "", indicators: template.indicators ?? [] },
   };
 }
@@ -169,6 +170,17 @@ export function WorkspaceSettingsDialog({
   }
 
   async function saveLayout(): Promise<void> {
+    for (const [index, row] of rows.entries()) {
+      if (!row.position_name.trim() || !row.party_name.trim()) {
+        setError(`Строка ${index + 1}: укажите наименование и производителя.`); return;
+      }
+      if (row.configuration?.subsidiary?.suppliers.some(s => !s.archived && !s.name.trim())) {
+        setError(`Строка ${index + 1}: укажите наименование каждого производителя.`); return;
+      }
+      if (row.configuration?.indicators.some(i => !i.label.trim())) {
+        setError(`Строка ${index + 1}: укажите название показателя.`); return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -262,6 +274,11 @@ export function WorkspaceSettingsDialog({
               <>
                 <div className="layout-list-header">
                   <strong>Строки рабочего поля</strong>
+                  {reportType === "DAILY_MOVEMENT" && <button type="button" className="button secondary" onClick={() => {
+                    const template = layout.templates.find(t => t.group_kind === "COMPONENT_POSITION");
+                    if (template) setRows(current => [...current, { id: null, template_group_id: template.id, party_name: "", position_name: "", configuration: { category: "PART", image: "", norm: "", opening: "", indicators: template.indicators ?? [] } }]);
+                  }}>+ Расход составной части</button>}
+
                   <button
                     className="button secondary"
                     type="button"
@@ -270,14 +287,14 @@ export function WorkspaceSettingsDialog({
                       if (row !== null) setRows((current) => [...current, row]);
                     }}
                   >
-                    + Добавить строку
+                    {reportType === "SUBSIDIARY" ? "+ Добавить деталь" : "+ Добавить строку"}
                   </button>
                 </div>
                 <div className="layout-row-list">
                   {rows.length === 0 && (
                     <div className="settings-empty">Добавьте первую строку отчёта.</div>
                   )}
-                  {rows.map((row, index) => (
+                  {rows.map((row, index) => (reportType === "SUBSIDIARY" || reportType === "HEAD_SITE") ? <SubsidiaryDetailEditor key={row.id ?? `new-${index}`} row={row} linkOptions={reportType === "HEAD_SITE" ? organizations.filter(o => o.kind === "SUBSIDIARY") : undefined} usedLinks={rows.filter((_, i) => i !== index).flatMap(r => r.configuration?.head_links ?? [])} onBusy={setSaving} disabled={saving} onChange={next => updateRow(index, next)} onRemove={() => setRows(current => current.filter((_, i) => i !== index))} onMove={direction => moveRow(index, direction)} /> : (
                     <fieldset disabled={saving} className="layout-row-editor" key={row.id ?? `new-${index}`}>
                       <label>Категория позиции<select aria-label="Категория позиции" value={row.configuration?.category ?? "UNSPECIFIED"} onChange={(event) => updateRow(index, { configuration: { image: "", norm: "", opening: "", indicators: [], ...row.configuration, category: event.target.value } })}>
                         {Object.entries(CATEGORY_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}
