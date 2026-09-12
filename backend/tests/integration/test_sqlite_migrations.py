@@ -66,6 +66,8 @@ def test_migrations_apply_to_empty_database_and_are_idempotent(tmp_path: Path) -
             "0007",
             "0008",
             "0009",
+            "0010",
+            "0011",
         )
         assert apply_migrations(connection, MIGRATIONS) == ()
 
@@ -637,6 +639,8 @@ def test_non_prefix_migration_history_is_rejected(tmp_path: Path) -> None:
             "0007",
             "0008",
             "0009",
+            "0010",
+            "0011",
         )
         connection.execute("DELETE FROM schema_migrations WHERE version = '0001'")
         connection.commit()

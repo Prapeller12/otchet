@@ -65,7 +65,7 @@ export function ReportCellView({
       }}
       onKeyDown={(event) => onKeyDown(event, position)}
     >
-      <span className="cell-value">{displayValue(cell.value)}</span>
+      <span className="cell-value">{cell.issue?.code === "MISSING_INPUT" ? "Заполните" : displayValue(cell.value)}</span>
       <span className="cell-markers" aria-hidden="true">
         {cell.state.access === "locked" && (
           <span className="cell-marker marker-locked">Б</span>

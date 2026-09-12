@@ -114,3 +114,31 @@ it("requests backend draft calculation before save and retains both dirty inputs
   expect(screen.getByRole("button", { name: "Сохранить (2)" })).toBeEnabled();
   expect(save).not.toHaveBeenCalled();
 });
+
+it("merges subsidiary totals and navigates between visible detail cells", async () => {
+  const initial = calendar();
+  initial.subsidiary = true;
+  initial.presentation = { plans: {} };
+  initial.time_columns[0]!.kind = "STOCK";
+  initial.time_columns[1]!.kind = "USED";
+  initial.time_columns[1]!.group_label = "2026-01";
+  initial.rows = initial.rows.map((row, index) => ({
+    ...row, group_id: index < 2 ? "detail-a" : "detail-b",
+    cells: row.cells.map((cell, column) => ({
+      ...cell,
+      state: { access: column === 0 ? "calculated" : "editable", persistence: "saved" },
+      value: { kind: "QUANTITY", quantity: String(index === 0 ? 120 : index === 1 ? 999 : 77) },
+    })),
+  }));
+  show(new DemoGateway(), initial);
+  const shared = document.querySelectorAll('td[data-shared="detail"]');
+  expect(shared).toHaveLength(2);
+  expect(shared[0]).toHaveAttribute("rowspan", "2");
+  expect(screen.queryByRole("button", { name: "значение 999, расчётная ячейка" })).toBeNull();
+  const first = screen.getByRole("button", { name: "значение 120, расчётная ячейка" });
+  const next = screen.getByRole("button", { name: "значение 77, расчётная ячейка" });
+  fireEvent.keyDown(first, { key: "ArrowDown" });
+  expect(next).toHaveFocus();
+  fireEvent.keyDown(next, { key: "ArrowUp" });
+  expect(first).toHaveFocus();
+});

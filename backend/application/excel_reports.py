@@ -204,6 +204,63 @@ class ExcelReportService:
         )
         return _preview(batch)
 
+    def stage_transfer(
+        self,
+        *,
+        source_document: dict[str, object],
+        report_type: str,
+        organization_id: int,
+        changes: list[dict[str, object]],
+    ) -> dict[str, object]:
+        """Persist a checked mapping as a normal fact import, preserving source provenance."""
+        source_hash = str(source_document["sha256"])
+        previous = self._imports.find_committed_source(
+            report_type=report_type,
+            organization_id=organization_id,
+            source_sha256=source_hash,
+        )
+        if previous is not None:
+            return _preview(previous, already_imported=True).to_dict()
+        current = {
+            _coordinate_json(item.coordinate): item
+            for item in self._report_cells.get_cells(
+                report_type=report_type,
+                organization_id=str(organization_id),
+            )
+        }
+        rows = []
+        for change in changes:
+            coordinate = ReportCellCoordinate.from_mapping(
+                cast(Mapping[str, object], change["coordinate"])
+            )
+            value = ReportCellValue.from_mapping(cast(Mapping[str, object], change["value"]))
+            key = _coordinate_json(coordinate)
+            old = current.get(key)
+            rows.append(
+                ImportRowDraft(
+                    source_cell=str(change["source_cell"]),
+                    coordinate_json=key,
+                    classification=_classification(old.value if old else None, value),
+                    value_kind=value.kind,
+                    quantity=value.quantity,
+                    expected_revision=None if old is None else old.revision,
+                )
+            )
+        batch = self._imports.add_batch(
+            ImportBatchDraft(
+                id=uuid4().hex,
+                report_type=report_type,
+                organization_id=organization_id,
+                source_file_name=str(source_document["file_name"]),
+                source_sha256=source_hash,
+                stored_relative_path="reference:" + str(source_document["id"]),
+                status="STAGED",
+                rows=tuple(rows),
+                issues=(),
+            )
+        )
+        return _preview(batch).to_dict()
+
     def commit_import(
         self, batch_id: str, *, allowed_coordinates: Callable[[str, str], set[str]]
     ) -> dict[str, object]:

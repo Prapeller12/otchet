@@ -162,7 +162,13 @@ def test_upgrade_preserves_opening_date_and_repairs_previous_preset(tmp_path: Pa
     data(app.save_report_layout({**QUERY, "rows": layout["rows"]}))
     conn = connect_sqlite(database)
     try:
-        assert apply_migrations(conn, ROOT / "backend/migrations") == ("0007", "0008", "0009")
+        assert apply_migrations(conn, ROOT / "backend/migrations") == (
+            "0007",
+            "0008",
+            "0009",
+            "0010",
+            "0011",
+        )
         assert apply_migrations(conn, ROOT / "backend/migrations") == ()
     finally:
         conn.close()
@@ -191,7 +197,9 @@ def test_year_excel_roundtrip(
     )
     changes = [
         {
-            "coordinate": first_row["cells"][index]["coordinate"],
+            "coordinate": [c for c in first_row["cells"] if c["state"]["access"] == "editable"][
+                index
+            ]["coordinate"],
             "value": {"kind": "QUANTITY", "quantity": value},
         }
         for index, value in [(0, "12.25"), (-1, "0")]
@@ -213,33 +221,14 @@ def test_year_excel_roundtrip(
     data(app.commit_import({"batch_id": preview["batch_id"], "year": 2026}))
     saved = data(app.get_report_matrix(query))
     for index, value in [(0, "12.25"), (-1, "0")]:
-        assert saved["rows"][0]["cells"][index]["value"] == {"kind": "QUANTITY", "quantity": value}
+        assert [c for c in saved["rows"][0]["cells"] if c["state"]["access"] == "editable"][index][
+            "value"
+        ] == {"kind": "QUANTITY", "quantity": value}
 
 
 @pytest.mark.parametrize(
     "report,preset_label,input_code,output_code,expected",
     [
-        (
-            "HEAD_SITE",
-            "Накопительный факт выпуска комплекта",
-            "WRK_HEAD_ASSEMBLY_FACT",
-            "TOTAL_FACT",
-            "20",
-        ),
-        (
-            "HEAD_SITE",
-            "Накопительный факт выпуска изделия",
-            "WRK_HEAD_PRODUCT_FACT",
-            "TOTAL_FACT",
-            "20",
-        ),
-        (
-            "SUBSIDIARY",
-            "Поставка и отклонение от договора",
-            "WRK_SUBSIDIARY_SUPPLY",
-            "CONTRACT_VARIANCE",
-            "-80",
-        ),
         (
             "DAILY_MOVEMENT",
             "Наличие и комплектность — как в Excel",

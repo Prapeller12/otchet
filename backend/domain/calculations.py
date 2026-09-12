@@ -122,6 +122,22 @@ def calculate_stock(
     return balance
 
 
+def calculate_component_consumption(
+    actual_product_quantity: QuantityValue,
+    quantity_per_product: Decimal,
+) -> QuantityValue:
+    """Actual finished output × BOM quantity; missing output remains missing."""
+
+    if not isinstance(actual_product_quantity, QuantityValue):
+        raise TypeError("actual_product_quantity must be QuantityValue")
+    _require_positive_decimal("quantity_per_product", quantity_per_product)
+    actual = actual_product_quantity.value
+    if actual is None:
+        return QuantityValue.data_not_provided()
+    _require_non_negative_decimal("actual_product_quantity", actual)
+    return QuantityValue.confirmed(_multiply_exact(actual, quantity_per_product))
+
+
 def calculate_required_quantity(
     product_plan_quantity: Decimal,
     quantity_per_product: Decimal,

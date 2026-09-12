@@ -14,3 +14,11 @@
 .excel-dialog .reference-scroll { max-height: 40vh; }
 .reference-selector { display: flex; align-items: center; gap: 8px; padding: 8px 20px; }
 .reference-selector select { min-height: 44px; max-width: 65vw; }
+.transfer-table { border-collapse: collapse; width: 100%; min-width: 950px; }
+.transfer-table td, .transfer-table th { border: 1px solid #ccc; padding: 8px; vertical-align: top; }
+.transfer-table input:not([type=checkbox]), .transfer-table select { min-height: 40px; max-width: 280px; width: 100%; }
+.transfer-table label { display: block; }
+.transfer-table small { display: block; color: #912323; }
+.transfer-invalid { background: #fff0df; }
+
+.excel-dialog.excel-transfer-dialog { width: min(1500px, 96vw); }

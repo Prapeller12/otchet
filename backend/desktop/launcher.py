@@ -20,6 +20,7 @@ from typing import Any
 from backend.api.working_reference_bridge import WorkingReferenceApplicationBridge
 from backend.desktop.application_self_test import (
     prepare_reference_window_test,
+    prepare_subsidiary_window_test,
     run_application_self_test,
 )
 from backend.desktop.database_bootstrap import backup_and_migrate
@@ -85,6 +86,7 @@ def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
 
     if ui_self_test:
         prepare_reference_window_test(paths.database, paths.temp)
+        prepare_subsidiary_window_test(bridge)
 
     webview.settings["ALLOW_DOWNLOADS"] = False
     webview.settings["ALLOW_FILE_URLS"] = False

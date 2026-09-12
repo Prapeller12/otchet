@@ -40,7 +40,7 @@ describe("configurable position fields", () => {
     await user.click(screen.getByRole("button", { name: "+ Показатель" }));
     expect(screen.getAllByLabelText("Название показателя")).toHaveLength(5);
     await user.click(screen.getAllByRole("button", { name: "Показатель выше" })[4]!);
-    expect(screen.getAllByLabelText("Название показателя")[3]).toHaveValue("Новый показатель");
+    expect(screen.getAllByLabelText("Название показателя")[3]).toHaveValue("");
     await user.click(screen.getAllByRole("button", { name: "Убрать показатель" })[3]!);
     await user.click(screen.getByRole("button", { name: "Убрать изображение" }));
     expect(changed.mock.lastCall?.[0]).toMatchObject({ norm: "3", opening: "71", image: "" });

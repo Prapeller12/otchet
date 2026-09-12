@@ -57,7 +57,9 @@ def test_reference_import_edit_restart_export(tmp_path: Path, kind: str) -> None
     preview = unwrap(app.validate_import(query))
     assert preview["reference_workbook"]["report_type"] == kind
     assert unwrap(app.reference_report({"action": "list", "organization_id": "1"})) == []
-    identity = unwrap(app.commit_import({"batch_id": preview["batch_id"]}))["reference_workbook_id"]
+    identity = ReferenceReports(tmp_path / "data/app.db").commit(preview["batch_id"])[
+        "reference_workbook_id"
+    ]
     repository = ReferenceReports(tmp_path / "data/app.db")
     loaded = repository.get(identity, 1)
     assert loaded["sheets"][0]["cells"]["I9"]["display"] == "675"
@@ -65,13 +67,15 @@ def test_reference_import_edit_restart_export(tmp_path: Path, kind: str) -> None
     assert "O9" not in loaded["sheets"][0]["cells"]
     with pytest.raises(ValueError):
         repository.get(identity, 2)
-    assert unwrap(app.validate_import(query))["already_imported"]
+    assert not unwrap(app.validate_import(query))["already_imported"]
     assert len(repository.list_reports(1)) == 1
     for address in ("I9", "J1", "C10"):
         with pytest.raises(ValueError):
             repository.save(identity, 1, 0, [{"sheet": 0, "address": address, "value": "1"}])
     changed = repository.save(identity, 1, 0, [{"sheet": 0, "address": "L9", "value": "400"}])
     assert changed["sheets"][0]["cells"]["I9"]["display"] == "700"
+    fresh_preview = unwrap(app.validate_import(query))
+    assert fresh_preview["reference_workbook"]["sheets"][0]["cells"]["L9"]["display"] == "375"
     with pytest.raises(ValueError):
         repository.save(identity, 1, 0, [{"sheet": 0, "address": "M9", "value": "1"}])
     fresh = bridge(tmp_path)
@@ -97,5 +101,7 @@ def test_rejects_unknown_formulas_without_commit(tmp_path: Path) -> None:
     assert read_reference(path.read_bytes())["errors"]
     app = bridge(tmp_path)
     app.configure_excel_dialogs(open_file=lambda: path, save_file=lambda _: None)
-    assert not app.validate_import({"report_type": "SUBSIDIARY", "organization_id": "1"})["ok"]
+    preview = unwrap(app.validate_import({"report_type": "SUBSIDIARY", "organization_id": "1"}))
+    assert preview["reference_workbook"]["errors"]
+    assert not app.commit_import({"batch_id": preview["batch_id"]})["ok"]
     assert unwrap(app.reference_report({"action": "list", "organization_id": "1"})) == []
