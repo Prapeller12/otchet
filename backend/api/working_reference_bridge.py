@@ -1298,9 +1298,7 @@ class WorkingReferenceApplicationBridge:
         templates: tuple[WorkspaceGroupTemplate, ...],
         groups: tuple[WorkspaceGroup, ...],
     ) -> dict[str, object]:
-        repeatable = {
-            template.template_group_id: template for template in templates if template.repeatable
-        }
+        configurable = {template.template_group_id: template for template in templates}
         with (self._definitions_directory / "presets" / "field-presets.v1.json").open(
             encoding="utf-8"
         ) as stream:
@@ -1314,9 +1312,10 @@ class WorkingReferenceApplicationBridge:
                     "id": template.template_group_id,
                     "label": template.default_position_name,
                     "group_kind": template.group_kind,
+                    "repeatable": template.repeatable,
                     "indicators": self._default_indicators(report_type, template.template_group_id),
                 }
-                for template in repeatable.values()
+                for template in configurable.values()
             ],
             "rows": [
                 {
@@ -1327,7 +1326,7 @@ class WorkingReferenceApplicationBridge:
                     "configuration": self._field_configuration(report_type, group),
                 }
                 for group in groups
-                if group.template_group_id in repeatable
+                if group.template_group_id in configurable
             ],
         }
 

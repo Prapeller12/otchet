@@ -34,7 +34,7 @@ function errorMessage(reason: unknown): string {
 }
 
 function newRow(layout: ReportLayoutContract): ReportLayoutRow | null {
-  const template = layout.templates[0];
+  const template = layout.templates.find(item => item.repeatable !== false);
   if (template === undefined) return null;
   return {
     id: null,
@@ -302,10 +302,11 @@ export function WorkspaceSettingsDialog({
                       <label>Набор строк
                       <select
                         aria-label="Тип строки"
+                        disabled={layout.templates.find(t => t.id === row.template_group_id)?.repeatable === false}
                         value={row.template_group_id}
                         onChange={(event) => updateRow(index, { template_group_id: event.target.value, configuration: { category: "UNSPECIFIED", image: "", norm: "", opening: "", ...row.configuration, indicators: layout.templates.find((item) => item.id === event.target.value)?.indicators ?? [] } })}
                       >
-                        {layout.templates.map((template) => (
+                        {layout.templates.filter(t => t.repeatable !== false || t.id === row.template_group_id).map((template) => (
                           <option key={template.id} value={template.id}>{template.label}</option>
                         ))}
                       </select>
@@ -323,13 +324,17 @@ export function WorkspaceSettingsDialog({
                         placeholder="Позиция"
                         onChange={(event) => updateRow(index, { position_name: event.target.value })}
                       />
-                      <div className="row-actions">
+                      {layout.templates.find(t => t.id === row.template_group_id)?.repeatable !== false && <div className="row-actions">
                         <button type="button" className="mini-button" onClick={() => setRows((current) => [...current, { ...row, id: null, position_name: `${row.position_name} — копия` }])}>Копировать позицию</button>
                         <button type="button" className="mini-button" onClick={() => moveRow(index, -1)} aria-label="Переместить выше">↑ Выше</button>
                         <button type="button" className="mini-button" onClick={() => moveRow(index, 1)} aria-label="Переместить ниже">↓ Ниже</button>
                         <button type="button" className="mini-button remove" onClick={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))} aria-label="Убрать строку">Убрать строку</button>
-                      </div>
-                      {row.configuration && <PositionFieldsEditor value={row.configuration} presets={layout.presets ?? []} onBusyChange={setSaving} onChange={(configuration) => updateRow(index, { configuration })} />}
+                      </div>}
+                      {row.configuration && layout.templates.find(t => t.id === row.template_group_id)?.repeatable === false && <div className="fixed-block-labels">
+                        <p>Итоговый блок: названия можно изменить, значения рассчитываются автоматически.</p>
+                        {row.configuration.indicators.map((indicator, i) => <label key={indicator.code}>Название показателя<input value={indicator.label} onChange={event => updateRow(index, { configuration: { ...row.configuration!, indicators: row.configuration!.indicators.map((item, j) => j === i ? { ...item, label: event.target.value } : item) } })} /></label>)}
+                      </div>}
+                      {row.configuration && layout.templates.find(t => t.id === row.template_group_id)?.repeatable !== false && <PositionFieldsEditor value={row.configuration} presets={layout.presets ?? []} onBusyChange={setSaving} onChange={(configuration) => updateRow(index, { configuration })} />}
                     </fieldset>
                   ))}
                 </div>

@@ -186,6 +186,7 @@ export type OrganizationResult = {
 };
 
 export type ReportLayoutTemplate = {
+  repeatable?: boolean;
   id: string;
   label: string;
   group_kind: string;

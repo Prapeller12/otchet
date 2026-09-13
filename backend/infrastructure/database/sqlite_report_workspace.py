@@ -329,8 +329,18 @@ class SqliteReportWorkspaceRepository:
             configurations = {int(row[0]): str(row[2]) for row in existing_rows}
             for sort_order, draft in enumerate(drafts):
                 template = template_map.get(draft.template_group_id)
-                if template is None or not template.repeatable:
+                if template is None:
                     raise ValueError("Неизвестный тип настраиваемой строки")
+                old_template = (
+                    template_map.get(existing.get(draft.id, "")) if draft.id is not None else None
+                )
+                if not template.repeatable or (
+                    old_template is not None and not old_template.repeatable
+                ):
+                    if draft.id is None or existing.get(draft.id) != draft.template_group_id:
+                        raise ValueError(
+                            "Итоговый блок нельзя копировать или заменять другим типом"
+                        )
                 party_name = _name(draft.party_name)
                 position_name = _name(draft.position_name)
                 if draft.id is None:
@@ -346,11 +356,7 @@ class SqliteReportWorkspaceRepository:
                     )
                     retained.add(group_id)
                     continue
-                if (
-                    draft.id not in existing
-                    or draft.id in retained
-                    or not template_map[existing[draft.id]].repeatable
-                ):
+                if draft.id not in existing or draft.id in retained:
                     raise ValueError("Строка не принадлежит выбранной форме")
                 if (
                     report_type in {"SUBSIDIARY", "HEAD_SITE"}
