@@ -353,7 +353,7 @@ def test_workspace_bridge_configures_multiple_organizations_and_report_rows(
     layout = cast(dict[str, Any], layout_response["data"])
     rows = cast(list[dict[str, Any]], layout["rows"])
     templates = cast(list[dict[str, Any]], layout["templates"])
-    assert len(rows) == 3
+    assert len(rows) == 4
 
     edited = {**rows[0], "party_name": "Поставщик А", "position_name": "ПКИ-101"}
     added = {
@@ -374,6 +374,7 @@ def test_workspace_bridge_configures_multiple_organizations_and_report_rows(
     assert [row["position_name"] for row in cast(list[dict[str, Any]], saved_layout["rows"])] == [
         "ПКИ-101",
         "ПКИ-202",
+        "Склад и комплектность",
     ]
 
     matrix_response = bridge.get_report_matrix(

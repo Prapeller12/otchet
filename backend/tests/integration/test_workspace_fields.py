@@ -511,3 +511,43 @@ def test_all_twelve_source_positions_produce_23_and_30(
     matrix = data(app.get_report_matrix(QUERY))
     ready = next(row for row in matrix["rows"] if row["metric_code"] == "WRK_DAILY_READY_SETS")
     assert [cell["value"]["quantity"] for cell in ready["cells"][:2]] == ["23", "30"]
+
+
+def test_daily_summary_names_can_be_edited_without_changing_values(
+    app: WorkingReferenceApplicationBridge,
+) -> None:
+    layout = data(app.get_report_layout(QUERY))
+    block = next(
+        row for row in layout["rows"] if row["template_group_id"] == "wrk-daily-warehouse-group"
+    )
+    before = data(app.get_report_matrix({**QUERY, "year": 2026}))
+    block["party_name"] = "Склад завода"
+    block["position_name"] = "Комплектность изделия"
+    labels = ["Остаток изделий", "Доступно комплектов"]
+    for indicator, label in zip(block["configuration"]["indicators"], labels, strict=True):
+        indicator["label"] = label
+    data(app.save_report_layout({**QUERY, "rows": layout["rows"]}))
+    saved = data(app.get_report_layout(QUERY))
+    assert next(row for row in saved["rows"] if row["id"] == block["id"]) == block
+    after = data(app.get_report_matrix({**QUERY, "year": 2026}))
+    codes = {item["code"] for item in block["configuration"]["indicators"]}
+    old_rows = [row for row in before["rows"] if row["metric_code"] in codes]
+    new_rows = [row for row in after["rows"] if row["metric_code"] in codes]
+    assert len(old_rows) == len(new_rows) == 2
+    for old, new, label in zip(old_rows, new_rows, labels, strict=True):
+        assert new["cells"] == old["cells"]
+        assert "Комплектность изделия" in new["left_values"].values()
+        assert "Склад завода" in new["left_values"].values()
+        assert label in new["left_values"].values()
+    duplicate = {**block, "id": None}
+    assert not app.save_report_layout({**QUERY, "rows": [*saved["rows"], duplicate]})["ok"]
+    # Older clients which do not send the summary block must preserve it.
+    data(
+        app.save_report_layout(
+            {**QUERY, "rows": [row for row in saved["rows"] if row["id"] != block["id"]]}
+        )
+    )
+    assert (
+        next(row for row in data(app.get_report_layout(QUERY))["rows"] if row["id"] == block["id"])
+        == block
+    )
