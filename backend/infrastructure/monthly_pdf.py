@@ -8,6 +8,9 @@ import io
 from pathlib import Path
 from typing import Any
 
+from backend.application.monthly_report import snapshot_hash
+from backend.application.report_signature_caption import signature_caption
+
 MONTHS = (
     "январь",
     "февраль",
@@ -27,6 +30,11 @@ MONTHS = (
 def render_monthly_pdf(
     snapshot: dict[str, Any], verification: dict[str, Any], font_path: Path
 ) -> bytes:
+    verification = {
+        "status": "UNVERIFIED",
+        "snapshot_sha256": snapshot_hash(snapshot),
+        **verification,
+    }
     if snapshot.get("subsidiary"):
         from backend.infrastructure.subsidiary_pdf import render_subsidiary_pdf
 
@@ -99,18 +107,10 @@ def render_monthly_pdf(
             text(line, x + 3, y - 3 - (i + 1) * step, w - 6, size)
 
     def footer() -> None:
-        if verification["status"] == "VERIFIED":
-            status = (
-                f"Данные подтверждены: {verification['signer_name']} | "
-                f"{verification['signed_at']} (локальное подтверждение)"
-            )
-        elif verification["status"] == "STALE":
-            status = "Данные изменены после подтверждения. Требуется повторная проверка."
-        else:
-            status = "Данные не подтверждены"
-        text(status, margin, 28, usable - 80, 9)
+        first, second = signature_caption(verification)
+        text(first, margin, 28, usable - 80, 8)
         text(f"Лист {page}", width - 75, 28, 55, 9)
-        text(f"Версия данных SHA-256: {verification['snapshot_sha256']}", margin, 17, usable, 5.5)
+        text(second, margin, 17, usable, 7)
 
     def start_page(section: str) -> float:
         nonlocal page

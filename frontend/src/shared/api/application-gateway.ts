@@ -249,6 +249,8 @@ export type ApplicationError = {
 export interface ApplicationGateway {
   referenceReport?(request: ReferenceRequest): Promise<unknown>;
   exportPdf?(request: MonthlyReportQuery): Promise<ExportResult>;
+  listReportSigners?(): Promise<ReportSigner[]>;
+  createReportSigner?(request: CreateReportSignerRequest): Promise<ReportSigner>;
   getReportVerification?(request: MonthlyReportQuery): Promise<ReportVerification>;
   verifyReport?(request: VerifyReportRequest): Promise<ReportVerification>;
   readonly mode: "pywebview" | "demo";
@@ -270,11 +272,12 @@ export interface ApplicationGateway {
 
 export type MonthlyReportQuery = ExportRequest & { month: number; week_start?: string; expected_revision?: string };
 export type ReportVerification = {
-  status: "UNVERIFIED" | "VERIFIED" | "STALE";
+  status: "UNVERIFIED" | "VERIFIED" | "STALE" | "LEGACY" | "INVALID";
   snapshot_sha256: string; verified_sha256?: string;
   signer_name?: string; signed_at?: string;
+  signer_id?: string; key_fingerprint?: string; public_key?: string; signature?: string; algorithm?: "Ed25519";
 };
-export type VerifyReportRequest = MonthlyReportQuery & { signer_name: string; snapshot_sha256: string; confirmed: boolean };
+export type VerifyReportRequest = MonthlyReportQuery & { signer_id: string; pin: string; snapshot_sha256: string; confirmed: boolean };
 
 export type ReferenceCell = { value: string | null; kind: "n" | "s" | "f" | "d"; display: string; error?: string };
 export type ReferenceSheet = { name: string; rows: number; columns: number; merges: string[]; cells: Record<string, ReferenceCell> };
@@ -282,3 +285,6 @@ export type ReferenceWorkbook = { id: string; file_name: string; report_type: Re
 export type ReferenceSummary = Pick<ReferenceWorkbook, "id" | "file_name" | "report_type">;
 export type ReferenceRequest = {
   report_type?: ReportType; year?: number; mappings?: unknown[]; action: "list" | "get" | "save" | "export" | "transfer"; organization_id: string; id?: string; revision?: number; changes?: { sheet: number; address: string; value: string | null }[] };
+
+export type ReportSigner = { id: string; display_name: string; role: "admin" | "signer"; key_fingerprint: string; created_at: string };
+export type CreateReportSignerRequest = { display_name: string; pin: string; admin_id?: string; admin_pin?: string };

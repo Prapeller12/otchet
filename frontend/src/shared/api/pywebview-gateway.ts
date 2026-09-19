@@ -1,5 +1,5 @@
 import type {
-  ApplicationGateway, ReferenceRequest,
+  ApplicationGateway, ReferenceRequest, ReportSigner, CreateReportSignerRequest,
   MonthlyReportQuery, ReportVerification, VerifyReportRequest,
   CommitImportRequest,
   CommitImportResult,
@@ -29,6 +29,8 @@ type PyWebViewApi = {
   reference_report(request: ReferenceRequest): Promise<BridgeEnvelope>;
   export_pdf(request: MonthlyReportQuery): Promise<BridgeEnvelope>;
   get_report_verification(request: MonthlyReportQuery): Promise<BridgeEnvelope>;
+  list_report_signers(request: Record<string, never>): Promise<BridgeEnvelope>;
+  create_report_signer(request: CreateReportSignerRequest): Promise<BridgeEnvelope>;
   verify_report(request: VerifyReportRequest): Promise<BridgeEnvelope>;
   save_report_presentation(request: SaveReportPresentationRequest): Promise<BridgeEnvelope>;
   get_report_matrix(query: ReportMatrixQuery): Promise<BridgeEnvelope>;
@@ -103,6 +105,12 @@ export class PyWebViewGateway implements ApplicationGateway {
   }
   async getReportVerification(request: MonthlyReportQuery): Promise<ReportVerification> {
     return unwrap(await this.#api.get_report_verification(request)) as ReportVerification;
+  }
+  async listReportSigners(): Promise<ReportSigner[]> {
+    return unwrap(await this.#api.list_report_signers({})) as ReportSigner[];
+  }
+  async createReportSigner(request: CreateReportSignerRequest): Promise<ReportSigner> {
+    return unwrap(await this.#api.create_report_signer(request)) as ReportSigner;
   }
   async verifyReport(request: VerifyReportRequest): Promise<ReportVerification> {
     return unwrap(await this.#api.verify_report(request)) as ReportVerification;

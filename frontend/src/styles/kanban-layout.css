@@ -134,7 +134,8 @@ main { min-width: 0; padding: 12px 12px 16px; }
 .monthly-report-actions select { min-height: 40px; padding: 6px; margin-left: 8px; }
 .monthly-report-actions p { margin: 0; }
 .verification-form label { display: block; margin: 12px 0; }
-.verification-form input[type="text"] { width: 100%; min-height: 44px; padding: 8px; }
+.verification-form select { margin-left: 0; }
+.verification-form input[type="text"], .verification-form input[type="password"], .verification-form select { width: 100%; min-height: 44px; padding: 8px; }
 
 /* Subsidiary worksheet: fixed typography and one vertical settings flow. */
 .subsidiary-detail-editor.layout-row-editor { display: block; }

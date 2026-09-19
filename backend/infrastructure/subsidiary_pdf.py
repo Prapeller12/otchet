@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
+from backend.application.report_signature_caption import signature_caption
+
 
 def render_subsidiary_pdf(
     snapshot: dict[str, Any], verification: dict[str, Any], font_path: Path
@@ -205,14 +207,14 @@ def render_subsidiary_pdf(
 
     def footer(canvas: Any, doc: Any) -> None:
         canvas.saveState()
+        first, second = signature_caption(verification)
+        for line, y, available in ((first, 28, 726), (second, 17, 806)):
+            size = 8.0
+            measured = metrics.stringWidth(line, "SubsidiaryFont", size)
+            canvas.setFont("SubsidiaryFont", min(size, size * available / max(measured, 1)))
+            canvas.drawString(18, y, line)
         canvas.setFont("SubsidiaryFont", 9)
-        caption = (
-            f"Проверено: {verification.get('signer_name', '')}, {verification.get('signed_at', '')}"
-            if verification.get("status") == "VERIFIED"
-            else "Данные не подтверждены"
-        )
-        canvas.drawString(18, 24, caption)
-        canvas.drawRightString(824, 24, f"Лист {doc.page}")
+        canvas.drawRightString(824, 28, f"Лист {doc.page}")
         canvas.restoreState()
 
     document.build(story, onFirstPage=footer, onLaterPages=footer)

@@ -48,6 +48,7 @@ from backend.infrastructure.database.sqlite_reference_reports import ReferenceRe
 from backend.infrastructure.database.sqlite_report_cells import (
     SqliteReportCellUnitOfWorkFactory,
 )
+from backend.infrastructure.database.sqlite_report_signers import SqliteReportSignersRepository
 from backend.infrastructure.database.sqlite_report_verification import (
     SqliteReportVerificationRepository,
     database_stamp,
@@ -115,6 +116,7 @@ class WorkingReferenceApplicationBridge:
         )
         self._references = ReferenceReports(self._database_path)
         self._verification = SqliteReportVerificationRepository(str(self._database_path))
+        self._signers = SqliteReportSignersRepository(str(self._database_path))
         self._save_pdf_file: Callable[[str], Path | None] | None = None
         self._open_excel_file: Callable[[], Path | None] | None = None
         self._save_excel_file: Callable[[str], Path | None] | None = None
@@ -185,6 +187,29 @@ class WorkingReferenceApplicationBridge:
         except (OSError, ValueError, KeyError, sqlite3.Error, ReportCellError) as error:
             return _failure("VERIFICATION_ERROR", str(error), request_id)
 
+    def list_report_signers(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            _reject_unknown(_mapping(payload, "payload"), set())
+            return {"ok": True, "data": self._signers.list(), "request_id": request_id}
+        except (OSError, ValueError, sqlite3.Error) as error:
+            return _failure("SIGNER_ERROR", str(error), request_id)
+
+    def create_report_signer(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"display_name", "pin", "admin_id", "admin_pin"})
+            result = self._signers.create(
+                _required_string(request, "display_name"),
+                _required_string(request, "pin"),
+                _required_string(request, "admin_id") if "admin_id" in request else "",
+                _required_string(request, "admin_pin") if "admin_pin" in request else "",
+            )
+            return {"ok": True, "data": result, "request_id": request_id}
+        except (OSError, ValueError, sqlite3.Error) as error:
+            return _failure("SIGNER_ERROR", str(error), request_id)
+
     def verify_report(self, payload: object) -> dict[str, object]:
         request_id = uuid4().hex
         try:
@@ -197,7 +222,8 @@ class WorkingReferenceApplicationBridge:
                     "year",
                     "month",
                     "week_start",
-                    "signer_name",
+                    "signer_id",
+                    "pin",
                     "snapshot_sha256",
                     "confirmed",
                     "expected_revision",
@@ -208,7 +234,8 @@ class WorkingReferenceApplicationBridge:
             snapshot = self._monthly_snapshot(request)
             result = self._verification.verify(
                 snapshot,
-                _required_string(request, "signer_name"),
+                _required_string(request, "signer_id"),
+                _required_string(request, "pin"),
                 _required_string(request, "snapshot_sha256"),
             )
             return {"ok": True, "data": result, "request_id": request_id}
