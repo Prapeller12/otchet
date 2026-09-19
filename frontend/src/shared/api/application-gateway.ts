@@ -46,6 +46,7 @@ export type MatrixCellContract = ReportCellContract & {
 };
 
 export type MatrixRowContract = {
+  manufactured_total?: string;
   workspace_id?: string; supplier_id?: string;
   stock_by_week?: Record<string, ReportCellValue>;
   archived?: boolean;
@@ -66,7 +67,19 @@ export type MatrixNavigation = {
   enter_direction: "down" | "right" | "stay";
 };
 
+export type DailySummaryRow = { row_id: string; annual: string; monthly: string[]; through_month: string[] };
+export type DailySummary = {
+  year: number;
+  periods: string[];
+  rows: DailySummaryRow[];
+  components: {
+    group_id: string; party: string; position: string;
+    rows: (DailySummaryRow & { metric_code: string })[];
+  }[];
+};
+
 export type ReportMatrixContract = {
+  daily_summary?: DailySummary;
   subsidiary?: boolean;
   head_site?: boolean;
   legacy_cells?: {coordinate: ReportCellCoordinate; value: ReportCellValue}[];
@@ -232,8 +245,16 @@ export type SaveReportLayoutRequest = ReportLayoutQuery & {
   rows: ReportLayoutRow[];
 };
 
-export type ReportPresentation = { title?: string; widths?: Record<string, number>; plans?: Record<string, string>; actuals?: Record<string, string>; completion?: Record<string, string> };
-export type SaveReportPresentationRequest = ReportLayoutQuery & ReportPresentation & { expected_revision?: string };
+export type ReportHeaderFields = { product_designation: string; product_name: string; factory_name: string; product_image: string };
+export type ProductionCode = { id: string; label: string; plans: Record<string, string>; actuals: Record<string, string> };
+export type ReportPresentation = {
+  title?: string; widths?: Record<string, number>; plans?: Record<string, string>;
+  actuals?: Record<string, string>; completion?: Record<string, string>;
+  header?: ReportHeaderFields; production_codes?: ProductionCode[];
+  production_code_annual?: Record<string, string>;
+  annual?: { plan: string; actual: string; completion: string; plan_months: number; actual_months: number };
+};
+export type SaveReportPresentationRequest = ReportLayoutQuery & ReportPresentation & { expected_revision?: string; confirm_production_totals?: boolean };
 
 export type ApplicationError = {
   code: string;

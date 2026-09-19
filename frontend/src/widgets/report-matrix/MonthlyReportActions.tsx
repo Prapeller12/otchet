@@ -4,10 +4,12 @@ import type { ApplicationGateway, ExportRequest, ReportVerification } from "../.
 
 const months = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 
-export function MonthlyReportActions({ gateway, query, revision, title, blocked, weeks = {} }: {
+export function MonthlyReportActions({ gateway, query, revision, title, blocked, weeks = {}, controlledMonth, onMonthChange }: {
   weeks?: Record<string, string>; gateway: ApplicationGateway; query: ExportRequest; revision: string; title?: string; blocked: boolean;
+  controlledMonth?: string; onMonthChange?(month: string): void;
 }) {
-  const [month, setMonth] = useState(new Date().getMonth() + 1);
+  const [localMonth, setLocalMonth] = useState(new Date().getMonth() + 1);
+  const month = controlledMonth ? Number(controlledMonth.slice(5, 7)) : localMonth;
   const [verification, setVerification] = useState<ReportVerification | null>(null);
   const [busy, setBusy] = useState(false);
   const [opened, setOpened] = useState(false);
@@ -46,7 +48,11 @@ export function MonthlyReportActions({ gateway, query, revision, title, blocked,
     finally { setBusy(false); }
   }
   return <section className="monthly-report-actions" aria-label="Печать и подтверждение отчёта">
-    <label>Месяц печати и проверки<select value={month} disabled={busy} onChange={e => setMonth(Number(e.target.value))}>
+    <label>Месяц печати и проверки<select value={month} disabled={busy || blocked} onChange={e => {
+      const next = Number(e.target.value);
+      if (controlledMonth) onMonthChange?.(`${year ?? new Date().getFullYear()}-${String(next).padStart(2, "0")}`);
+      else setLocalMonth(next);
+    }}>
       {months.map((name, index) => <option key={name} value={index + 1}>{name} {year ?? new Date().getFullYear()}</option>)}
     </select></label>
     <button className="button secondary" disabled={blocked || busy} onClick={() => void pdf()}>Печать / PDF А4</button>

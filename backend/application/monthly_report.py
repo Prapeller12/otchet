@@ -8,6 +8,8 @@ import json
 from decimal import Decimal
 from typing import Any
 
+from backend.domain.calculations import sum_quantities
+
 
 def aggregate(cells: list[dict[str, Any]], calculated: bool) -> str:
     if not cells:
@@ -18,7 +20,7 @@ def aggregate(cells: list[dict[str, Any]], calculated: bool) -> str:
     quantities = [
         Decimal(c["value"]["quantity"]) for c in cells if c["value"]["kind"] == "QUANTITY"
     ]
-    return format(sum(quantities, Decimal(0)), "f") if quantities else ""
+    return format(sum_quantities(quantities), "f") if quantities else ""
 
 
 def monthly_snapshot(
@@ -64,6 +66,10 @@ def monthly_snapshot(
             "plan": matrix["presentation"].get("plans", {}).get(period, ""),
             "actual": matrix["presentation"].get("actuals", {}).get(period, ""),
             "completion": matrix["presentation"].get("completion", {}).get(period, ""),
+            "header": matrix["presentation"].get("header", {}),
+            "production_codes": matrix["presentation"].get("production_codes", []),
+            "production_code_annual": matrix["presentation"].get("production_code_annual", {}),
+            "annual": matrix["presentation"].get("annual", {}),
             "left_columns": matrix["left_columns"],
             "columns": [matrix["time_columns"][i] for i in indices],
             "rows": [
@@ -71,6 +77,7 @@ def monthly_snapshot(
                     "group_id": row["group_id"],
                     "left_values": row["left_values"],
                     "image": row.get("image", ""),
+                    "manufactured_total": row.get("manufactured_total", ""),
                     "values": [
                         str(row["stock_by_week"][selected_week].get("quantity", ""))
                         if matrix["time_columns"][i].get("kind") == "STOCK"
@@ -144,6 +151,7 @@ def monthly_snapshot(
         "title": matrix["title"],
         "period": period,
         "revision": matrix["matrix_revision"],
+        "header": matrix.get("presentation", {}).get("header", {}),
         "prior": prior,
         "days": days,
         "rows": rows,

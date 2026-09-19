@@ -26,6 +26,8 @@ export function App() {
   const [referenceId, setReferenceId] = useState("");
   const [references, setReferences] = useState<ReferenceSummary[]>([]);
   const [referenceDirty, setReferenceDirty] = useState(false);
+  const [matrixBlocked, setMatrixBlocked] = useState(false);
+  const navigationBlocked = referenceDirty || matrixBlocked;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [cellStatus, setCellStatus] = useState("Готово");
@@ -72,6 +74,16 @@ export function App() {
     return () => { active = false; window.removeEventListener("reference-report-imported", imported); };
   }, [gateway, organizationId]);
 
+  useEffect(() => {
+    if (!navigationBlocked) return;
+    const warnBeforeClose = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeClose);
+    return () => window.removeEventListener("beforeunload", warnBeforeClose);
+  }, [navigationBlocked]);
+
   const activeOrganization = organizations.find((item) => item.id === organizationId);
   const activeReferences = references.filter((report) => report.report_type === reportType);
 
@@ -92,7 +104,7 @@ export function App() {
               key={type}
               type="button"
               aria-current={type === reportType ? "page" : undefined}
-              disabled={referenceDirty}
+              disabled={navigationBlocked}
               onClick={() => { setReferenceId(""); setReportType(type); }}
             >
               <UiIcon name={type === "DAILY_MOVEMENT" ? "calendar" : type === "HEAD_SITE" ? "factory" : "buildings"} />
@@ -102,7 +114,7 @@ export function App() {
         </nav>
         <label className="organization-switcher">
           <span>Организация</span>
-          <select disabled={referenceDirty} value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>
+          <select disabled={navigationBlocked} value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>
             {organizations.map((organization) => (
               <option key={organization.id} value={organization.id}>
                 {organization.name}
@@ -110,18 +122,19 @@ export function App() {
             ))}
           </select>
         </label>
-        <button className="header-settings-button" type="button" disabled={referenceDirty || !!referenceId} onClick={() => setSettingsOpen(true)}>
+        <button className="header-settings-button" type="button" disabled={navigationBlocked || !!referenceId} onClick={() => setSettingsOpen(true)}>
           <UiIcon name="settings" />
           Настроить рабочее поле
         </button>
       </div>
 
       {activeReferences.length > 0 && <label className="reference-selector">Сохранённые отчёты Excel
-        <select aria-label="Сохранённые отчёты Excel" disabled={referenceDirty} value={referenceId} onChange={e => setReferenceId(e.target.value)}>
+        <select aria-label="Сохранённые отчёты Excel" disabled={navigationBlocked} value={referenceId} onChange={e => setReferenceId(e.target.value)}>
           <option value="">Рабочая форма</option>
           {activeReferences.map(r => <option key={r.id} value={r.id}>{r.file_name}</option>)}
         </select>
       </label>}
+      {matrixBlocked && <p className="workspace-edit-notice" role="status">Завершите ввод и сохраните изменения перед переходом в другую форму, организацию или настройки.</p>}
       <main>
         {loadError !== null ? (
           <section className="load-state load-state-error" role="alert">{loadError}</section>
@@ -133,6 +146,7 @@ export function App() {
             organizationId={organizationId}
             reloadKey={reloadKey}
             onStatusChange={handleStatusChange}
+            onNavigationBlockedChange={setMatrixBlocked}
           />
         ) : (
           <section className="load-state">Загрузка организаций…</section>
@@ -147,7 +161,7 @@ export function App() {
         </span>
         <span className="status-database">
           <i aria-hidden="true" />
-          {gateway.mode === "pywebview" ? "SQLite подключена" : "Демо без записи на диск"}
+          {gateway.mode === "pywebview" ? "Данные на этом компьютере" : "Демо без записи на диск"}
         </span>
       </footer>
 

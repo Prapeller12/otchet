@@ -6,6 +6,7 @@ import type { ApplicationGateway, ReportMatrixContract, SaveReportPresentationRe
 import type { ReportCellCoordinate } from "../../src/shared/api/report-cell-contract";
 import { createDemoMatrix, DemoGateway } from "../../src/shared/api/demo-gateway";
 import { ReportMatrix } from "../../src/widgets/report-matrix/ReportMatrix";
+import { sourceMatrix } from "../fixtures/source-matrix";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -115,28 +116,20 @@ it("requests backend draft calculation before save and retains both dirty inputs
   expect(save).not.toHaveBeenCalled();
 });
 
-it("merges subsidiary totals and navigates between visible detail cells", async () => {
-  const initial = calendar();
-  initial.subsidiary = true;
-  initial.presentation = { plans: {} };
-  initial.time_columns[0]!.kind = "STOCK";
-  initial.time_columns[1]!.kind = "USED";
-  initial.time_columns[1]!.group_label = "2026-01";
-  initial.rows = initial.rows.map((row, index) => ({
-    ...row, group_id: index < 2 ? "detail-a" : "detail-b",
-    cells: row.cells.map((cell, column) => ({
-      ...cell,
-      state: { access: column === 0 ? "calculated" : "editable", persistence: "saved" },
-      value: { kind: "QUANTITY", quantity: String(index === 0 ? 120 : index === 1 ? 999 : 77) },
-    })),
-  }));
+it("merges source totals and navigates between shared editable opening balances", async () => {
+  const initial = sourceMatrix();
   show(new DemoGateway(), initial);
   const shared = document.querySelectorAll('td[data-shared="detail"]');
-  expect(shared).toHaveLength(2);
+  // Main table: stock + variance per detail; separate input table: opening per detail.
+  expect(shared).toHaveLength(6);
   expect(shared[0]).toHaveAttribute("rowspan", "2");
-  expect(screen.queryByRole("button", { name: "значение 999, расчётная ячейка" })).toBeNull();
-  const first = screen.getByRole("button", { name: "значение 120, расчётная ячейка" });
-  const next = screen.getByRole("button", { name: "значение 77, расчётная ячейка" });
+  const main = screen.getByRole("table", { name: initial.title });
+  expect(main.querySelectorAll('td[data-shared="detail"]')).toHaveLength(4);
+  expect(within(main).queryByRole("button", { name: /расчётная ячейка/ })).toBeNull();
+  const auxiliary = screen.getByRole("table", { name: "Данные для расчёта" });
+  expect(within(auxiliary).queryByRole("button", { name: "значение 999, доступна для ввода" })).toBeNull();
+  const first = within(auxiliary).getByRole("button", { name: "значение 120, доступна для ввода" });
+  const next = within(auxiliary).getByRole("button", { name: "значение 77, доступна для ввода" });
   fireEvent.keyDown(first, { key: "ArrowDown" });
   expect(next).toHaveFocus();
   fireEvent.keyDown(next, { key: "ArrowUp" });

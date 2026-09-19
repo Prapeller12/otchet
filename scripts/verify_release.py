@@ -46,6 +46,10 @@ REQUIRED_FILES = (
     "config/reporting_rules.yaml",
     "config/roles.yaml",
 )
+USER_DATA_DIRECTORIES = ("attachments", "backups", "data", "exports", "imports", "temp")
+SECRET_FILE_SUFFIXES = {".key", ".p12", ".pfx", ".kdbx"}
+DATABASE_FILE_SUFFIXES = {".db", ".sqlite", ".sqlite3", ".sqlitedb", ".backup", ".bak", ".dump"}
+PRIVATE_KEY_HEADER = re.compile(rb"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----")
 NETWORK_REFERENCE = re.compile(rb"(?:https?|wss?)://[^\s\"'`<>]+", re.IGNORECASE)
 NETWORK_API = re.compile(
     rb"(?:\bfetch\s*\(|\bXMLHttpRequest\b|\bWebSocket\s*\(|\bEventSource\s*\(|"
@@ -65,6 +69,45 @@ INERT_FRONTEND_URIS = frozenset(
 
 class ReleaseVerificationError(RuntimeError):
     """Raised for an incomplete or unsafe portable release."""
+
+
+def verify_distribution_hygiene(root: Path) -> None:
+    """Check a newly packaged distribution, before it has any user's working data."""
+
+    local = root / "config" / "app.local.toml"
+    if local.exists():
+        try:
+            configuration = tomllib.loads(local.read_text(encoding="utf-8-sig"))
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            raise ReleaseVerificationError("Invalid packaged local configuration") from exc
+        # The packager itself creates this exact override for explicit test builds.
+        if configuration != {"webview2": {"runtime_mode": "evergreen"}}:
+            raise ReleaseVerificationError("Developer local configuration is packaged")
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            raise ReleaseVerificationError(f"Symbolic link is forbidden: {path}")
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root)
+        name, suffix = path.name.lower(), path.suffix.lower()
+        if relative.parts[0] in USER_DATA_DIRECTORIES:
+            if (
+                name != ".portable-dir"
+                or path.read_bytes().strip() != b"managed by ReportingSystem"
+            ):
+                raise ReleaseVerificationError(f"User data is packaged: {relative}")
+        if (
+            suffix in SECRET_FILE_SUFFIXES | DATABASE_FILE_SUFFIXES
+            or name in {"id_rsa", "id_ed25519", ".env"}
+            or name.startswith(".env.")
+            and name != ".env.example"
+            or name.endswith((".sqlite-wal", ".sqlite-shm", ".sqlite3-wal", ".sqlite3-shm"))
+        ):
+            raise ReleaseVerificationError(f"Private or runtime file is packaged: {relative}")
+        # PEM may legitimately be a runtime's public CA bundle; reject private keys only.
+        if suffix in {".pem", ".txt", ".toml", ".yaml", ".yml", ".json", ".env"}:
+            if PRIVATE_KEY_HEADER.search(path.read_bytes()):
+                raise ReleaseVerificationError(f"Private key is packaged: {relative}")
 
 
 def verify_frontend_network_policy(frontend_root: Path) -> None:
@@ -109,10 +152,12 @@ def _pe_machine(path: Path) -> int:
         return int(struct.unpack("<H", machine_bytes)[0])
 
 
-def verify_release(root: Path) -> None:
+def verify_release(root: Path, *, pristine: bool = False) -> None:
     root = root.resolve()
     if not root.is_dir():
         raise ReleaseVerificationError(f"Release directory does not exist: {root}")
+    if pristine:
+        verify_distribution_hygiene(root)
     try:
         with (root / "config" / "app.defaults.toml").open("rb") as stream:
             defaults = tomllib.load(stream)
@@ -180,13 +225,14 @@ def verify_release(root: Path) -> None:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path)
+    parser.add_argument("--pristine", action="store_true", help="Reject user data before packaging")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = _build_parser().parse_args(argv)
     try:
-        verify_release(arguments.root)
+        verify_release(arguments.root, pristine=arguments.pristine)
     except ReleaseVerificationError as exc:
         print(f"Portable release verification failed: {exc}")
         return 1
