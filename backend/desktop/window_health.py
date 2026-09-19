@@ -167,6 +167,9 @@ def monitor_window(
                 _exercise_signing(window)
                 _exercise_matrix_paste(window)
             if ui_self_test and tab == 1:
+                importlib.import_module("PIL.ImageGrab").grab().save(
+                    paths.temp / "window-head-header.png"
+                )
                 if not window.evaluate_js("""(() => {
                     const header = document.querySelector('.compact-production-header');
                     const row = header?.querySelector('.compact-production-row');
@@ -179,7 +182,16 @@ def monitor_window(
                         header.querySelectorAll('input').length === 2 &&
                         !document.querySelector('.production-code-table');
                 })()"""):
-                    raise RuntimeError("Шапка головной площадки не помещается в одну строку")
+                    geometry = window.evaluate_js("""JSON.stringify(
+                        [...document.querySelectorAll('.compact-production-header, '
+                            + '.compact-production-row > *')].map(node => ({
+                                tag: node.tagName,
+                                height: node.getBoundingClientRect().height,
+                                top: node.getBoundingClientRect().top
+                            })))""")
+                    raise RuntimeError(
+                        f"Шапка головной площадки не помещается в одну строку: {geometry}"
+                    )
             if ui_self_test and tab == 2:
                 if not window.evaluate_js("""(() => {
                     const table = document.querySelector('.subsidiary-matrix');
