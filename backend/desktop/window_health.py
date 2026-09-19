@@ -166,6 +166,20 @@ def monitor_window(
             if ui_self_test and tab == 0:
                 _exercise_signing(window)
                 _exercise_matrix_paste(window)
+            if ui_self_test and tab == 1:
+                if not window.evaluate_js("""(() => {
+                    const header = document.querySelector('.compact-production-header');
+                    const row = header?.querySelector('.compact-production-row');
+                    const fields = row
+                        ? [...row.querySelectorAll('label, .compact-annual-plan')] : [];
+                    return !!header && header.getBoundingClientRect().height <= 60 &&
+                        fields.length === 3 &&
+                        fields.every(node => Math.abs(node.getBoundingClientRect().top -
+                            fields[1].getBoundingClientRect().top) <= 10) &&
+                        header.querySelectorAll('input').length === 2 &&
+                        !document.querySelector('.production-code-table');
+                })()"""):
+                    raise RuntimeError("Шапка головной площадки не помещается в одну строку")
             if ui_self_test and tab == 2:
                 if not window.evaluate_js("""(() => {
                     const table = document.querySelector('.subsidiary-matrix');

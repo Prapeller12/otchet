@@ -6,6 +6,7 @@ on:
       - codex/portable-mvp
       - codex/cryptographic-report-verification
       - codex/reference-audit-dev23
+      - codex/compact-head-header-dev25
   workflow_dispatch:
 
 permissions:
@@ -132,5 +133,5 @@ jobs:
               --target $env:GITHUB_SHA `
               --prerelease `
               --title "Reporting System $version test build" `
-              --notes "Windows x64 alpha. Reference form audit, product headers and code totals, safe matrix editing, calendar summaries and PIN-protected report verification. See docs/test-cases/alpha-dev24.md and docs/user-guide.md. Read TESTING.txt, extract and run start.cmd. WebView2 Fixed Runtime included; real-window startup test required. Windows 10 ACL limitations: docs/decisions/ADR-0001-webview2-fixed-runtime-windows10-acl.md."
+              --notes "Windows x64 alpha. Compact single-row head-site header: annual plan, product name and designation. See docs/test-cases/alpha-dev25.md and docs/user-guide.md. Read TESTING.txt, extract and run start.cmd. WebView2 Fixed Runtime included; real-window startup test required. Windows 10 ACL limitations: docs/decisions/ADR-0001-webview2-fixed-runtime-windows10-acl.md."
           }

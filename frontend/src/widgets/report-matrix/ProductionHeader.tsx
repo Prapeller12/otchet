@@ -1,3 +1,4 @@
+import { CompactProductionHeader } from "./CompactProductionHeader";
 import { useEffect, useRef, useState } from "react";
 
 export type ReportHeaderFields = {
@@ -17,11 +18,17 @@ export type ProductionHeaderPatch = {
 };
 const EMPTY_HEADER: ReportHeaderFields = { product_designation: "", product_name: "", factory_name: "", product_image: "" };
 
-export function ProductionHeader({ presentation, year, headSite, blocked, onSave, onDirtyChange, onBusyChange }: {
+export type ProductionHeaderProps = {
   presentation: ProductionHeaderPresentation; year: number; headSite: boolean; blocked: boolean;
   onSave(patch: ProductionHeaderPatch): Promise<void>;
   onDirtyChange(dirty: boolean): void; onBusyChange?(busy: boolean): void;
-}) {
+};
+
+export function ProductionHeader(props: ProductionHeaderProps) {
+  return props.headSite ? <CompactProductionHeader {...props} /> : <DetailedProductionHeader {...props} />;
+}
+
+function DetailedProductionHeader({ presentation, year, headSite, blocked, onSave, onDirtyChange, onBusyChange }: ProductionHeaderProps) {
   const baseline = JSON.stringify({ header: { ...EMPTY_HEADER, ...presentation.header }, codes: presentation.production_codes ?? [] });
   const [draft, setDraft] = useState<{header: ReportHeaderFields; codes: ProductionCode[]}>(() => JSON.parse(baseline));
   const [busy, setBusy] = useState(false);

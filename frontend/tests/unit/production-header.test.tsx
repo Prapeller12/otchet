@@ -18,23 +18,27 @@ it("edits header only on explicit save, tracks dirty state and cancels", async (
   expect(dirty).toHaveBeenLastCalledWith(false);
 });
 
-it("preserves prior-year code data while editing monthly zero and blank cells", async () => {
+it("shows only annual plan, name and code, preserving hidden metadata and code history on save", async () => {
   const save = vi.fn(async () => {}); const user = userEvent.setup();
-  render(<ProductionHeader presentation={{ production_codes: [{ id: "A", label: "Код A", plans: { "2025-12": "10" }, actuals: {} }] }} year={2026} headSite blocked={false} onSave={save} onDirtyChange={vi.fn()} />);
-  await user.type(screen.getByLabelText("Код A: план 2026-01"), "0");
-  await user.click(screen.getByRole("button", { name: "Сохранить шапку и выпуск" }));
-  expect(save).toHaveBeenCalledWith(expect.objectContaining({ production_codes: [{ id: "A", label: "Код A", plans: { "2025-12": "10", "2026-01": "0" }, actuals: {} }] }));
-  expect(screen.getByRole("button", { name: "Убрать код" })).toBeDisabled();
-  expect(screen.getByLabelText("Код A: факт 2026-01")).toHaveValue("");
+  const header = { product_designation: "A", product_name: "Изделие", factory_name: "Завод", product_image: "stored-image" };
+  render(<ProductionHeader presentation={{ header, annual: { plan: "0", actual: "10", completion: "", plan_months: 1, actual_months: 1 }, production_codes: [{ id: "A", label: "Код A", plans: { "2025-12": "10" }, actuals: {} }] }} year={2026} headSite blocked={false} onSave={save} onDirtyChange={vi.fn()} />);
+  expect(screen.getByLabelText("Годовой план")).toHaveTextContent("0");
+  expect(screen.getAllByRole("textbox")).toHaveLength(2);
+  expect(screen.queryByLabelText("Завод / изготовитель")).toBeNull();
+  expect(screen.queryByText("+ Код выпуска")).toBeNull();
+  expect(screen.queryByText(/Выпущено за год/)).toBeNull();
+  await user.type(screen.getByLabelText("Название изделия"), " 2");
+  await user.click(screen.getByRole("button", { name: "Сохранить шапку" }));
+  expect(save).toHaveBeenCalledWith({ header: { ...header, product_name: "Изделие 2" } });
 });
 
-it("keeps failed-save draft and requires the user to supply a code label", async () => {
-  const save = vi.fn(async () => { throw new Error("Итоги расходятся"); }); const user = userEvent.setup();
+it("retains a compact header draft after a failed save", async () => {
+  const save = vi.fn(async () => { throw new Error("Не удалось сохранить"); }); const user = userEvent.setup();
   render(<ProductionHeader presentation={{}} year={2026} headSite blocked={false} onSave={save} onDirtyChange={vi.fn()} />);
-  await user.click(screen.getByRole("button", { name: "+ Код выпуска" }));
-  expect(screen.getByRole("button", { name: "Сохранить шапку и выпуск" })).toBeDisabled();
-  await user.type(screen.getByLabelText("Код / модификация"), "Исполнение A");
-  await user.click(screen.getByRole("button", { name: "Сохранить шапку и выпуск" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Итоги расходятся");
-  expect(screen.getByLabelText("Код / модификация")).toHaveValue("Исполнение A");
+  await user.type(screen.getByLabelText("Шифр изделия"), "TEST");
+  await user.click(screen.getByRole("button", { name: "Сохранить шапку" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Не удалось сохранить");
+  expect(screen.getByLabelText("Шифр изделия")).toHaveValue("TEST");
+  await user.click(screen.getByRole("button", { name: "Отменить изменения шапки" }));
+  expect(screen.getByLabelText("Шифр изделия")).toHaveValue("");
 });
