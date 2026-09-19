@@ -17,3 +17,14 @@
 .production-confirmation { display: flex; gap: 8px; margin: 12px 0; align-items: start; }
 .production-header .compact-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
 .daily-summary-value { text-align: right; background: #edf3f6; padding: 5px; font-variant-numeric: tabular-nums; }
+
+.compact-production-header { padding: 8px 14px; border-bottom: 1px solid var(--pk-border); overflow-x: auto; }
+.compact-production-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 700px; }
+.compact-production-row label { display: flex; align-items: center; gap: 7px; white-space: nowrap; min-width: 0; }
+.compact-annual-plan { flex: 0 0 auto; white-space: nowrap; }
+.compact-annual-plan output { font-weight: 700; font-variant-numeric: tabular-nums; }
+.compact-product-name { flex: 1 1 320px; }
+.compact-product-code { flex: 0 1 230px; }
+.compact-production-row input { width: 100%; min-width: 60px; height: 32px; box-sizing: border-box; padding: 5px 7px; border: 1px solid #9cabb8; border-radius: 3px; background: #fff; color: #172f42; }
+.compact-production-row input:focus-visible { outline: 2px solid #087b83; outline-offset: 2px; }
+.compact-production-row .compact-header-action { flex: 0 0 32px; width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 6px; justify-content: center; }
