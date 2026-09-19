@@ -1,0 +1,18 @@
+.source-matrix-period { margin: 0; padding: 10px 16px; font-size: 13px; color: var(--pk-text); }
+.source-matrix .source-header-months th { top: 0; height: 40px; background: var(--pk-sunken); color: var(--pk-text); }
+.source-matrix .source-header-dates th { top: 40px; height: 50px; }
+.source-matrix thead th[rowspan] { height: 90px; }
+.source-matrix .source-identity-cell { padding: 6px !important; font-weight: 600; text-align: center; }
+.source-matrix .source-identity-cell:nth-child(4) { text-align: left; }
+.source-position-image { display: block; max-width: 100%; max-height: 96px; object-fit: contain; margin: 4px auto; }
+.report-matrix .source-calculated { background: var(--pk-sunken); text-align: right; font-variant-numeric: tabular-nums; font-weight: 650; }
+.source-readonly-value { display: block; padding: 8px; }
+.report-matrix .source-reference-value { padding: 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.source-calculation-fields { border-top: 1px solid var(--pk-border); padding: 16px; }
+.source-calculation-fields h3 { margin: 0 0 8px; font-size: 16px; }
+.source-calculation-fields p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
+.source-auxiliary-scroll { min-height: 0; max-height: 45vh; }
+.source-auxiliary-matrix { width: 100%; min-width: 560px; }
+.source-auxiliary-matrix thead th { top: 0; }
+.source-auxiliary-matrix tbody th { padding: 8px; font-weight: 600; }
+.source-auxiliary-matrix tbody td { min-width: 100px; }

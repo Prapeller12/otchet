@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import io
 import json
 import zipfile
 from collections.abc import Mapping, Sequence
@@ -13,6 +15,7 @@ from typing import Any, cast
 from openpyxl import Workbook, load_workbook
 from openpyxl.cell import Cell
 from openpyxl.comments import Comment
+from openpyxl.drawing.image import Image as ExcelImage
 from openpyxl.formatting.rule import CellIsRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Side
 from openpyxl.utils import get_column_letter
@@ -26,6 +29,7 @@ from backend.application.excel_reports import (
     ParsedWorkbook,
     WorkbookIssue,
 )
+from backend.application.monthly_report import aggregate
 from backend.application.report_cells import ReportCellCoordinate, ReportCellValue
 
 _MAP_SHEET = "_Системная карта"
@@ -65,6 +69,7 @@ class OpenpyxlMatrixWorkbookAdapter:
 
         sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_column)
         title_cell = sheet.cell(1, 1, title)
+        title_cell.data_type = "s"
         title_cell.font = Font(name="Arial", size=16, bold=True, color=_WHITE)
         title_cell.fill = PatternFill("solid", fgColor=_NAVY)
         title_cell.alignment = Alignment(horizontal="left", vertical="center")
@@ -107,6 +112,17 @@ class OpenpyxlMatrixWorkbookAdapter:
             sheet.column_dimensions[get_column_letter(index)].hidden = hidden
             if not hidden:
                 visible_columns.append(index)
+        month_start = first_time_column
+        while month_start <= last_column:
+            month_end = month_start
+            group = sheet.cell(5, month_start).value
+            while month_end < last_column and sheet.cell(5, month_end + 1).value == group:
+                month_end += 1
+            if month_end > month_start:
+                sheet.merge_cells(
+                    start_row=5, end_row=5, start_column=month_start, end_column=month_end
+                )
+            month_start = month_end + 1
 
         mapping.append([_MARKER, _SCHEMA_VERSION])
         mapping.append(["report_type", report_type])
@@ -124,7 +140,31 @@ class OpenpyxlMatrixWorkbookAdapter:
                 cell = sheet.cell(
                     row_offset, index, str(left_values.get(_string(column, "id"), ""))
                 )
+                cell.data_type = "s"
                 _body(cell, border, PatternFill("solid", fgColor=_BLUE), horizontal="left")
+            first_in_group = row_offset == 7 or _mapping(rows[row_offset - 8], "row").get(
+                "group_id"
+            ) != row.get("group_id")
+            if row.get("image") and first_in_group:
+                position_column = next(
+                    (
+                        i
+                        for i, raw in enumerate(left_columns, 1)
+                        if _mapping(raw, "left column").get("id") == "position"
+                    ),
+                    1,
+                )
+                _add_image(
+                    sheet,
+                    str(row["image"]),
+                    f"{get_column_letter(position_column)}{row_offset}",
+                    90,
+                    48,
+                )
+                sheet.row_dimensions[row_offset].height = 70
+                sheet.cell(row_offset, position_column).alignment = Alignment(
+                    horizontal="left", vertical="bottom", wrap_text=True
+                )
             indicator_detail = row.get("indicator_detail")
             detail = indicator_detail if isinstance(indicator_detail, Mapping) else {}
             cells = _sequence(row.get("cells"), "row.cells")
@@ -135,7 +175,13 @@ class OpenpyxlMatrixWorkbookAdapter:
                     end = get_column_letter(first_time_column + len(cells) - 1)
                     total.value = f"=SUM({start}{row_offset}:{end}{row_offset})"
                 elif detail.get("kind") == "CALCULATION":
-                    total.value = "Расчёт"
+                    closing = aggregate([dict(_mapping(cell, "cell")) for cell in cells], True)
+                    total.value = _excel_number(closing) if closing != "" else None
+                    total.comment = Comment(
+                        "Значение на конец периода. Снимок расчёта backend; "
+                        "дневные остатки не суммируются.",
+                        "Reporting System",
+                    )
                 _body(total, border, PatternFill("solid", fgColor=_CALCULATED))
 
             for column_offset, raw_cell in enumerate(cells, start=first_time_column):
@@ -283,6 +329,7 @@ class OpenpyxlMatrixWorkbookAdapter:
                 1,
                 "План и выпуск изменяются в программе. Расчёты — снимок на момент экспорта.",
             )
+        _write_report_header(workbook, matrix, border)
         workbook.calculation.fullCalcOnLoad = True
         workbook.calculation.forceFullCalc = True
         workbook.calculation.calcMode = "auto"
@@ -411,6 +458,85 @@ class OpenpyxlMatrixWorkbookAdapter:
         return ParsedWorkbook(tuple(cells), tuple(issues))
 
 
+def _add_image(sheet: Worksheet, data_url: str, anchor: str, width: float, height: float) -> None:
+    image = ExcelImage(io.BytesIO(base64.b64decode(data_url.split(",", 1)[1], validate=True)))
+    ratio = min(width / image.width, height / image.height)
+    image.width, image.height = round(image.width * ratio), round(image.height * ratio)
+    sheet.add_image(image, anchor)
+
+
+def _write_report_header(workbook: Workbook, matrix: Mapping[str, object], border: Border) -> None:
+    presentation = cast(dict[str, Any], matrix.get("presentation", {}))
+    header = presentation.get("header", {})
+    codes = presentation.get("production_codes", [])
+    annual = presentation.get("annual", {})
+    if not header and not codes and not annual:
+        return
+    sheet = workbook.create_sheet("Шапка и выпуск")
+    for key, label in (
+        ("product_designation", "Шифр изделия"),
+        ("product_name", "Изделие"),
+        ("factory_name", "Завод"),
+    ):
+        sheet.append([label, header.get(key, "")])
+        sheet.cell(sheet.max_row, 2).data_type = "s"
+    if header.get("product_image"):
+        _add_image(sheet, header["product_image"], "D1", 140, 75)
+    sheet.append(["Год", matrix.get("year", "")])
+    for key, label in (("plan", "План за год (внесено)"), ("actual", "Факт за год (внесено)")):
+        value = annual.get(key, "")
+        sheet.append(
+            [
+                label,
+                _excel_number(value) if value != "" else None,
+                "Месяцев с данными",
+                annual.get(key + "_months", ""),
+            ]
+        )
+    if codes:
+        year = matrix.get("year")
+        periods = [f"{year}-{month:02d}" for month in range(1, 13)]
+        sheet.append([])
+        top = sheet.max_row + 1
+        sheet.append(
+            [
+                "Код / модификация",
+                "Факт за год (внесено)",
+                *[label for period in periods for label in (period + " План", period + " Факт")],
+            ]
+        )
+        for code in codes:
+            annual_actual = presentation.get("production_code_annual", {}).get(code["id"], "")
+            values: list[Any] = [
+                code["label"],
+                _excel_number(annual_actual) if annual_actual != "" else None,
+            ]
+            for period in periods:
+                for field in ("plans", "actuals"):
+                    value = code.get(field, {}).get(period, "")
+                    values.append(_excel_number(value) if value != "" else None)
+            sheet.append(values)
+            sheet.cell(sheet.max_row, 1).data_type = "s"
+        for cell in sheet[top]:
+            _header(cell, PatternFill("solid", fgColor=_NAVY), border)
+    sheet.append([])
+    sheet.append(
+        [
+            "Поля шапки и выпуск по кодам изменяются в программе. "
+            "Экспорт содержит снимок; обратный импорт этих полей не выполняется."
+        ]
+    )
+    sheet.column_dimensions["A"].width = 38
+    sheet.column_dimensions["B"].width = 35
+    for column in range(3, sheet.max_column + 1):
+        sheet.column_dimensions[get_column_letter(column)].width = 18
+    for row in sheet:
+        for cell in row:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+    sheet.protection.sheet = True
+    sheet.freeze_panes = "B9"
+
+
 def _editable_coordinates(matrix: Mapping[str, object]) -> set[str]:
     result: set[str] = set()
     for raw_row in _sequence(matrix.get("rows"), "rows"):
@@ -453,9 +579,17 @@ def _report_value(value: object) -> ReportCellValue:
 
 def _excel_number(value: str) -> int | float:
     decimal = Decimal(value)
-    if decimal == decimal.to_integral_value():
-        return int(decimal)
-    return float(decimal)
+    try:
+        number = int(decimal) if decimal == decimal.to_integral_value() else float(decimal)
+        if not decimal.is_finite() or Decimal(format(number, ".15g")) != decimal:
+            raise ValueError("Excel numeric precision would change this quantity")
+    except (ValueError, OverflowError, InvalidOperation) as exc:
+        raise ExcelWorkbookValidationError(
+            f"Число {value} нельзя сохранить в Excel без потери точности "
+            "(до 15 значащих цифр). Экспорт отменён, данные не изменены. "
+            "Используйте PDF для точного представления или продолжите работу в программе."
+        ) from exc
+    return number
 
 
 def _header(cell: Cell, fill: PatternFill, border: Border) -> None:

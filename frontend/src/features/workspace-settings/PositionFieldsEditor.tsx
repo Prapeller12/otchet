@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FormulaLibrary } from "./FormulaLibrary";
+import { addDailyCodeFields } from "./daily-code-fields";
 import type { FieldConfiguration, FieldIndicator, FieldPreset } from "../../shared/api/application-gateway";
 
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -14,6 +15,8 @@ export function PositionFieldsEditor({ value, presets = [], onChange, onBusyChan
 }) {
   const [error, setError] = useState("");
   const [reading, setReading] = useState(false);
+  const [codes, setCodes] = useState("");
+  const codePrefix = value.indicators.some(item => item.code === "WRK_DAILY_ASSEMBLY_PLAN") ? "ASSEMBLY" : value.indicators.some(item => item.code === "WRK_DAILY_PRODUCT_PLAN") ? "PRODUCT" : null;
   function edit(index: number, patch: Partial<FieldIndicator>) {
     onChange({ ...value, indicators: value.indicators.map((item, i) => i === index ? { ...item, ...patch } : item) });
   }
@@ -61,6 +64,15 @@ export function PositionFieldsEditor({ value, presets = [], onChange, onBusyChan
         {presets.filter((item) => item.required_codes.every((code) => value.indicators.some((indicator) => indicator.code === code))).map((item) =>
           <button key={item.label} type="button" className="button secondary" onClick={() => preset(item)}>{item.label}</button>)}
       </div>
+      {codePrefix && <div className="preset-choices">
+        <strong>Разбивка выпуска по кодам</strong>
+        <label>Коды / модификации через запятую<input value={codes} onChange={event => setCodes(event.target.value)} /></label>
+        <p className="field-help">Добавляет план, выпуск и прибытие отдельно для каждого кода. Общие строки и ранее введённые данные сохраняются. Названия и порядок новых строк можно изменить ниже.</p>
+        <button type="button" className="button secondary" disabled={!codes.trim()} onClick={() => {
+          try { onChange({ ...value, indicators: addDailyCodeFields(value.indicators, codes, codePrefix) }); setCodes(""); setError(""); }
+          catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось добавить коды."); }
+        }}>Добавить строки по кодам</button>
+      </div>}
       <FormulaLibrary indicators={value.indicators} presets={presets} onInsert={(code, formula) => {
         const index = value.indicators.findIndex(item => item.code === code);
         if (index >= 0) edit(index, { formula });
@@ -74,10 +86,10 @@ export function PositionFieldsEditor({ value, presets = [], onChange, onBusyChan
           <p className="field-help">Ссылки — коды показателей этой позиции. NORM — норма, OPENING — начальный остаток. SUM, MIN, MAX, IF, ROUNDDOWN; CUMSUM — сумма внесённых значений с начала периода; CUM требует заполнения всех исходных ячеек. BALANCE(приход, расход) — остаток по внесённым движениям.</p>
         </details>
         <div className="row-actions">
-          <button type="button" className="mini-button" aria-label="Показатель выше" disabled={index === 0} onClick={() => {
+          <button type="button" className="mini-button" aria-label="Показатель выше" disabled={index === 0 || (item.code.startsWith("WRK_DAILY_") && value.indicators[index - 1]?.code.startsWith("WRK_DAILY_"))} onClick={() => {
             const next = [...value.indicators]; [next[index - 1], next[index]] = [next[index]!, next[index - 1]!]; onChange({ ...value, indicators: next });
           }}>↑ Выше</button>
-          <button type="button" className="mini-button" aria-label="Убрать показатель" onClick={() => onChange({ ...value, indicators: value.indicators.filter((_, i) => i !== index) })}>Убрать показатель</button>
+          <button type="button" className="mini-button" aria-label="Убрать показатель" disabled={item.code.startsWith("WRK_DAILY_")} title={item.code.startsWith("WRK_DAILY_") ? "Обязательная строка исходной формы" : undefined} onClick={() => onChange({ ...value, indicators: value.indicators.filter((_, i) => i !== index) })}>Убрать показатель</button>
         </div>
       </div>)}
       <div className="compact-actions">

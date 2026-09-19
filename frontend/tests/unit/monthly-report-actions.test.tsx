@@ -3,12 +3,30 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { DemoGateway } from "../../src/shared/api/demo-gateway";
 import { MonthlyReportActions } from "../../src/widgets/report-matrix/MonthlyReportActions";
+import { useState } from "react";
 
 afterEach(cleanup);
 const query = { report_type: "DAILY_MOVEMENT" as const, organization_id: "1", year: 2024 };
 
 const signer = { id: "user-1", display_name: "Иванов", role: "admin" as const, key_fingerprint: "ABCD0123456789EF", created_at: "2024-02-29" };
 const signerApi = { listReportSigners: vi.fn(async () => [signer]), createReportSigner: vi.fn(async () => signer) };
+
+it("shares the selected reporting month with printing and stock-week verification", async () => {
+  const pdf = vi.fn(async () => ({ cancelled: true }));
+  const status = vi.fn(async () => ({ status: "UNVERIFIED" as const, snapshot_sha256: "a" }));
+  const gateway = Object.assign(new DemoGateway(), signerApi, { getReportVerification: status, verifyReport: vi.fn(), exportPdf: pdf });
+  function Harness() {
+    const [month, setMonth] = useState("2024-02");
+    return <MonthlyReportActions gateway={gateway} query={{ ...query, report_type: "SUBSIDIARY" }} revision="r1" blocked={false} controlledMonth={month} onMonthChange={setMonth} weeks={{ "2024-02": "2024-02-05", "2024-03": "2024-03-04" }} />;
+  }
+  render(<Harness />);
+  const user = userEvent.setup();
+  expect(screen.getByLabelText("Месяц печати и проверки")).toHaveValue("2");
+  await user.click(screen.getByRole("button", { name: "Печать / PDF А4" }));
+  expect(pdf).toHaveBeenLastCalledWith(expect.objectContaining({ month: 2, week_start: "2024-02-05" }));
+  await user.selectOptions(screen.getByLabelText("Месяц печати и проверки"), "3");
+  await waitFor(() => expect(status).toHaveBeenLastCalledWith(expect.objectContaining({ month: 3, week_start: "2024-03-04" })));
+});
 
 it("exports the selected month and requires an explicit attestation of the exact snapshot", async () => {
   const user = userEvent.setup();

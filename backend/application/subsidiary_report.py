@@ -8,6 +8,11 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from backend.application.report_calendar import reporting_weeks
+from backend.domain.calculations import (
+    calculate_required_quantity,
+    subtract_quantities,
+    sum_quantities,
+)
 
 
 def quantity(value: object) -> str:
@@ -197,7 +202,7 @@ def build_rows(
             available = (
                 None
                 if opening_value is None or any(v is None for v in incoming)
-                else opening_value + sum((v for v in incoming if v is not None), Decimal(0))
+                else sum_quantities((v for v in incoming if v is not None), opening_value)
             )
             missing = []
             if opening_value is None:
@@ -210,17 +215,19 @@ def build_rows(
             variance = (
                 None
                 if available is None or not plan or not norm
-                else available - Decimal(plan) * Decimal(norm)
+                else subtract_quantities(
+                    available, calculate_required_quantity(Decimal(plan), Decimal(norm), Decimal(0))
+                )
             )
             accumulated = Decimal(0)
             balances = {}
             for index, week in enumerate(weeks):
                 # As in the approved worksheet: total of recorded consumption.
-                accumulated += sum(
-                    (number(items[index]) or Decimal(0) for items in used), Decimal(0)
+                accumulated = sum_quantities(
+                    (number(items[index]) or Decimal(0) for items in used), accumulated
                 )
                 balances[week.start.isoformat()] = result_value(
-                    None if available is None else available - accumulated
+                    None if available is None else subtract_quantities(available, accumulated)
                 )
             for index, row in enumerate(supplier_rows):
                 common = index == next((i for i, s in enumerate(suppliers) if not s["archived"]), 0)

@@ -50,7 +50,7 @@ export function CellEditor({
       value={value}
       aria-label={label}
       inputMode="decimal"
-      onChange={(event) => onChange(event.target.value)}
+      onChange={(event) => { finishedRef.current = false; onChange(event.target.value); }}
       onKeyDown={handleKeyDown}
       onBlur={() => {
         if (!finishedRef.current) onCommit("stay");

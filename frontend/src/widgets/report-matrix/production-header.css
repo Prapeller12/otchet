@@ -1,0 +1,19 @@
+.production-header { margin: 12px 0; }
+.production-header fieldset { border: 1px solid #bac8d5; border-radius: 6px; padding: 14px; min-width: 0; }
+.production-header legend { font-weight: 700; padding: 0 6px; }
+.production-header-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.production-header-fields label { display: flex; flex-direction: column; gap: 5px; }
+.production-header input { min-width: 0; padding: 7px; border: 1px solid #9cabb8; border-radius: 3px; background: #fff; color: #172f42; }
+.production-header input:focus-visible { outline: 2px solid #087b83; outline-offset: 2px; }
+.production-header .position-picture img { max-width: 180px; max-height: 100px; object-fit: contain; }
+.production-annual { display: flex; gap: 20px; flex-wrap: wrap; padding: 14px 0; }
+.production-annual small { flex-basis: 100%; color: #526271; }
+.production-code-scroll { max-width: 100%; overflow: auto; margin-bottom: 12px; }
+.production-code-table { border-collapse: collapse; width: max-content; }
+.production-code-table th,.production-code-table td { border: 1px solid #c0ccd5; padding: 4px; }
+.production-code-table th { background: #e9f0f5; }
+.production-code-table td input { width: 82px; text-align: right; }
+.production-code-table th:first-child { position: sticky; left: 0; z-index: 1; }
+.production-confirmation { display: flex; gap: 8px; margin: 12px 0; align-items: start; }
+.production-header .compact-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.daily-summary-value { text-align: right; background: #edf3f6; padding: 5px; font-variant-numeric: tabular-nums; }

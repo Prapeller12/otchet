@@ -18,6 +18,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 from backend.api.bridge import DesktopBridge
+from backend.application.daily_summary import summarize_daily_rows
 from backend.application.excel_reports import (
     ExcelReportError,
     ExcelReportService,
@@ -32,6 +33,11 @@ from backend.application.report_cells import (
     ReportCellService,
     ReportCellValidationError,
     ReportCellValue,
+    RevisionConflictError,
+)
+from backend.application.report_header import (
+    apply_header_patch,
+    effective_production_presentation,
 )
 from backend.application.subsidiary_report import build_rows, default_detail, quantity
 from backend.application.workspace_fields import (
@@ -341,12 +347,13 @@ class WorkingReferenceApplicationBridge:
             report_type = _required_string(request, "report_type")
             organization_id = self._organization_id(request.get("organization_id"))
             expected_matrix_revision = _required_string(request, "base_revision")
-            if expected_matrix_revision != self._matrix_revision(report_type, organization_id):
-                return _failure(
-                    "REVISION_CONFLICT",
-                    "Матрица была изменена другим сохранением; перезагрузите форму.",
-                    request_id,
-                )
+
+            def validate_current_state() -> None:
+                if expected_matrix_revision != self._matrix_revision(report_type, organization_id):
+                    raise RevisionConflictError(
+                        "Матрица была изменена другим сохранением; перезагрузите форму."
+                    )
+
             raw_changes = request.get("changes")
             if not isinstance(raw_changes, Sequence) or isinstance(
                 raw_changes, (str, bytes, bytearray)
@@ -387,6 +394,13 @@ class WorkingReferenceApplicationBridge:
                 changes,
                 idempotency_key=_required_string(request, "idempotency_key"),
                 actor_ref="local-working-reference",
+                validate_current_state=validate_current_state,
+                request_context={
+                    "report_type": report_type,
+                    "organization_id": str(organization_id),
+                    "year": _year(request),
+                    "base_revision": expected_matrix_revision,
+                },
             )
             cells = [
                 {
@@ -768,25 +782,37 @@ class WorkingReferenceApplicationBridge:
                     "plans",
                     "actuals",
                     "expected_revision",
+                    "header",
+                    "production_codes",
+                    "confirm_production_totals",
                 },
             )
             report_type = _required_string(request, "report_type")
             self._definition(report_type)
             organization_id = self._organization_id(request.get("organization_id"))
-            patch: dict[str, object] = {}
-            if "plans" in request or "actuals" in request:
-                if report_type not in {"SUBSIDIARY", "HEAD_SITE"}:
-                    raise ValueError("План и выпуск доступны в месячных отчётах")
+            current_presentation = self._workspace.get_presentation(organization_id, report_type)
+            patch: dict[str, object] = apply_header_patch(
+                current_presentation, request, report_type
+            )
+
+            def validate_current_state() -> None:
                 if request.get("expected_revision") != self._matrix_revision(
                     report_type, organization_id
                 ):
                     raise ValueError(
                         "Форма изменилась. Перезагрузите данные перед сохранением плана"
                     )
+
+            if "plans" in request or "actuals" in request:
+                if report_type not in {"SUBSIDIARY", "HEAD_SITE"}:
+                    raise ValueError("План и выпуск доступны в месячных отчётах")
                 for field in ("plans", "actuals"):
                     if field not in request:
                         continue
-                    values = _mapping(request[field], field)
+                    values = {
+                        **cast(dict[str, object], current_presentation.get(field, {})),
+                        **_mapping(request[field], field),
+                    }
                     if len(values) > 1200 or any(
                         re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", key) is None for key in values
                     ):
@@ -810,8 +836,21 @@ class WorkingReferenceApplicationBridge:
                 ):
                     raise ValueError("Ширина столбца: от 48 до 600 пикселей")
                 patch["widths"] = dict(widths)
-            result = self._workspace.save_presentation(organization_id, report_type, patch)
-            return {"ok": True, "data": result, "request_id": request_id}
+            result = self._workspace.save_presentation(
+                organization_id,
+                report_type,
+                patch,
+                validate_current_state=(
+                    validate_current_state
+                    if request.keys() & {"plans", "actuals", "header", "production_codes"}
+                    else None
+                ),
+            )
+            return {
+                "ok": True,
+                "data": effective_production_presentation(result),
+                "request_id": request_id,
+            }
         except (ValueError, sqlite3.Error, ReportCellError) as error:
             return _failure("PRESENTATION_ERROR", str(error), request_id)
 
@@ -824,7 +863,10 @@ class WorkingReferenceApplicationBridge:
     ) -> dict[str, object]:
         definition = self._definition(report_type)
         periods = self._periods(report_type, year)
-        presentation = self._workspace.get_presentation(organization_id, report_type)
+        presentation = effective_production_presentation(
+            self._workspace.get_presentation(organization_id, report_type),
+            year or date.today().year,
+        )
         if report_type in {"SUBSIDIARY", "HEAD_SITE"}:
             from backend.application.production_progress import completion
 
@@ -936,6 +978,18 @@ class WorkingReferenceApplicationBridge:
                 structure = build_head_rows(
                     groups, year or date.today().year, read, presentation, subsidiaries
                 )
+                from backend.application.monthly_report import aggregate
+
+                fact_columns = {
+                    column["id"]
+                    for column in structure["time_columns"]
+                    if column.get("kind") == "FACT"
+                }
+                for row in structure["rows"]:
+                    row["manufactured_total"] = aggregate(
+                        [cell for cell in row["cells"] if cell["column_id"] in fact_columns],
+                        False,
+                    )
             else:
                 structure = build_rows(
                     groups,
@@ -1097,6 +1151,11 @@ class WorkingReferenceApplicationBridge:
                 for column_id, period_start in periods
             ],
             "rows": rows,
+            "daily_summary": summarize_daily_rows(
+                cast(list[dict[str, Any]], rows),
+                year or date.today().year,
+                cast(list[dict[str, Any]], left_columns),
+            ),
             "capabilities": {
                 "save": {"enabled": True},
                 "import": (
@@ -1209,19 +1268,22 @@ class WorkingReferenceApplicationBridge:
                 "WHERE entity_type = 'report_workspace' AND entity_id = ?",
                 (f"{organization_id}:{report_type}",),
             ).fetchone()[0]
-            if report_type in {"SUBSIDIARY", "HEAD_SITE"}:
-                layout_revision = max(
-                    layout_revision,
-                    connection.execute(
-                        "SELECT coalesce(max(id), 0) FROM audit_events "
-                        "WHERE entity_type = 'report_presentation' AND entity_id = ? "
-                        "AND (json_extract(before_json, '$.plans') IS NOT "
-                        "json_extract(after_json, '$.plans') OR "
-                        "json_extract(before_json, '$.actuals') IS NOT "
-                        "json_extract(after_json, '$.actuals'))",
-                        (f"{organization_id}:{report_type}",),
-                    ).fetchone()[0],
-                )
+            layout_revision = max(
+                layout_revision,
+                connection.execute(
+                    "SELECT coalesce(max(id), 0) FROM audit_events "
+                    "WHERE entity_type = 'report_presentation' AND entity_id = ? "
+                    "AND (json_extract(before_json, '$.plans') IS NOT "
+                    "json_extract(after_json, '$.plans') OR "
+                    "json_extract(before_json, '$.actuals') IS NOT "
+                    "json_extract(after_json, '$.actuals') OR "
+                    "json_extract(before_json, '$.header') IS NOT "
+                    "json_extract(after_json, '$.header') OR "
+                    "json_extract(before_json, '$.production_codes') IS NOT "
+                    "json_extract(after_json, '$.production_codes'))",
+                    (f"{organization_id}:{report_type}",),
+                ).fetchone()[0],
+            )
             if report_type == "HEAD_SITE":
                 layout_revision = max(
                     layout_revision,
