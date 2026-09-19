@@ -579,9 +579,17 @@ def _report_value(value: object) -> ReportCellValue:
 
 def _excel_number(value: str) -> int | float:
     decimal = Decimal(value)
-    if decimal == decimal.to_integral_value():
-        return int(decimal)
-    return float(decimal)
+    try:
+        number = int(decimal) if decimal == decimal.to_integral_value() else float(decimal)
+        if not decimal.is_finite() or Decimal(format(number, ".15g")) != decimal:
+            raise ValueError("Excel numeric precision would change this quantity")
+    except (ValueError, OverflowError, InvalidOperation) as exc:
+        raise ExcelWorkbookValidationError(
+            f"Число {value} нельзя сохранить в Excel без потери точности "
+            "(до 15 значащих цифр). Экспорт отменён, данные не изменены. "
+            "Используйте PDF для точного представления или продолжите работу в программе."
+        ) from exc
+    return number
 
 
 def _header(cell: Cell, fill: PatternFill, border: Border) -> None:
