@@ -49,6 +49,12 @@ REQUIRED_FILES = (
 USER_DATA_DIRECTORIES = ("attachments", "backups", "data", "exports", "imports", "temp")
 SECRET_FILE_SUFFIXES = {".key", ".p12", ".pfx", ".kdbx"}
 DATABASE_FILE_SUFFIXES = {".db", ".sqlite", ".sqlite3", ".sqlitedb", ".backup", ".bak", ".dump"}
+DATABASE_SIDECAR_SUFFIXES = tuple(
+    f"{suffix}{sidecar}"
+    for suffix in DATABASE_FILE_SUFFIXES
+    for sidecar in ("-wal", "-shm", "-journal")
+)
+VAULT_FILENAME = re.compile(r"\.keys\.json(?:\.|$)", re.IGNORECASE)
 PRIVATE_KEY_HEADER = re.compile(rb"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----")
 NETWORK_REFERENCE = re.compile(rb"(?:https?|wss?)://[^\s\"'`<>]+", re.IGNORECASE)
 NETWORK_API = re.compile(
@@ -101,9 +107,16 @@ def verify_distribution_hygiene(root: Path) -> None:
             or name in {"id_rsa", "id_ed25519", ".env"}
             or name.startswith(".env.")
             and name != ".env.example"
-            or name.endswith((".sqlite-wal", ".sqlite-shm", ".sqlite3-wal", ".sqlite3-shm"))
+            or name.endswith(DATABASE_SIDECAR_SUFFIXES)
+            or suffix in {".pending", ".encrypted-pending"}
+            or VAULT_FILENAME.search(name)
         ):
             raise ReleaseVerificationError(f"Private or runtime file is packaged: {relative}")
+        # Catch a plaintext SQLite database renamed to an innocuous resource extension.
+        # Encrypted files have no fixed header and are excluded by location/name above.
+        with path.open("rb") as stream:
+            if stream.read(16) == b"SQLite format 3\x00":
+                raise ReleaseVerificationError(f"SQLite user database is packaged: {relative}")
         # PEM may legitimately be a runtime's public CA bundle; reject private keys only.
         if suffix in {".pem", ".txt", ".toml", ".yaml", ".yml", ".json", ".env"}:
             if PRIVATE_KEY_HEADER.search(path.read_bytes()):
@@ -152,6 +165,15 @@ def _pe_machine(path: Path) -> int:
         return int(struct.unpack("<H", machine_bytes)[0])
 
 
+def verify_sqlcipher_runtime(root: Path) -> None:
+    """Require the bundled cipher extension, independently of ordinary SQLite."""
+    extensions = tuple((root / "runtime" / "sqlcipher3").glob("_sqlite3*.pyd"))
+    if len(extensions) != 1:
+        raise ReleaseVerificationError("Bundled SQLCipher runtime is missing or ambiguous")
+    if _pe_machine(extensions[0]) != 0x8664:
+        raise ReleaseVerificationError("Bundled SQLCipher runtime is not Windows x64")
+
+
 def verify_release(root: Path, *, pristine: bool = False) -> None:
     root = root.resolve()
     if not root.is_dir():
@@ -193,6 +215,7 @@ def verify_release(root: Path, *, pristine: bool = False) -> None:
     python_dlls = tuple((root / "runtime").glob("python3*.dll"))
     if not python_dlls or not (root / "runtime" / "base_library.zip").is_file():
         raise ReleaseVerificationError("PyInstaller embedded Python runtime is incomplete")
+    verify_sqlcipher_runtime(root)
     if _pe_machine(root / "ReportingSystem.exe") != 0x8664:
         raise ReleaseVerificationError("ReportingSystem.exe is not Windows x64")
     if (

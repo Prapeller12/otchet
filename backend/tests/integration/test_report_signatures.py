@@ -67,7 +67,7 @@ def test_profiles_require_admin_and_do_not_return_secrets(
     assert not app.create_report_signer(request)["ok"]
     assert not app.create_report_signer({**request, "admin_pin": "wrong-pin"})["ok"]
     signer = data(app.create_report_signer({**request, "admin_pin": PIN}))
-    assert signer["role"] == "signer"
+    assert signer["role"] == "reviewer"
     assert signer["key_fingerprint"] != admin["key_fingerprint"]
     assert not app.create_report_signer({**request, "admin_pin": PIN})["ok"]
     assert not app.create_report_signer(
@@ -176,7 +176,7 @@ def test_legacy_migration_preserves_old_attestation(tmp_path: Path) -> None:
             ),
         )
         conn.commit()
-        assert apply_migrations(conn, ROOT / "backend/migrations") == ("0012",)
+        assert apply_migrations(conn, ROOT / "backend/migrations") == ("0012", "0013")
         assert apply_migrations(conn, ROOT / "backend/migrations") == ()
     finally:
         conn.close()

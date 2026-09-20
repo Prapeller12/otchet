@@ -27,7 +27,7 @@ function show(gateway: ApplicationGateway, initial = calendar()) {
   let latest = initial;
   function Workspace() {
     const [matrix, setMatrix] = useState(initial);
-    return <ReportMatrix gateway={gateway} matrix={matrix} onChange={(next) => { latest = next; setMatrix(next); }} onStatusChange={vi.fn()} />;
+    return <ReportMatrix workspaceMode="admin" gateway={gateway} matrix={matrix} onChange={(next) => { latest = next; setMatrix(next); }} onStatusChange={vi.fn()} />;
   }
   render(<Workspace />);
   return () => latest;

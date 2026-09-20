@@ -1,6 +1,11 @@
 import { ReferenceReport } from "../features/reference-reports/ReferenceReport";
 import type { ReferenceSummary } from "../shared/api/application-gateway";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AccessGate } from "../features/access/AccessGate";
+import { AuthorizationDialog, type PendingAuthorization } from "../features/access/AuthorizationDialog";
+import { Onboarding } from "../features/access/Onboarding";
+import { ResponsibleUsers } from "../features/access/ResponsibleUsers";
+import type { AuthorizationHandler } from "../shared/api/application-gateway";
 import { UiIcon } from "../shared/ui/UiIcon";
 
 import { WorkspaceSettingsDialog } from "../features/workspace-settings/WorkspaceSettingsDialog";
@@ -20,6 +25,48 @@ const REPORT_LABELS: Record<ReportType, string> = {
 
 export function App() {
   const gateway = useApplicationGateway();
+  return <AccessGate gateway={gateway}><Workspace /></AccessGate>;
+}
+
+function Workspace() {
+  const gateway = useApplicationGateway();
+  const [workspaceMode, setWorkspaceMode] = useState<"entry" | "admin">("entry");
+  const [adminSection, setAdminSection] = useState<"reports" | "users">("reports");
+  const [onboardingOpen, setOnboardingOpen] = useState(() => {
+    try { return gateway.mode === "pywebview" && localStorage.getItem("reporting-onboarding-v1") !== "done"; } catch { return gateway.mode === "pywebview"; }
+  });
+  const [pendingAuthorization, setPendingAuthorization] = useState<PendingAuthorization | null>(null);
+  const authorizationRef = useRef<PendingAuthorization | null>(null);
+  const requestAuthorization = useCallback<AuthorizationHandler>((prompt, execute) => new Promise((resolve, reject) => {
+    if (authorizationRef.current) { reject(new Error("Сначала завершите открытое подтверждение.")); return; }
+    const pending = { ...prompt, execute, resolve, reject };
+    authorizationRef.current = pending;
+    setPendingAuthorization(pending);
+  }), []);
+  useEffect(() => {
+    gateway.setAuthorizationHandler?.(requestAuthorization);
+    return () => {
+      gateway.setAuthorizationHandler?.(null);
+      authorizationRef.current?.reject(new Error("Подтверждение закрыто."));
+      authorizationRef.current = null;
+    };
+  }, [gateway, requestAuthorization]);
+  function closeAuthorization() { authorizationRef.current = null; setPendingAuthorization(null); }
+  function closeOnboarding() {
+    setOnboardingOpen(false);
+    try { localStorage.setItem("reporting-onboarding-v1", "done"); } catch { /* Optional local preference. */ }
+  }
+  async function openAdministration() {
+    if (gateway.mode === "demo") { setWorkspaceMode("admin"); return; }
+    try {
+      await requestAuthorization({ title: "Открыть раздел администратора", adminOnly: true }, async authorization => {
+        const user = await gateway.authenticateAccess!(authorization);
+        if (user.role !== "admin") throw new Error("Требуется код администратора.");
+        return user;
+      });
+      setWorkspaceMode("admin"); setAdminSection("reports");
+    } catch { /* Cancel preserves the current workspace. */ }
+  }
   const [reportType, setReportType] = useState<ReportType>("DAILY_MOVEMENT");
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
   const [organizationId, setOrganizationId] = useState("");
@@ -91,10 +138,21 @@ export function App() {
     <div className="app-shell">
       <header className="app-header">
         <div className="app-brand">
-          <p className="app-eyebrow">Локальный контур</p>
+          <p className="app-eyebrow">{workspaceMode === "admin" ? "Раздел администратора" : "Заполнение отчётов"}</p>
           <h1>Производственная отчётность</h1>
         </div>
+        <div className="workspace-mode-actions">
+          <button type="button" disabled={navigationBlocked} onClick={() => setOnboardingOpen(true)}>Как заполнить</button>
+          {workspaceMode === "entry" ? <button type="button" disabled={navigationBlocked} onClick={() => void openAdministration()}>Администратор</button>
+            : <button type="button" disabled={navigationBlocked} onClick={() => { setWorkspaceMode("entry"); setAdminSection("reports"); }}>К заполнению отчётов</button>}
+        </div>
       </header>
+      {workspaceMode === "admin" && <div className="admin-navigation" aria-label="Разделы администратора">
+        <p>Настройте формы и выдайте личные ключи.</p>
+        <button className="button secondary" disabled={navigationBlocked} aria-pressed={adminSection === "reports"} onClick={() => setAdminSection("reports")}>План и сведения</button>
+        <button className="button secondary" disabled={navigationBlocked || !!referenceId} onClick={() => setSettingsOpen(true)}>Настроить рабочее поле</button>
+        <button className="button secondary" disabled={navigationBlocked} aria-pressed={adminSection === "users"} onClick={() => setAdminSection("users")}>Ответственные лица</button>
+      </div>}
 
       <div className="workspace-navigation">
         <nav className="report-tabs" aria-label="Формы отчётности">
@@ -122,10 +180,7 @@ export function App() {
             ))}
           </select>
         </label>
-        <button className="header-settings-button" type="button" disabled={navigationBlocked || !!referenceId} onClick={() => setSettingsOpen(true)}>
-          <UiIcon name="settings" />
-          Настроить рабочее поле
-        </button>
+
       </div>
 
       {activeReferences.length > 0 && <label className="reference-selector">Сохранённые отчёты Excel
@@ -136,12 +191,13 @@ export function App() {
       </label>}
       {matrixBlocked && <p className="workspace-edit-notice" role="status">Завершите ввод и сохраните изменения перед переходом в другую форму, организацию или настройки.</p>}
       <main>
-        {loadError !== null ? (
+        {workspaceMode === "admin" && adminSection === "users" ? <ResponsibleUsers gateway={gateway} /> : loadError !== null ? (
           <section className="load-state load-state-error" role="alert">{loadError}</section>
         ) : referenceId ? (
           <ReferenceReport gateway={gateway} organizationId={organizationId} identity={referenceId} onBack={() => setReferenceId("")} onDirty={setReferenceDirty} />
         ) : organizationId ? (
           <ReportMatrixPage
+            workspaceMode={workspaceMode}
             reportType={reportType}
             organizationId={organizationId}
             reloadKey={reloadKey}
@@ -165,7 +221,9 @@ export function App() {
         </span>
       </footer>
 
-      {settingsOpen && organizationId && (
+      {onboardingOpen && <Onboarding onClose={closeOnboarding} />}
+      {pendingAuthorization && <AuthorizationDialog gateway={gateway} pending={pendingAuthorization} onClose={closeAuthorization} />}
+      {workspaceMode === "admin" && settingsOpen && organizationId && (
         <WorkspaceSettingsDialog
           gateway={gateway}
           organizations={organizations}

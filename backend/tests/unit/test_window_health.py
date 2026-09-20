@@ -54,3 +54,47 @@ def test_native_signing_stops_if_secret_is_left_in_input(monkeypatch: pytest.Mon
     monkeypatch.setattr(window_health, "_fill_signing_input", Mock())
     with pytest.raises(RuntimeError, match="PIN не очищен"):
         window_health._exercise_signing(window)
+
+
+def test_input_waits_until_asynchronous_access_field_is_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = Mock()
+    # The page shell exists; its input appears after the native status response.
+    window.evaluate_js.side_effect = [False, False, True]
+    sleeper = Mock()
+    monkeypatch.setattr("backend.desktop.window_health.time.sleep", sleeper)
+    window_health._fill_form_input(window, ".access-page", "Код доступа", "synthetic-pin")
+    assert window.evaluate_js.call_count == 3
+    assert sleeper.call_count == 2
+
+
+def test_input_timeout_names_field_without_disclosing_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = Mock()
+    window.evaluate_js.side_effect = [False, ""]
+    clock = iter((0, 16))
+    monkeypatch.setattr("backend.desktop.window_health.time.monotonic", lambda: next(clock))
+    with pytest.raises(RuntimeError) as error:
+        window_health._fill_form_input(window, ".access-page", "Код доступа", "never-disclose")
+    assert "Код доступа" in str(error.value)
+    assert ".access-page" in str(error.value)
+    assert "never-disclose" not in str(error.value)
+
+
+def test_failed_native_self_test_captures_screen_before_close(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = Mock()
+    window.events.loaded.wait.return_value = False
+    capture = Mock()
+    importer = Mock(return_value=capture)
+    monkeypatch.setattr("backend.desktop.window_health.importlib.import_module", importer)
+    failures: list[str] = []
+    monitor_window(window, PortablePaths(tmp_path), ui_self_test=True, failures=failures)
+    assert failures
+    importer.assert_called_once_with("PIL.ImageGrab")
+    capture.grab.return_value.save.assert_called_once_with(tmp_path / "temp/window-error.png")
+    window.destroy.assert_called_once()

@@ -62,7 +62,7 @@ describe("Excel actions", () => {
     const user = userEvent.setup();
 
     render(
-      <ReportMatrix
+      <ReportMatrix workspaceMode="admin"
         gateway={gateway}
         matrix={matrix}
         onChange={vi.fn()}

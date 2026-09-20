@@ -17,7 +17,7 @@ function show() {
   }));
   function Workspace() {
     const [matrix, setMatrix] = useState(initial);
-    return <ReportMatrix gateway={gateway} matrix={matrix} onChange={next => { latest = next; setMatrix(next); }} onStatusChange={() => {}} />;
+    return <ReportMatrix workspaceMode="admin" gateway={gateway} matrix={matrix} onChange={next => { latest = next; setMatrix(next); }} onStatusChange={() => {}} />;
   }
   render(<Workspace />);
   return { initial, save, latest: () => latest };

@@ -308,7 +308,7 @@ class SqliteReportWorkspaceRepository:
             raise
         finally:
             connection.close()
-        return self._list_groups(organization_id, report_type)
+        return self.list_groups(organization_id, report_type)
 
     def save_groups(
         self,
@@ -479,9 +479,9 @@ class SqliteReportWorkspaceRepository:
             raise
         finally:
             connection.close()
-        return self._list_groups(organization_id, report_type)
+        return self.list_groups(organization_id, report_type)
 
-    def _list_groups(self, organization_id: int, report_type: str) -> tuple[WorkspaceGroup, ...]:
+    def list_groups(self, organization_id: int, report_type: str) -> tuple[WorkspaceGroup, ...]:
         connection = connect_sqlite(self._database_path)
         try:
             rows = connection.execute(

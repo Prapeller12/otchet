@@ -15,6 +15,12 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from backend.infrastructure.database.encrypted_sqlite import (
+    connect_encrypted,
+    has_database_key,
+    is_encrypted_database,
+)
+
 _MIGRATION_FILE = re.compile(r"^(?P<version>[0-9]{4})_[a-z0-9_]+\.sql$")
 _DEFAULT_MIGRATIONS_DIRECTORY = Path(__file__).resolve().parents[2] / "migrations"
 
@@ -36,7 +42,12 @@ class Migration:
 def connect_sqlite(database_path: str | Path) -> sqlite3.Connection:
     """Open a SQLite connection with mandatory referential-integrity checks."""
 
-    connection = sqlite3.connect(database_path)
+    if has_database_key(database_path):
+        connection = connect_encrypted(database_path)
+    elif is_encrypted_database(database_path):
+        raise sqlite3.DatabaseError("База заблокирована. Введите код доступа.")
+    else:
+        connection = sqlite3.connect(database_path)
     connection.execute("PRAGMA foreign_keys = ON")
     enabled = connection.execute("PRAGMA foreign_keys").fetchone()
     if enabled != (1,):

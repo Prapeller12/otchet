@@ -133,6 +133,24 @@ def apply_header_patch(
         if not isinstance(raw, dict):
             raise ValueError("Неверные поля шапки отчёта")
         patch["header"] = validate_header({**current.get("header", {}), **raw})
+    if "production_code_actuals" in request:
+        if "production_codes" in request:
+            raise ValueError("Сохраните настройку кодов и фактический выпуск отдельными действиями")
+        actuals = request["production_code_actuals"]
+        existing = validate_production_codes(current.get("production_codes", []))
+        known = {code["id"] for code in existing}
+        if not isinstance(actuals, dict) or not actuals or actuals.keys() - known:
+            raise ValueError("Выберите существующие коды выпуска; новые коды задаёт администратор")
+        for code in existing:
+            if code["id"] not in actuals:
+                continue
+            values = actuals[code["id"]]
+            if not isinstance(values, dict):
+                raise ValueError("Неверные месяцы фактического выпуска по кодам")
+            code["actuals"] = {**code["actuals"], **values}
+        # Reuse all numeric/month/legacy-total checks without accepting plan,
+        # label or identifier changes through this reviewer-only command.
+        request = {**request, "production_codes": existing}
     if "production_codes" not in request:
         return patch
     if report_type != "HEAD_SITE":

@@ -41,7 +41,7 @@ it("exports the selected month and requires an explicit attestation of the exact
   await waitFor(() => expect(screen.getByRole("button", { name: "Подтвердить данные" })).toBeEnabled());
   await user.click(screen.getByRole("button", { name: "Подтвердить данные" }));
   expect(screen.getByRole("button", { name: "Подтверждаю верность данных" })).toBeDisabled();
-  await user.type(await screen.findByLabelText("PIN пользователя"), "test-pin");
+  await user.type(await screen.findByLabelText("Код проверяющего или администратора"), "test-pin");
   await user.click(screen.getByRole("checkbox"));
   await user.click(screen.getByRole("button", { name: "Подтверждаю верность данных" }));
   expect(verify).toHaveBeenCalledWith({ ...query, month: 2, expected_revision: "db-1", signer_id: "user-1", pin: "test-pin", confirmed: true, snapshot_sha256: "abc" });
@@ -62,61 +62,42 @@ it("keeps the confirmation open when the backend rejects a stale snapshot", asyn
   const user = userEvent.setup();
   await waitFor(() => expect(screen.getByRole("button", { name: "Подтвердить данные" })).toBeEnabled());
   await user.click(screen.getByRole("button", { name: "Подтвердить данные" }));
-  await user.type(await screen.findByLabelText("PIN пользователя"), "test-pin");
+  await user.type(await screen.findByLabelText("Код проверяющего или администратора"), "test-pin");
   await user.click(screen.getByRole("checkbox"));
   await user.click(screen.getByRole("button", { name: "Подтверждаю верность данных" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Данные изменились");
   expect(screen.getByRole("dialog")).toBeVisible();
-  expect(screen.getByLabelText("PIN пользователя")).toHaveValue("");
+  expect(screen.getByLabelText("Код проверяющего или администратора")).toHaveValue("");
 });
 
-it("creates the first key, checks repeated PIN, and clears secrets on cancel", async () => {
-  const createReportSigner = vi.fn(async () => signer);
-  const verifyReport = vi.fn(async () => ({ status: "VERIFIED" as const, snapshot_sha256: "abc" }));
+it("directs users without a reviewer to the administrator instead of creating keys in entry", async () => {
+  const createReportSigner = vi.fn();
   const gateway = Object.assign(new DemoGateway(), {
     getReportVerification: vi.fn(async () => ({ status: "UNVERIFIED" as const, snapshot_sha256: "abc" })),
-    listReportSigners: vi.fn(async () => []), createReportSigner, verifyReport,
+    listReportSigners: vi.fn(async () => []), createReportSigner, verifyReport: vi.fn(),
     exportPdf: vi.fn(async () => ({ cancelled: true })),
   });
   render(<MonthlyReportActions gateway={gateway} query={query} revision="db-1" blocked={false} />);
   const user = userEvent.setup();
   await waitFor(() => expect(screen.getByRole("button", { name: "Подтвердить данные" })).toBeEnabled());
   await user.click(screen.getByRole("button", { name: "Подтвердить данные" }));
-  await user.type(await screen.findByLabelText("ФИО пользователя"), "Иванов");
-  await user.type(screen.getByLabelText("Новый PIN (от 6 символов)"), "test-pin");
-  await user.type(screen.getByLabelText("Повтор PIN"), "different");
-  await user.click(screen.getByRole("button", { name: "Создать ключ пользователя" }));
-  expect(await screen.findByRole("alert")).toHaveTextContent("не совпадают");
+  expect(await screen.findByText(/Нет проверяющих/)).toBeVisible();
+  expect(screen.queryByLabelText("ФИО пользователя")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Создать ключ пользователя" })).toBeNull();
   expect(createReportSigner).not.toHaveBeenCalled();
-  await user.clear(screen.getByLabelText("Повтор PIN"));
-  await user.type(screen.getByLabelText("Повтор PIN"), "test-pin");
-  await user.click(screen.getByRole("button", { name: "Создать ключ пользователя" }));
-  expect(createReportSigner).toHaveBeenCalledWith({ display_name: "Иванов", pin: "test-pin" });
-  expect(await screen.findByLabelText("PIN пользователя")).toHaveValue("");
-  await user.type(screen.getByLabelText("PIN пользователя"), "test-pin");
-  await user.click(screen.getByRole("button", { name: "Отмена" }));
-  expect(screen.queryByRole("dialog")).toBeNull();
-  expect(verifyReport).not.toHaveBeenCalled();
 });
 
-it("passes admin credentials only when creating an additional user", async () => {
-  const createReportSigner = vi.fn(async () => ({ ...signer, id: "user-2", display_name: "Петров", role: "signer" as const }));
+it("does not offer project managers as reviewers or create new users in the signing flow", async () => {
   const gateway = Object.assign(new DemoGateway(), signerApi, {
-    getReportVerification: vi.fn(async () => ({ status: "INVALID" as const, snapshot_sha256: "abc" })),
-    createReportSigner, verifyReport: vi.fn(), exportPdf: vi.fn(),
+    getReportVerification: vi.fn(async () => ({ status: "UNVERIFIED" as const, snapshot_sha256: "abc" })),
+    listReportSigners: vi.fn(async () => [signer, { ...signer, id: "manager", display_name: "Руководитель", role: "project_manager" }]),
+    verifyReport: vi.fn(), exportPdf: vi.fn(),
   });
   render(<MonthlyReportActions gateway={gateway} query={query} revision="db-1" blocked={false} />);
   const user = userEvent.setup();
-  expect(await screen.findByText(/Подпись недействительна/)).toBeVisible();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Подтвердить данные" })).toBeEnabled());
   await user.click(screen.getByRole("button", { name: "Подтвердить данные" }));
-  await waitFor(() => expect(screen.getByRole("button", { name: "Добавить пользователя" })).toBeEnabled());
-  await user.click(screen.getByRole("button", { name: "Добавить пользователя" }));
-  await user.type(screen.getByLabelText("ФИО пользователя"), "Петров");
-  await user.type(screen.getByLabelText("Новый PIN (от 6 символов)"), "test-pin");
-  await user.type(screen.getByLabelText("Повтор PIN"), "test-pin");
-  expect(screen.getByRole("button", { name: "Создать ключ пользователя" })).toBeDisabled();
-  await user.type(screen.getByLabelText("PIN администратора"), "admin-pin");
-  await user.click(screen.getByRole("button", { name: "Создать ключ пользователя" }));
-  expect(createReportSigner).toHaveBeenCalledWith({ display_name: "Петров", pin: "test-pin", admin_id: "user-1", admin_pin: "admin-pin" });
-  expect(await screen.findByLabelText("PIN пользователя")).toHaveValue("");
+  await screen.findByLabelText("Код проверяющего или администратора");
+  expect(screen.queryByRole("option", { name: /Руководитель/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Добавить пользователя" })).toBeNull();
 });

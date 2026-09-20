@@ -254,7 +254,7 @@ export type ReportPresentation = {
   production_code_annual?: Record<string, string>;
   annual?: { plan: string; actual: string; completion: string; plan_months: number; actual_months: number };
 };
-export type SaveReportPresentationRequest = ReportLayoutQuery & ReportPresentation & { expected_revision?: string; confirm_production_totals?: boolean };
+export type SaveReportPresentationRequest = ReportLayoutQuery & ReportPresentation & { expected_revision?: string; confirm_production_totals?: boolean; production_code_actuals?: Record<string, Record<string, string>> };
 
 export type ApplicationError = {
   code: string;
@@ -274,6 +274,12 @@ export interface ApplicationGateway {
   createReportSigner?(request: CreateReportSignerRequest): Promise<ReportSigner>;
   getReportVerification?(request: MonthlyReportQuery): Promise<ReportVerification>;
   verifyReport?(request: VerifyReportRequest): Promise<ReportVerification>;
+  getAccessStatus?(): Promise<AccessStatus>;
+  setupAccess?(request: { display_name?: string; pin: string; signer_id?: string }): Promise<AccessStatus>;
+  unlockAccess?(authorization: WriteAuthorization): Promise<AccessStatus>;
+  enrollAccess?(authorization: WriteAuthorization): Promise<AccessUser>;
+  authenticateAccess?(authorization: WriteAuthorization): Promise<AccessUser>;
+  setAuthorizationHandler?(handler: AuthorizationHandler | null): void;
   readonly mode: "pywebview" | "demo";
   saveReportPresentation?(request: SaveReportPresentationRequest): Promise<ReportPresentation>;
   getReportMatrix(query: ReportMatrixQuery): Promise<ReportMatrixContract>;
@@ -307,5 +313,12 @@ export type ReferenceSummary = Pick<ReferenceWorkbook, "id" | "file_name" | "rep
 export type ReferenceRequest = {
   report_type?: ReportType; year?: number; mappings?: unknown[]; action: "list" | "get" | "save" | "export" | "transfer"; organization_id: string; id?: string; revision?: number; changes?: { sheet: number; address: string; value: string | null }[] };
 
-export type ReportSigner = { id: string; display_name: string; role: "admin" | "signer"; key_fingerprint: string; created_at: string };
-export type CreateReportSignerRequest = { display_name: string; pin: string; admin_id?: string; admin_pin?: string };
+export type ReportSigner = { can_unlock?: boolean; id: string; display_name: string; role: AccessRole; key_fingerprint: string; created_at: string };
+export type CreateReportSignerRequest = { display_name: string; pin: string; role?: AccessRole; admin_id?: string; admin_pin?: string };
+
+export type AccessRole = "admin" | "reviewer" | "project_manager";
+export type AccessUser = { can_unlock?: boolean; id: string; display_name: string; role: AccessRole };
+export type AccessStatus = { state: "setup" | "legacy" | "locked" | "ready"; users: AccessUser[]; current_user?: AccessUser };
+export type WriteAuthorization = { signer_id: string; pin: string };
+export type AuthorizationPrompt = { title: string; adminOnly: boolean };
+export type AuthorizationHandler = (prompt: AuthorizationPrompt, execute: (authorization: WriteAuthorization) => Promise<unknown>) => Promise<unknown>;

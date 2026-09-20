@@ -129,3 +129,63 @@ def test_partial_header_update_preserves_other_fields_and_image_validation() -> 
         validate_header({"product_image": "data:image/png;base64,bm90IGEgcG5n"})
     with pytest.raises(ValueError):
         validate_header({"unknown": "x"})
+
+
+def test_reviewer_code_actuals_preserve_identifiers_labels_plans_and_other_months() -> None:
+    current = {"production_codes": [code("A", "19", "2"), code("B", "12", "1")]}
+    patch = apply_header_patch(
+        current,
+        {
+            "production_code_actuals": {
+                "A": {"2026-02": "0"},
+                "B": {"2026-02": ""},
+            }
+        },
+        "HEAD_SITE",
+    )
+    assert patch["production_codes"] == [
+        {
+            "id": "A",
+            "label": "Код A",
+            "plans": {"2026-01": "19"},
+            "actuals": {"2026-01": "2", "2026-02": "0"},
+        },
+        {
+            "id": "B",
+            "label": "Код B",
+            "plans": {"2026-01": "12"},
+            "actuals": {"2026-01": "1", "2026-02": ""},
+        },
+    ]
+    assert current["production_codes"][0]["actuals"] == {"2026-01": "2"}
+
+
+@pytest.mark.parametrize(
+    "actuals",
+    [
+        {"NEW": {"2026-01": "1"}},
+        {"A": {"label": "Переименование"}},
+        {"A": {"plans": {"2026-01": "12"}}},
+        {"A": {"2026-01": {"quantity": "1"}}},
+    ],
+)
+def test_reviewer_code_actuals_reject_metadata_and_unknown_codes(actuals: object) -> None:
+    with pytest.raises(ValueError):
+        apply_header_patch(
+            {"production_codes": [code("A")]},
+            {
+                "production_code_actuals": actuals,
+            },
+            "HEAD_SITE",
+        )
+
+
+def test_reviewer_code_actuals_requires_confirmation_before_replacing_legacy_total() -> None:
+    current = {"actuals": {"2026-02": "7"}, "production_codes": [code("A")]}
+    request = {"production_code_actuals": {"A": {"2026-02": "2"}}}
+    with pytest.raises(ValueError, match="Подтвердите"):
+        apply_header_patch(current, request, "HEAD_SITE")
+    patched = apply_header_patch(
+        current, {**request, "confirm_production_totals": True}, "HEAD_SITE"
+    )
+    assert patched["production_codes"][0]["actuals"]["2026-02"] == "2"

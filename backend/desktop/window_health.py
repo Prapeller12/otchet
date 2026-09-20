@@ -32,45 +32,98 @@ def _click_button(window: Any, label: str) -> None:
 
     expression = f"""(() => {{
       const button = [...document.querySelectorAll('button')]
-        .find(node => node.textContent.trim() === {json.dumps(label)});
-      if (!button || button.disabled) return false;
+        .find(node => node.textContent.trim() === {json.dumps(label)} &&
+          !node.disabled && node.getClientRects().length > 0 &&
+          getComputedStyle(node).visibility === 'visible');
+      if (!button) return false;
       button.click(); return true;
     }})()"""
     _wait_for_script(window, expression, f"Недоступна кнопка «{label}»")
 
 
-def _fill_signing_input(window: Any, label: str, value: str) -> None:
+def _fill_form_input(window: Any, scope: str, label: str, value: str) -> None:
     import json
 
-    window.evaluate_js(f"""(() => {{
-      const label = [...document.querySelectorAll('.verification-form label')]
+    # The access page first renders its shell, then waits for the native status.
+    # Readiness and input happen in one evaluation so a rerender cannot race them.
+    expression = f"""(() => {{
+      const label = [...document.querySelectorAll({json.dumps(scope + " label")})]
         .find(node => node.textContent.trim() === {json.dumps(label)});
       const input = label?.querySelector('input');
-      if (!input || input.disabled) throw new Error('Signing field is not available');
+      if (!input || input.disabled || input.readOnly || !input.getClientRects().length ||
+          getComputedStyle(input).visibility !== 'visible') return false;
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
         .set.call(input, {json.dumps(value)});
       input.dispatchEvent(new Event('input', {{bubbles: true}}));
-    }})()""")
+      return true;
+    }})()"""
+    _wait_for_script(window, expression, f"Недоступно поле «{label}» ({scope})")
+
+
+def _fill_signing_input(window: Any, label: str, value: str) -> None:
+    _fill_form_input(window, ".verification-form", label, value)
+
+
+def _unlock_test_window(window: Any) -> None:
+    """Use the same locked-screen path that a person uses after restarting."""
+    _wait_for_script(window, "!!document.querySelector('.access-page')", "Не открыт вход")
+    _fill_form_input(window, ".access-page", "Код доступа", "window-test-pin")
+    _click_button(window, "Открыть отчёты")
+    _wait_for_script(
+        window, "!!document.querySelector('.onboarding-dialog')", "Нет подсказок заполнения"
+    )
+    _click_button(window, "Далее")
+    _wait_for_script(
+        window,
+        "document.querySelector('#onboarding-title')?.textContent === 'Заполните таблицу'",
+        "Нет второго шага подсказок",
+    )
+    _click_button(window, "Далее")
+    _click_button(window, "Начать заполнение")
+    _wait_for_script(window, _READY, "После входа не открылась рабочая форма")
+    if not window.evaluate_js("""(() => {
+      const buttons = [...document.querySelectorAll('.matrix-toolbar button')];
+      return buttons.length === 2 && buttons[0].textContent.includes('Сохранить') &&
+        buttons[1].textContent === 'Ещё' &&
+        document.querySelector('#report-more-actions')?.hidden &&
+        !document.querySelector('.admin-navigation');
+    })()"""):
+        raise RuntimeError("Основное поле заполнения перегружено действиями администратора")
+
+
+def _confirm_write(window: Any, *, reject_wrong_code: bool = False) -> None:
+    _wait_for_script(
+        window, "!!document.querySelector('.authorization-dialog')", "Нет запроса кода записи"
+    )
+    if reject_wrong_code:
+        _fill_form_input(window, ".authorization-dialog", "Код подтверждения", "wrong-code")
+        _click_button(window, "Подтвердить")
+        _wait_for_script(
+            window,
+            "!!document.querySelector('.authorization-dialog [role=alert]')",
+            "Неверный код не отклонён",
+        )
+        if not window.evaluate_js(
+            "document.querySelector('.authorization-dialog input[type=password]').value === ''"
+        ):
+            raise RuntimeError("Код не очищен после неудачного подтверждения записи")
+    _fill_form_input(window, ".authorization-dialog", "Код подтверждения", "window-test-pin")
+    _click_button(window, "Подтвердить")
+    _wait_for_script(
+        window, "!document.querySelector('.authorization-dialog')", "Запись не подтверждена"
+    )
 
 
 def _exercise_signing(window: Any) -> None:
     """Exercise the real React → native bridge → crypto roundtrip in the test copy."""
+    _click_button(window, "Ещё")
     _click_button(window, "Подтвердить данные")
     _wait_for_script(
         window,
-        "!!document.querySelector('.verification-form input[type=text]:not(:disabled)')",
-        "Не открылось создание ключа",
-    )
-    _fill_signing_input(window, "ФИО пользователя", "Контроль окна")
-    _fill_signing_input(window, "Новый PIN (от 6 символов)", "window-test-pin")
-    _fill_signing_input(window, "Повтор PIN", "window-test-pin")
-    _click_button(window, "Создать ключ пользователя")
-    _wait_for_script(
-        window,
         "!!document.querySelector('.verification-form input[type=checkbox]:not(:disabled)')",
-        "Ключ не создан через окно программы",
+        "Не открылась проверка отчёта",
     )
-    _fill_signing_input(window, "PIN пользователя", "incorrect-test-pin")
+    _fill_signing_input(window, "Код проверяющего или администратора", "incorrect-test-pin")
     window.evaluate_js("document.querySelector('.verification-form input[type=checkbox]').click()")
     _click_button(window, "Подтверждаю верность данных")
     _wait_for_script(
@@ -82,7 +135,7 @@ def _exercise_signing(window: Any) -> None:
         "document.querySelector('.verification-form input[type=password]').value === ''"
     ):
         raise RuntimeError("PIN не очищен после попытки подписи")
-    _fill_signing_input(window, "PIN пользователя", "window-test-pin")
+    _fill_signing_input(window, "Код проверяющего или администратора", "window-test-pin")
     _click_button(window, "Подтверждаю верность данных")
     _wait_for_script(
         window,
@@ -133,6 +186,7 @@ def _exercise_matrix_paste(window: Any) -> None:
         "Несохранённый диапазон не защищён от переключения вкладки",
     )
     _click_button(window, "Сохранить (2)")
+    _confirm_write(window, reject_wrong_code=True)
     _wait_for_script(
         window,
         "[...document.querySelectorAll('.report-tab')].every(button => !button.disabled) && "
@@ -149,12 +203,24 @@ def monitor_window(
     try:
         if not window.events.loaded.wait(45):
             raise RuntimeError("WebView2 не загрузил страницу за 45 секунд")
+        if ui_self_test:
+            _unlock_test_window(window)
         for tab in range(3 if ui_self_test else 1):
             if tab:
                 window.evaluate_js(f"document.querySelectorAll('.report-tab')[{tab}].click()")
                 time.sleep(0.5)
             deadline = time.monotonic() + 30
-            while not window.evaluate_js(_READY):
+            # The access screen is a healthy normal startup. Do not time out while
+            # a person reads the instructions or looks up their code.
+            ready = (
+                _READY
+                if ui_self_test
+                else (
+                    "!!(window.pywebview?.api && document.querySelector('.access-page')) || "
+                    + _READY
+                )
+            )
+            while not window.evaluate_js(ready):
                 error = window.evaluate_js(
                     "document.querySelector('[role=alert]')?.textContent || ''"
                 )
@@ -171,20 +237,18 @@ def monitor_window(
                     paths.temp / "window-head-header.png"
                 )
                 if not window.evaluate_js("""(() => {
-                    const header = document.querySelector('.compact-production-header');
-                    const row = header?.querySelector('.compact-production-row');
-                    const fields = row
-                        ? [...row.querySelectorAll('label, .compact-annual-plan')] : [];
+                    const header = document.querySelector('.readonly-production-header');
+                    const fields = header ? [...header.children] : [];
                     return !!header && header.getBoundingClientRect().height <= 60 &&
                         fields.length === 3 &&
                         fields.every(node => Math.abs(node.getBoundingClientRect().top -
                             fields[1].getBoundingClientRect().top) <= 10) &&
-                        header.querySelectorAll('input').length === 2 &&
+                        header.querySelectorAll('input').length === 0 &&
                         !document.querySelector('.production-code-table');
                 })()"""):
                     geometry = window.evaluate_js("""JSON.stringify(
-                        [...document.querySelectorAll('.compact-production-header, '
-                            + '.compact-production-row > *')].map(node => ({
+                        [...document.querySelectorAll('.readonly-production-header, '
+                            + '.readonly-production-header > *')].map(node => ({
                                 tag: node.tagName,
                                 height: node.getBoundingClientRect().height,
                                 top: node.getBoundingClientRect().top
@@ -213,7 +277,7 @@ def monitor_window(
                     const button = document.querySelector('.supplier-remove');
                     const headers = [...document.querySelectorAll('.source-header-months th')];
                     const dates = [...document.querySelectorAll('.source-header-dates th')];
-                    return button?.getBoundingClientRect().width <= 36 &&
+                    return !button &&
                         headers.length >= 11 && dates.length >= 4 &&
                         headers[0].textContent.includes('Условное изображение') &&
                         headers[1].textContent.includes('№ п/п') &&
@@ -225,7 +289,9 @@ def monitor_window(
                         !!document.querySelector('.week-heading[aria-pressed="true"]');
                 })()"""):
                     raise RuntimeError("Неверные размеры или подписи дочернего отчёта")
-                window.evaluate_js("document.querySelector('.header-settings-button').click()")
+                _click_button(window, "Администратор")
+                _confirm_write(window)
+                _click_button(window, "Настроить рабочее поле")
                 deadline = time.monotonic() + 10
                 while not window.evaluate_js(
                     "!!document.querySelector('.subsidiary-detail-editor')"
@@ -245,6 +311,8 @@ def monitor_window(
                     paths.temp / "window-settings.png"
                 )
                 window.evaluate_js("document.querySelector('.settings-header button').click()")
+                _click_button(window, "К заполнению отчётов")
+                _wait_for_script(window, _READY, "Не восстановлен экран заполнения")
             if ui_self_test:
                 grab = importlib.import_module("PIL.ImageGrab")
                 grab.grab().save(paths.temp / f"window-{tab + 1}.png")
@@ -269,6 +337,13 @@ def monitor_window(
             grab.grab().save(paths.temp / "window-4.png")
             window.destroy()
     except Exception as exc:
+        if ui_self_test:
+            try:
+                importlib.import_module("PIL.ImageGrab").grab().save(
+                    paths.temp / "window-error.png"
+                )
+            except Exception:
+                pass  # Preserve the original failure if capture is unavailable.
         failures.append(
             f"Ошибка загрузки окна: {exc}. Распакуйте полный ZIP в новую локальную папку. "
             "В комплекте должен быть каталог runtime/webview2."
