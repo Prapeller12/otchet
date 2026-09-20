@@ -86,9 +86,7 @@ def test_legacy_migration_and_backups_keep_data_encrypted(tmp_path: Path) -> Non
     )
     configure_database_key(backup, key)
     with closing(connect_sqlite(backup)) as connection:
-        assert connection.execute("SELECT * FROM preserved").fetchone() == (
-            "данные до обновления",
-        )
+        assert connection.execute("SELECT * FROM preserved").fetchone() == ("данные до обновления",)
 
 
 def test_cipher_tamper_rejected(tmp_path: Path) -> None:
