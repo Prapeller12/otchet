@@ -6,7 +6,10 @@ import { ApplicationGatewayProvider } from "./app/providers/ApplicationGatewayPr
 import { createApplicationGateway } from "./shared/api/create-application-gateway";
 import "./styles/global.css";
 import "./styles/design-tokens.css";
-import "./styles/kanban-layout.css";
+import "./styles/legacy-print.css";
+import "./assets/fonts/golos-text.css";
+import "./styles/reference-tokens.css";
+import "./styles/reference-theme.css";
 
 async function bootstrap(): Promise<void> {
   const rootElement = document.getElementById("root");

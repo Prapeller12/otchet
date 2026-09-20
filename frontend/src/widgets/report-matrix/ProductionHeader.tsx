@@ -1,3 +1,4 @@
+import { UiIcon } from "../../shared/ui/UiIcon";
 import { CompactProductionHeader } from "./CompactProductionHeader";
 import { useEffect, useRef, useState } from "react";
 
@@ -91,7 +92,7 @@ function DetailedProductionHeader({ presentation, year, headSite, blocked, onSav
         <label>Завод / изготовитель<input maxLength={200} value={draft.header.factory_name} onChange={e => editHeader({ factory_name: e.target.value })} /></label>
         <label>Изображение изделия<input type="file" accept="image/png,image/jpeg" onChange={e => upload(e.target.files?.[0])} /></label>
         {draft.header.product_image && <div className="position-picture"><img src={draft.header.product_image} alt="Изображение изделия" />
-          <button type="button" className="mini-button" onClick={() => editHeader({ product_image: "" })}>Убрать изображение изделия</button></div>}
+          <button type="button" className="mini-button" onClick={() => editHeader({ product_image: "" })}><UiIcon name="trash" />Убрать изображение изделия</button></div>}
       </div>
       {presentation.annual && <div className="production-annual" aria-label="Годовые итоги">
         <span>Годовой план: <strong>{presentation.annual.plan || "—"}</strong> шт.</span>
@@ -109,15 +110,15 @@ function DetailedProductionHeader({ presentation, year, headSite, blocked, onSav
             <tbody>{draft.codes.map(code => <tr key={code.id}><th scope="row"><input aria-label="Код / модификация" maxLength={200} placeholder="Введите код изделия" value={code.label} onChange={e => setDraft(previous => ({ ...previous, codes: previous.codes.map(row => row.id === code.id ? { ...row, label: e.target.value } : row) }))} /></th>
               <td><output aria-label={`${code.label || "Новый код"}: выпущено за год`} title="По сохранённым данным; обновляется после сохранения">{presentation.production_code_annual?.[code.id] || "—"}</output></td>
               {months.flatMap(month => ( ["plans", "actuals"] as const).map(field => <td key={month + field}><input inputMode="decimal" aria-label={`${code.label || "Новый код"}: ${field === "plans" ? "план" : "факт"} ${month}`} value={code[field][month] ?? ""} onChange={e => editCode(code.id, field, month, e.target.value)} /></td>))}
-              <td><button type="button" className="mini-button" disabled={Object.values(code.plans).some(Boolean) || Object.values(code.actuals).some(Boolean)} title="Код с данными нельзя удалить; сначала явно очистите его значения" onClick={() => setDraft(previous => ({ ...previous, codes: previous.codes.filter(row => row.id !== code.id) }))}>Убрать код</button></td>
+              <td><button type="button" className="mini-button" disabled={Object.values(code.plans).some(Boolean) || Object.values(code.actuals).some(Boolean)} title="Код с данными нельзя удалить; сначала явно очистите его значения" onClick={() => setDraft(previous => ({ ...previous, codes: previous.codes.filter(row => row.id !== code.id) }))}><UiIcon name="trash" />Убрать код</button></td>
             </tr>)}</tbody></table>
         </div>}
-        <button type="button" className="button secondary" disabled={draft.codes.length >= 50} onClick={() => setDraft(previous => ({ ...previous, codes: [...previous.codes, { id: crypto.randomUUID().replaceAll("-", "").toUpperCase(), label: "", plans: {}, actuals: {} }] }))}>+ Код выпуска</button>
+        <button type="button" className="button secondary" disabled={draft.codes.length >= 50} onClick={() => setDraft(previous => ({ ...previous, codes: [...previous.codes, { id: crypto.randomUUID().replaceAll("-", "").toUpperCase(), label: "", plans: {}, actuals: {} }] }))}><UiIcon name="add" />Код выпуска</button>
         {dirty && draft.codes.length > 0 && <label className="production-confirmation"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />При отличии от прежнего общего выпуска использовать суммы по кодам. Прежние общие значения сохранятся в базе.</label>}
       </>}
       <div className="compact-actions">
-        {!onSaveReady && <button type="button" className="button primary" disabled={!dirty || draft.codes.some(code => !code.label.trim())} onClick={() => void save()}>Сохранить шапку и выпуск</button>}
-        <button type="button" className="button secondary" disabled={!dirty} onClick={() => { setDraft(JSON.parse(baseline)); setConfirmed(false); setError(""); }}>Отменить изменения шапки</button>
+        {!onSaveReady && <button type="button" className="button primary" disabled={!dirty || draft.codes.some(code => !code.label.trim())} onClick={() => void save()}><UiIcon name="save" />Сохранить шапку и выпуск</button>}
+        <button type="button" className="button secondary" disabled={!dirty} onClick={() => { setDraft(JSON.parse(baseline)); setConfirmed(false); setError(""); }}><UiIcon name="undo" />Отменить изменения шапки</button>
         <span role="status">{busy ? "Сохранение…" : dirty ? "Есть изменения. Нажмите «Сохранить» вверху." : "Шапка сохранена"}</span>
       </div>
     </fieldset>

@@ -27,7 +27,7 @@ describe("workspace settings", () => {
       await screen.findByRole("dialog", { name: "Организации и строки отчёта" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "+ Добавить строку" }));
+    await user.click(screen.getByRole("button", { name: "Добавить строку" }));
     expect(screen.getAllByLabelText("Позиция")).toHaveLength(2);
     expect(screen.getAllByLabelText("Позиция")[1]).toHaveValue("");
     await user.type(screen.getAllByLabelText("Позиция")[1]!, "Новая деталь");

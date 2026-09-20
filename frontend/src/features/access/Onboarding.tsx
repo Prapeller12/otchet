@@ -1,3 +1,4 @@
+import { UiIcon } from "../../shared/ui/UiIcon";
 import { useState } from "react";
 import { useDialogFocus } from "./useDialogFocus";
 const steps = [
@@ -11,7 +12,7 @@ export function Onboarding({ onClose }: { onClose(): void }) {
   return <div className="excel-dialog-backdrop"><section ref={node => { dialogRef.current = node; }} className="access-card onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
     <p className="access-eyebrow">Как заполнить отчёт · {step + 1} из {steps.length}</p>
     <h2 id="onboarding-title">{steps[step]!.title}</h2><p>{steps[step]!.text}</p>
-    <div className="access-actions"><button className="button secondary" onClick={onClose}>Пропустить подсказки</button>{step > 0 && <button className="button secondary" onClick={() => setStep(step - 1)}>Назад</button>}<button autoFocus className="button primary" onClick={() => step === steps.length - 1 ? onClose() : setStep(step + 1)}>{step === steps.length - 1 ? "Начать заполнение" : "Далее"}</button></div>
+    <div className="access-actions"><button className="button secondary" onClick={onClose}>Пропустить подсказки</button>{step > 0 && <button className="button secondary" onClick={() => setStep(step - 1)}><UiIcon name="arrow-left" />Назад</button>}<button autoFocus className="button primary" onClick={() => step === steps.length - 1 ? onClose() : setStep(step + 1)}>{step === steps.length - 1 ? "Начать заполнение" : "Далее"}<UiIcon name="arrow-right" /></button></div>
     <p className="access-footnote">Эти подсказки всегда доступны по кнопке «Как заполнить».</p>
   </section></div>;
 }

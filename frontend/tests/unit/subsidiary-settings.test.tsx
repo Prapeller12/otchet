@@ -14,7 +14,7 @@ it("adds and archives a manufacturer without duplicating or deleting the detail"
     return <SubsidiaryDetailEditor row={row} onBusy={vi.fn()} onChange={setRow} onRemove={remove} onMove={vi.fn()} disabled={false} />;
   }
   render(<Harness />);
-  await user.click(screen.getByRole("button", { name: "+ Добавить производителя" }));
+  await user.click(screen.getByRole("button", { name: "Добавить производителя" }));
   expect(screen.getAllByLabelText("Производитель")).toHaveLength(2);
   const added = screen.getAllByLabelText("Производитель")[1]!;
   expect(added).toHaveValue("");
@@ -22,7 +22,7 @@ it("adds and archives a manufacturer without duplicating or deleting the detail"
   await user.type(added, "АО Завод");
   expect(added).toHaveValue("АО Завод");
   expect(screen.getAllByLabelText("Наименование")).toHaveLength(1);
-  await user.click(screen.getByRole("button", { name: "+ Добавить производителя" }));
+  await user.click(screen.getByRole("button", { name: "Добавить производителя" }));
   await user.click(screen.getAllByRole("button", { name: "Убрать производителя" })[2]!);
   expect(screen.getAllByLabelText("Производитель")).toHaveLength(2);
   await user.click(screen.getAllByRole("button", { name: "Убрать производителя" })[0]!);

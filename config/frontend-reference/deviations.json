@@ -1,0 +1,55 @@
+{
+  "$schema": "schemas/deviations.schema.json",
+  "profile_version": "1.0.0",
+  "target_name": "otchet",
+  "items": [
+    {
+      "id": "PRINT-01",
+      "reference_element": "Печатные CSS 9–10 px, исходный макет Реестра",
+      "target_decision": "Не подключать print.css/full.css эталона; сохранить текущие PDF-генераторы и TTF.",
+      "reason": "Прямое исключение печатных шрифтов из задачи.",
+      "requirement_source": "Указание пользователя; docs/10_PRINT.md комплекта",
+      "verification": "print-baseline.json: сравнение SHA-256 и PDF regression"
+    },
+    {
+      "id": "MATRIX-01",
+      "reference_element": "Реестр документов/таймлайн/карточка письма",
+      "target_decision": "Сохранить три производственные матрицы и их состав; переносить внешний вид поверхностей и контролов.",
+      "reason": "Отчётные формы и привычный ввод обязательны.",
+      "requirement_source": "AGENTS.md §4.2; docs/01_SCOPE_AND_PRIORITIES.md комплекта",
+      "verification": "source-matrix-table, daily-cumulative, calendar-workspace tests"
+    },
+    {
+      "id": "STACK-01",
+      "reference_element": "React/Tauri + БД и команды Реестра",
+      "target_decision": "Сохранить React18/PyWebView/SQLCipher/portable onedir.",
+      "reason": "Стиль не требует смены стека, хранения или запуска.",
+      "requirement_source": "AGENTS.md §7–8; docs/08_ADAPTATION.md комплекта",
+      "verification": "build, offline policy, packaged native self-test"
+    },
+    {
+      "id": "ROLES-01",
+      "reference_element": "Статусы и действия письма",
+      "target_decision": "Использовать только статусы ячеек/подписи и права программы otchet.",
+      "reason": "Доменные состояния Реестра не описывают производственную отчётность.",
+      "requirement_source": "docs/07_DATA_BOUNDARY.md комплекта",
+      "verification": "authorized-gateway и backend access/signatures tests"
+    },
+    {
+      "id": "ICONS-01",
+      "reference_element": "16 значков образца",
+      "target_decision": "Единые локальные SVG; добавить осмысленные отсутствующие действия Save/Export/Help/Users. Сохранить текст рядом; отмена и выбор числовых значений не требуют значка.",
+      "reason": "Пользователь просит иконки только там, где необходимы; не превращать текстовые действия в загадки.",
+      "requirement_source": "Текущее прямое указание пользователя; constants/icons.json комплекта",
+      "verification": "UI semantic button/icon tests; native screenshot review"
+    },
+    {
+      "id": "DENSITY-01",
+      "reference_element": "Точные ширины десяти колонок реестра",
+      "target_decision": "Сохранить ширины производственных дат/чисел, горизонтальную прокрутку и закрепления.",
+      "reason": "У матриц иной состав данных; длинные названия должны оставаться доступны.",
+      "requirement_source": "AGENTS.md §5.4; docs/04_LAYOUT_AND_TABLES.md комплекта",
+      "verification": "resize/keyboard tests; native scroll and small-window review"
+    }
+  ]
+}

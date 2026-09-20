@@ -155,18 +155,18 @@ function Workspace() {
           <h1>Производственная отчётность</h1>
         </div>
         <div className="workspace-mode-actions">
-          <button type="button" disabled={navigationBlocked} onClick={() => setOnboardingOpen(true)}>Как заполнить</button>
+          <button type="button" disabled={navigationBlocked} onClick={() => setOnboardingOpen(true)}><UiIcon name="help" />Как заполнить</button>
           {workspaceMode === "entry" ? <>
-            <button type="button" disabled={navigationBlocked || !!referenceId} onClick={() => setWorkspaceMode("report-settings")}>План и сведения</button>
-            <button type="button" disabled={navigationBlocked} onClick={() => void openAdministration()}>Администратор</button>
-          </> : <button type="button" disabled={navigationBlocked || leavingAdministration} onClick={() => void leaveEditing()}>К заполнению отчётов</button>}
+            <button type="button" disabled={navigationBlocked || !!referenceId} onClick={() => setWorkspaceMode("report-settings")}><UiIcon name="edit" />План и сведения</button>
+            <button type="button" disabled={navigationBlocked} onClick={() => void openAdministration()}><UiIcon name="key" />Администратор</button>
+          </> : <button type="button" disabled={navigationBlocked || leavingAdministration} onClick={() => void leaveEditing()}><UiIcon name="arrow-left" />К заполнению отчётов</button>}
         </div>
       </header>
       {workspaceMode === "admin" && <div className="admin-navigation" aria-label="Разделы администратора">
         <p>Настройте формы и выдайте личные ключи.</p>
-        <button className="button secondary" disabled={navigationBlocked} aria-pressed={adminSection === "reports"} onClick={() => setAdminSection("reports")}>План и сведения</button>
-        <button className="button secondary" disabled={navigationBlocked || !!referenceId} onClick={() => setSettingsOpen(true)}>Настроить рабочее поле</button>
-        <button className="button secondary" disabled={navigationBlocked} aria-pressed={adminSection === "users"} onClick={() => setAdminSection("users")}>Ответственные лица</button>
+        <button className="button secondary" disabled={navigationBlocked} aria-pressed={adminSection === "reports"} onClick={() => setAdminSection("reports")}><UiIcon name="edit" />План и сведения</button>
+        <button className="button secondary" disabled={navigationBlocked || !!referenceId} onClick={() => setSettingsOpen(true)}><UiIcon name="settings" />Настроить рабочее поле</button>
+        <button className="button secondary" disabled={navigationBlocked} aria-pressed={adminSection === "users"} onClick={() => setAdminSection("users")}><UiIcon name="users" />Ответственные лица</button>
       </div>}
 
       <div className="workspace-navigation">

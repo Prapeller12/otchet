@@ -25,7 +25,7 @@ it("shows only annual plan, name and code, preserving hidden metadata and code h
   expect(screen.getByLabelText("Годовой план")).toHaveTextContent("0");
   expect(screen.getAllByRole("textbox")).toHaveLength(2);
   expect(screen.queryByLabelText("Завод / изготовитель")).toBeNull();
-  expect(screen.queryByText("+ Код выпуска")).toBeNull();
+  expect(screen.queryByText("Код выпуска")).toBeNull();
   expect(screen.queryByText(/Выпущено за год/)).toBeNull();
   await user.type(screen.getByLabelText("Название изделия"), " 2");
   await user.click(screen.getByRole("button", { name: "Сохранить шапку" }));

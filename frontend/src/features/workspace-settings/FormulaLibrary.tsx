@@ -1,3 +1,4 @@
+import { UiIcon } from "../../shared/ui/UiIcon";
 import { useState } from "react";
 import type { FieldIndicator, FieldPreset } from "../../shared/api/application-gateway";
 
@@ -35,10 +36,10 @@ export function FormulaLibrary({ indicators, presets, onInsert }: {
       <strong>{label}</strong>
       <input aria-label={`Текст формулы: ${label}`} readOnly value={formula} onFocus={event => event.currentTarget.select()} />
       <div className="compact-actions">
-        <button type="button" className="button secondary" onClick={() => void copy(formula)}>Копировать формулу</button>
+        <button type="button" className="button secondary" onClick={() => void copy(formula)}><UiIcon name="copy" />Копировать формулу</button>
         <button type="button" className="button secondary" disabled={!canInsert(formula, code)} onClick={() => {
           onInsert(code, formula); setMessage("Формула вставлена. Для сохранения нажмите «Применить настройки».");
-        }}>Вставить в показатель</button>
+        }}><UiIcon name="paste" />Вставить в показатель</button>
       </div>
       {!canInsert(formula, code) && <p className="field-help">Выберите отдельный показатель результата и добавьте используемые показатели. Для расчёта из Excel можно применить полный набор кнопкой выше.</p>}
     </article>;
