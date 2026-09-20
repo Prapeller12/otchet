@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import struct
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from scripts.verify_release import (
     ReleaseVerificationError,
     verify_distribution_hygiene,
     verify_frontend_network_policy,
+    verify_sqlcipher_runtime,
 )
 
 
@@ -65,6 +67,14 @@ def test_frontend_network_policy_rejects_network_capability(tmp_path: Path, sour
         ("exports/report.pdf", b"private report"),
         ("temp/.portable-dir", b"private data disguised as marker"),
         ("resources/forgotten.db", b"SQLite user data"),
+        ("resources/renamed-resource.dat", b"SQLite format 3\x00private database"),
+        ("config/report.sqlite3.keys.json", b'{"users":["private wrapped keys"]}'),
+        ("config/report.sqlite3.keys.json.pending", b'{"users":["private wrapped keys"]}'),
+        ("resources/report.sqlite3.keys.json.copy", b"private vault backup"),
+        ("resources/.report.sqlite3.uuid.encrypted-pending", b"encrypted user database"),
+        ("resources/report.db-journal", b"private rollback pages"),
+        ("resources/report.db-wal", b"private transaction pages"),
+        ("resources/report.sqlitedb-shm", b"private database sidecar"),
         ("config/.env", b"TOKEN=private"),
         ("config/signing.key", b"private key"),
         ("config/id_ed25519", b"private key"),
@@ -109,3 +119,25 @@ def test_pristine_distribution_allows_only_exact_generated_evergreen_override(
         stream.write('[database]\npath="private-location"\n')
     with pytest.raises(ReleaseVerificationError, match="local configuration"):
         verify_distribution_hygiene(tmp_path)
+
+
+def test_sqlcipher_runtime_requires_its_own_native_x64_extension(tmp_path: Path) -> None:
+    runtime = tmp_path / "runtime"
+    runtime.mkdir()
+    # A normal SQLite extension cannot satisfy encrypted storage dependencies.
+    (runtime / "_sqlite3.pyd").write_bytes(b"ordinary sqlite")
+    with pytest.raises(ReleaseVerificationError, match="SQLCipher runtime is missing"):
+        verify_sqlcipher_runtime(tmp_path)
+    cipher = runtime / "sqlcipher3" / "_sqlite3.cp312-win_amd64.pyd"
+    cipher.parent.mkdir()
+    executable = bytearray(256)
+    executable[:2] = b"MZ"
+    executable[0x3C:0x40] = struct.pack("<I", 0x80)
+    executable[0x80:0x84] = b"PE\0\0"
+    executable[0x84:0x86] = struct.pack("<H", 0x14C)
+    cipher.write_bytes(executable)
+    with pytest.raises(ReleaseVerificationError, match="SQLCipher runtime is not Windows x64"):
+        verify_sqlcipher_runtime(tmp_path)
+    executable[0x84:0x86] = struct.pack("<H", 0x8664)
+    cipher.write_bytes(executable)
+    verify_sqlcipher_runtime(tmp_path)

@@ -19,12 +19,19 @@ export type ProductionHeaderPatch = {
 const EMPTY_HEADER: ReportHeaderFields = { product_designation: "", product_name: "", factory_name: "", product_image: "" };
 
 export type ProductionHeaderProps = {
+  workspaceMode?: "entry" | "admin";
   presentation: ProductionHeaderPresentation; year: number; headSite: boolean; blocked: boolean;
   onSave(patch: ProductionHeaderPatch): Promise<void>;
   onDirtyChange(dirty: boolean): void; onBusyChange?(busy: boolean): void;
 };
 
 export function ProductionHeader(props: ProductionHeaderProps) {
+  if (props.workspaceMode === "entry") return <section className="readonly-production-header" aria-label="Шапка изделия">
+    <span>Годовой план: <output aria-label="Годовой план">{props.presentation.annual?.plan || "—"}</output></span>
+    <span>Название изделия: <strong>{props.presentation.header?.product_name || "Не задано"}</strong></span>
+    <span>Шифр: <strong>{props.presentation.header?.product_designation || "Не задан"}</strong></span>
+  </section>;
+  if (props.workspaceMode === "admin") return <DetailedProductionHeader {...props} />;
   return props.headSite ? <CompactProductionHeader {...props} /> : <DetailedProductionHeader {...props} />;
 }
 

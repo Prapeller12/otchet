@@ -6,6 +6,7 @@ import type { ReportType } from "../../shared/api/report-cell-contract";
 import { ReportMatrix } from "../../widgets/report-matrix/ReportMatrix";
 
 type ReportMatrixPageProps = {
+  workspaceMode?: "entry" | "admin";
   reportType: ReportType;
   organizationId: string;
   reloadKey: number;
@@ -14,6 +15,7 @@ type ReportMatrixPageProps = {
 };
 
 export function ReportMatrixPage({
+  workspaceMode = "entry",
   reportType,
   organizationId,
   reloadKey,
@@ -72,6 +74,7 @@ export function ReportMatrixPage({
       <ReportMatrix
         key={`${matrix.report_type}:${matrix.organization_id}:${reloadKey}:${year}`}
         gateway={gateway}
+        workspaceMode={workspaceMode}
         matrix={matrix}
         onChange={setMatrix}
         onStatusChange={onStatusChange}

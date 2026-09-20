@@ -18,6 +18,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 from backend.api.bridge import DesktopBridge
+from backend.application.access_policy import is_plan_coordinate
 from backend.application.daily_summary import summarize_daily_rows
 from backend.application.excel_reports import (
     ExcelReportError,
@@ -98,16 +99,28 @@ class WorkingReferenceApplicationBridge:
         inbox_directory: str | Path | None = None,
         backups_directory: str | Path | None = None,
         application_version: str = "development",
+        initialize_workspace: bool = True,
     ) -> None:
         self._database_path = Path(database_path)
         self._definitions_directory = Path(definitions_directory)
         self._transport = DesktopBridge(
             self._database_path,
             migrations_directory=migrations_directory,
+            migrate=initialize_workspace,
         )
         self._service = ReportCellService(SqliteReportCellUnitOfWorkFactory(self._database_path))
         self._workspace = SqliteReportWorkspaceRepository(str(self._database_path))
-        self._default_organization = self._workspace.ensure_default_organization()
+        if initialize_workspace:
+            self._default_organization = self._workspace.ensure_default_organization()
+            # Only authorized setup/migration initializes structural defaults.
+            for organization in self._workspace.list_organizations():
+                self._initialize_workspace(organization.id)
+        else:
+            organizations = self._workspace.list_organizations()
+            heads = [organization for organization in organizations if organization.kind == "HEAD"]
+            if not heads:
+                raise ValueError("Настройку базы должен завершить администратор")
+            self._default_organization = heads[0]
         root = self._database_path.parent.parent
         self._backups_directory = Path(backups_directory or root / "backups")
         self._application_version = application_version
@@ -126,6 +139,12 @@ class WorkingReferenceApplicationBridge:
         self._save_pdf_file: Callable[[str], Path | None] | None = None
         self._open_excel_file: Callable[[], Path | None] | None = None
         self._save_excel_file: Callable[[str], Path | None] | None = None
+
+    def _initialize_workspace(self, organization_id: int) -> None:
+        for report_type in _DEFINITION_FILES:
+            self._workspace.ensure_groups(
+                organization_id, report_type, self._group_templates(report_type)
+            )
 
     def configure_excel_dialogs(
         self,
@@ -205,12 +224,13 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"display_name", "pin", "admin_id", "admin_pin"})
+            _reject_unknown(request, {"display_name", "pin", "admin_id", "admin_pin", "role"})
             result = self._signers.create(
                 _required_string(request, "display_name"),
                 _required_string(request, "pin"),
                 _required_string(request, "admin_id") if "admin_id" in request else "",
                 _required_string(request, "admin_pin") if "admin_pin" in request else "",
+                role=_required_string(request, "role") if "role" in request else "reviewer",
             )
             return {"ok": True, "data": result, "request_id": request_id}
         except (OSError, ValueError, sqlite3.Error) as error:
@@ -643,6 +663,7 @@ class WorkingReferenceApplicationBridge:
             request = _mapping(payload, "payload")
             _reject_unknown(request, {"name"})
             organization = self._workspace.create_organization(_required_string(request, "name"))
+            self._initialize_workspace(organization.id)
             return {
                 "ok": True,
                 "data": {
@@ -702,7 +723,7 @@ class WorkingReferenceApplicationBridge:
             report_type = _required_string(request, "report_type")
             organization_id = self._organization_id(request.get("organization_id"))
             templates = self._group_templates(report_type)
-            groups = self._workspace.ensure_groups(organization_id, report_type, templates)
+            groups = self._workspace.list_groups(organization_id, report_type)
             return {
                 "ok": True,
                 "data": self._layout_contract(report_type, organization_id, templates, groups),
@@ -784,6 +805,7 @@ class WorkingReferenceApplicationBridge:
                     "expected_revision",
                     "header",
                     "production_codes",
+                    "production_code_actuals",
                     "confirm_production_totals",
                 },
             )
@@ -842,7 +864,8 @@ class WorkingReferenceApplicationBridge:
                 patch,
                 validate_current_state=(
                     validate_current_state
-                    if request.keys() & {"plans", "actuals", "header", "production_codes"}
+                    if request.keys()
+                    & {"plans", "actuals", "header", "production_codes", "production_code_actuals"}
                     else None
                 ),
             )
@@ -922,11 +945,7 @@ class WorkingReferenceApplicationBridge:
                 for group in _sequence(layout.get("row_groups"), "row_groups")
             )
         }
-        configured_groups = self._workspace.ensure_groups(
-            organization_id,
-            report_type,
-            self._group_templates(report_type),
-        )
+        configured_groups = self._workspace.list_groups(organization_id, report_type)
 
         if report_type in {"SUBSIDIARY", "HEAD_SITE"}:
 
@@ -958,6 +977,7 @@ class WorkingReferenceApplicationBridge:
                     "state": {
                         "access": "editable" if editable else "calculated",
                         "persistence": "saved",
+                        "admin_only": is_plan_coordinate(coordinate.to_dict()),
                     },
                 }
 
@@ -1082,7 +1102,11 @@ class WorkingReferenceApplicationBridge:
                         "column_id": column_id,
                         "coordinate": coordinate.to_dict(),
                         "value": value,
-                        "state": {"access": access, "persistence": "saved"},
+                        "state": {
+                            "access": access,
+                            "persistence": "saved",
+                            "admin_only": is_plan_coordinate(coordinate.to_dict()),
+                        },
                     }
                     if not editable:
                         cell["lock_reason"] = "Расчёт заблокирован до утверждения бизнес-привязки."

@@ -17,13 +17,12 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from backend.api.working_reference_bridge import WorkingReferenceApplicationBridge
+from backend.api.secure_desktop_bridge import SecureDesktopBridge
 from backend.desktop.application_self_test import (
     prepare_reference_window_test,
     prepare_subsidiary_window_test,
     run_application_self_test,
 )
-from backend.desktop.database_bootstrap import backup_and_migrate
 from backend.desktop.instance_lock import AlreadyRunningError, SingleInstanceLock
 from backend.desktop.paths import PortableLayoutError, PortablePaths
 from backend.desktop.window_health import monitor_window
@@ -75,7 +74,7 @@ def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
     mimetypes.add_type("application/javascript", ".js")
     mimetypes.add_type("text/css", ".css")
     webview: Any = importlib.import_module("webview")
-    bridge = WorkingReferenceApplicationBridge(
+    bridge = SecureDesktopBridge(
         paths.database,
         migrations_directory=paths.migrations,
         definitions_directory=paths.resources / "report-definitions",
@@ -85,8 +84,12 @@ def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
     )
 
     if ui_self_test:
+        setup = bridge.setup_access({"display_name": "Контроль окна", "pin": "window-test-pin"})
+        if not setup["ok"] or bridge._application is None:
+            raise RuntimeError("Не удалось подготовить защищённую проверку окна")
         prepare_reference_window_test(paths.database, paths.temp)
-        prepare_subsidiary_window_test(bridge)
+        prepare_subsidiary_window_test(bridge._application)
+        bridge._lock()
 
     webview.settings["ALLOW_DOWNLOADS"] = False
     webview.settings["ALLOW_FILE_URLS"] = False
@@ -146,8 +149,8 @@ def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
             return None
         return Path(selected) if isinstance(selected, (str, Path)) else Path(selected[0])
 
-    bridge.configure_pdf_dialog(save_pdf_file)
-    bridge.configure_excel_dialogs(
+    bridge._configure_pdf_dialog(save_pdf_file)
+    bridge._configure_excel_dialogs(
         open_file=open_excel_file,
         save_file=save_excel_file,
     )
@@ -165,6 +168,7 @@ def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
         storage_path=str(paths.webview2_profile),
     )
     shutil.rmtree(paths.webview2_profile, ignore_errors=True)
+    bridge._lock()
     if failures:
         raise RuntimeError(failures[0])
 
@@ -194,7 +198,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         paths.prepare_writable_directories()
         lock = SingleInstanceLock(paths.root, paths.lock_file)
         with lock:
-            backup_and_migrate(paths.database, paths.migrations, paths.backups, _version(paths))
             _run_window(paths, ui_self_test=arguments.ui_self_test)
         if arguments.ui_self_test and arguments.self_test_report is not None:
             arguments.self_test_report.write_text("ok\n", encoding="utf-8")

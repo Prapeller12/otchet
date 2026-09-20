@@ -437,3 +437,24 @@
 .legacy-facts { padding: 12px; max-height: 300px; overflow: auto; }
 
 .subsidiary-matrix .matrix-cell-button.is-calculated { background: #f2f3f4; }
+
+/* The entry workspace exposes its primary action before optional tools. */
+.report-more-actions { padding: 10px 16px; background: #f7f9fc; border-bottom: 1px solid #dbe3ef; }
+.report-more-actions[hidden] { display: none; }
+.readonly-production-header { display: flex; flex-wrap: nowrap; gap: 24px; align-items: center; padding: 10px 16px; min-height: 40px; overflow-x: auto; border-bottom: 1px solid #dbe3ef; }
+.readonly-production-header > span { white-space: nowrap; }
+.readonly-production-header output { font-weight: 700; }
+.entry-month { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; }
+.entry-month select { min-height: 36px; }
+.report-month-options { padding: 4px 16px; }
+.report-month-options > summary { cursor: pointer; width: fit-content; padding: 6px 0; }
+.entry-controls { padding: 8px 16px; }
+.entry-controls p { margin: 2px 0; }
+.entry-controls input[readonly] { background: #f0f3f7; border-style: dashed; }
+
+.entry-code-actuals { flex-basis: 100%; padding: 4px 0; }
+.entry-code-actuals summary { cursor: pointer; padding: 6px 0; }
+.entry-code-fields { display: flex; flex-wrap: wrap; gap: 12px; }
+
+.subsidiary-controls .entry-code-confirmation { display: flex; align-items: center; margin-top: 10px; }
+.subsidiary-controls .entry-code-confirmation input { width: auto; min-height: 0; padding: 0; flex: none; }

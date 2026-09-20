@@ -129,6 +129,7 @@ def test_verification_migration_from_dev7(tmp_path: Path) -> None:
             "0010",
             "0011",
             "0012",
+            "0013",
         )
         assert apply_migrations(connection, ROOT / "backend/migrations") == ()
     finally:

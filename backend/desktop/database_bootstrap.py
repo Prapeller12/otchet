@@ -5,11 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import sqlite3
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+from backend.infrastructure.database.encrypted_sqlite import encrypted_backup, has_database_key
 from backend.infrastructure.database.migrator import apply_migrations, connect_sqlite
 
 
@@ -30,17 +32,27 @@ def backup_database(database: Path, backups: Path, app_version: str) -> Path:
     pending = backups / f".{stem}.pending"
     destination = backups / f"{stem}.sqlite3"
 
-    source_connection = connect_sqlite(database)
-    target_connection = sqlite3.connect(pending)
-    try:
-        source_connection.backup(target_connection)
-        integrity = target_connection.execute("PRAGMA integrity_check").fetchone()
-        if integrity != ("ok",):
-            raise sqlite3.DatabaseError(f"Backup integrity check failed: {integrity!r}")
-    finally:
-        target_connection.close()
-        source_connection.close()
+    if has_database_key(database):
+        encrypted_backup(database, pending)
+    else:
+        source_connection = connect_sqlite(database)
+        target_connection = sqlite3.connect(pending)
+        try:
+            source_connection.backup(target_connection)
+            integrity = target_connection.execute("PRAGMA integrity_check").fetchone()
+            if integrity != ("ok",):
+                raise sqlite3.DatabaseError(f"Backup integrity check failed: {integrity!r}")
+        finally:
+            target_connection.close()
+            source_connection.close()
     os.replace(pending, destination)
+    vault = database.with_suffix(database.suffix + ".keys.json")
+    if vault.exists():
+        vault_pending = pending.with_suffix(pending.suffix + ".keys.json")
+        shutil.copyfile(vault, vault_pending)
+        with vault_pending.open("rb") as stream:
+            os.fsync(stream.fileno())
+        os.replace(vault_pending, destination.with_suffix(destination.suffix + ".keys.json"))
 
     manifest = {
         "application_version": app_version,

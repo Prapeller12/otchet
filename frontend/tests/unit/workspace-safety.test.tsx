@@ -18,7 +18,7 @@ it("protects unfinished and unsaved matrix edits from report, organization and s
   const targetTab = screen.getByRole("button", { name: "Головная площадка" });
   expect(targetTab).toBeDisabled();
   expect(screen.getByLabelText("Организация")).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Настроить рабочее поле" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Администратор" })).toBeDisabled();
   const input = screen.getByRole("textbox");
   await user.clear(input);
   await user.type(input, "123{Enter}");
@@ -29,7 +29,7 @@ it("protects unfinished and unsaved matrix edits from report, organization and s
   await user.click(screen.getByRole("button", { name: "Сохранить (1)" }));
   await waitFor(() => expect(targetTab).toBeEnabled());
   expect(screen.getByLabelText("Организация")).toBeEnabled();
-  expect(screen.getByRole("button", { name: "Настроить рабочее поле" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Администратор" })).toBeEnabled();
   const after = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(after);
   expect(after.defaultPrevented).toBe(false);
@@ -41,7 +41,7 @@ function matrix() {
   let latest = createDemoMatrix("DAILY_MOVEMENT");
   function Workspace() {
     const [value, setValue] = useState(latest);
-    return <ReportMatrix gateway={gateway} matrix={value} onChange={next => { latest = next; setValue(next); }} onStatusChange={() => {}} />;
+    return <ReportMatrix workspaceMode="admin" gateway={gateway} matrix={value} onChange={next => { latest = next; setValue(next); }} onStatusChange={() => {}} />;
   }
   render(<Workspace />);
   return { latest: () => latest, save };

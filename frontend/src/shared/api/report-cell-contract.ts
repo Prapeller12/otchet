@@ -71,6 +71,7 @@ export type ReportCellPersistenceState =
   (typeof REPORT_CELL_PERSISTENCE_STATES)[number];
 
 export type ReportCellState = {
+  admin_only?: boolean;
   access: ReportCellAccessState;
   persistence: ReportCellPersistenceState;
 };

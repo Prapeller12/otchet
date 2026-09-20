@@ -1,15 +1,35 @@
-schema_version: 1
-status: ROLE_NAMES_CONFIRMED_PERMISSIONS_OPEN
+schema_version: 2
+status: ACCEPTED_OWNER_DEV26
+# Three access roles, not a sequential three-signature approval workflow.
+# Enforced by backend/application/access_policy.py and SecureDesktopBridge.
 roles:
-  - name: наблюдатель
-    permissions: null
-  - name: оператор дочернего общества
-    permissions: null
-  - name: оператор головной площадки
-    permissions: null
-  - name: планировщик
-    permissions: null
-  - name: контролёр
-    permissions: null
+  - name: руководитель проекта
+    code: project_manager
+    requires_reviewer_or_admin_to_open_database: true
+    permissions:
+      - view_reports
+      - edit_unsaved_facts
+      - export_reports
+  - name: проверяющий
+    code: reviewer
+    permissions:
+      - open_reports
+      - view_reports
+      - edit_unsaved_facts
+      - authorize_fact_save_with_fresh_code
+      - verify_report_with_fresh_code
+      - export_reports
   - name: администратор
-    permissions: null
+    code: admin
+    maximum_count: 1
+    permissions:
+      - open_reports
+      - view_reports
+      - edit_unsaved_facts
+      - authorize_fact_save_with_fresh_code
+      - verify_report_with_fresh_code
+      - export_reports
+      - configure_workspace_with_fresh_code
+      - change_plans_with_fresh_code
+      - manage_responsible_users_with_fresh_code
+      - import_excel_with_fresh_code

@@ -28,7 +28,7 @@ export function MonthlyReportActions({ gateway, query, revision, title, blocked,
     }
     return () => { active = false; };
   }, [gateway, report_type, organization_id, year, month, revision, title, blocked, selectedWeek]);
-  if (!gateway.exportPdf || !gateway.getReportVerification || !gateway.verifyReport || !gateway.listReportSigners || !gateway.createReportSigner) return null;
+  if (!gateway.exportPdf || !gateway.getReportVerification || !gateway.verifyReport || !gateway.listReportSigners) return null;
 
   async function pdf() {
     setBusy(true); setError(""); setMessage("");
