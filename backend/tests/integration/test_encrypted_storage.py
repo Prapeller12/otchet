@@ -58,7 +58,18 @@ def test_cipher_errors_transactions_and_rollback_keep_sqlite_contract(tmp_path: 
         assert connection.execute("SELECT count(*) FROM values_table").fetchone() == (0,)
 
 
-def test_legacy_migration_and_backups_keep_data_encrypted(tmp_path: Path) -> None:
+def test_legacy_migration_and_backups_keep_data_encrypted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_fsync = os.fsync
+
+    def require_writable_flush(descriptor: int) -> None:
+        # Enforce the Windows flush requirement on Linux too. This writes no data,
+        # but rejects a read-only descriptor before the actual durability call.
+        os.write(descriptor, b"")
+        real_fsync(descriptor)
+
+    monkeypatch.setattr(os, "fsync", require_writable_flush)
     path = tmp_path / "старая база.sqlite3"
     key = os.urandom(32)
     with closing(connect_sqlite(path)) as connection, connection:
@@ -108,7 +119,7 @@ def test_failed_conversion_keeps_original_database(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = tmp_path / "legacy.sqlite3"
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute("CREATE TABLE preserved(value TEXT)")
         connection.execute("INSERT INTO preserved VALUES ('original')")
     original = path.read_bytes()
@@ -120,5 +131,5 @@ def test_failed_conversion_keeps_original_database(
     with pytest.raises(OSError, match="simulated failure"):
         encrypt_existing_database(path, os.urandom(32), tmp_path / "backups")
     assert path.read_bytes() == original
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         assert connection.execute("SELECT * FROM preserved").fetchone() == ("original",)

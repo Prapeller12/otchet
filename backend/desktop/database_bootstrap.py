@@ -50,7 +50,7 @@ def backup_database(database: Path, backups: Path, app_version: str) -> Path:
     if vault.exists():
         vault_pending = pending.with_suffix(pending.suffix + ".keys.json")
         shutil.copyfile(vault, vault_pending)
-        with vault_pending.open("rb") as stream:
+        with vault_pending.open("r+b") as stream:
             os.fsync(stream.fileno())
         os.replace(vault_pending, destination.with_suffix(destination.suffix + ".keys.json"))
 

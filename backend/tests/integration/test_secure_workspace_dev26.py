@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -98,7 +99,7 @@ def test_first_setup_encrypts_and_cannot_create_second_administrator(
     path = tmp_path / "data/reports.sqlite3"
     assert not path.read_bytes().startswith(b"SQLite format 3")
     assert "Администратор QA".encode() not in path.read_bytes()
-    with sqlite3.connect(path) as connection, pytest.raises(sqlite3.DatabaseError):
+    with closing(sqlite3.connect(path)) as connection, pytest.raises(sqlite3.DatabaseError):
         connection.execute("SELECT name FROM sqlite_master").fetchall()
     assert PIN not in json.dumps(status)
 
@@ -257,7 +258,7 @@ def test_interrupted_legacy_conversion_resumes_before_access_role_migration(
         },
         PIN,
     )
-    with connect_sqlite(database) as connection:
+    with closing(connect_sqlite(database)) as connection, connection:
         apply_migrations(connection, directory)
         connection.execute(
             "INSERT INTO report_signers(id,display_name,role,public_key,key_fingerprint,"

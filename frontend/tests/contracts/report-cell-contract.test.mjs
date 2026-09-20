@@ -119,6 +119,10 @@ function validate(instance, currentSchema, instancePath = "$") {
     }
   }
 
+  if (currentSchema.type === "boolean" && typeof instance !== "boolean") {
+    errors.push(`${instancePath}: expected boolean`);
+  }
+
   if (currentSchema.type === "string") {
     if (typeof instance !== "string") {
       errors.push(`${instancePath}: expected string`);

@@ -163,7 +163,8 @@ def create_encrypted_database(path: str | Path, key: bytes) -> None:
 
 
 def _fsync(path: Path) -> None:
-    with path.open("rb") as stream:
+    # Windows FlushFileBuffers requires a writable handle; r+b preserves contents.
+    with path.open("r+b") as stream:
         os.fsync(stream.fileno())
 
 
