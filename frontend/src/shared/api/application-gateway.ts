@@ -112,7 +112,11 @@ export type CellChange = {
   value: ReportCellValue;
 };
 
+export type ConfirmationContext = { year?: number; month: number; week_start?: string };
+export type SaveVerificationResult = { verification?: ReportVerification; verification_error?: { code: string; message: string } };
+
 export type SaveReportCellsRequest = {
+  confirmation?: ConfirmationContext;
   year?: number;
   report_type: ReportType;
   organization_id: string;
@@ -121,7 +125,7 @@ export type SaveReportCellsRequest = {
   changes: CellChange[];
 };
 
-export type SaveReportCellsResponse = {
+export type SaveReportCellsResponse = SaveVerificationResult & {
   matrix_revision: string;
   cells: ReportCellContract[];
 };
@@ -247,14 +251,14 @@ export type SaveReportLayoutRequest = ReportLayoutQuery & {
 
 export type ReportHeaderFields = { product_designation: string; product_name: string; factory_name: string; product_image: string };
 export type ProductionCode = { id: string; label: string; plans: Record<string, string>; actuals: Record<string, string> };
-export type ReportPresentation = {
+export type ReportPresentation = SaveVerificationResult & {
   title?: string; widths?: Record<string, number>; plans?: Record<string, string>;
   actuals?: Record<string, string>; completion?: Record<string, string>;
   header?: ReportHeaderFields; production_codes?: ProductionCode[];
   production_code_annual?: Record<string, string>;
   annual?: { plan: string; actual: string; completion: string; plan_months: number; actual_months: number };
 };
-export type SaveReportPresentationRequest = ReportLayoutQuery & ReportPresentation & { expected_revision?: string; confirm_production_totals?: boolean; production_code_actuals?: Record<string, Record<string, string>> };
+export type SaveReportPresentationRequest = ReportLayoutQuery & ReportPresentation & { confirmation?: ConfirmationContext; expected_revision?: string; confirm_production_totals?: boolean; production_code_actuals?: Record<string, Record<string, string>> };
 
 export type ApplicationError = {
   code: string;
@@ -279,6 +283,7 @@ export interface ApplicationGateway {
   unlockAccess?(authorization: WriteAuthorization): Promise<AccessStatus>;
   enrollAccess?(authorization: WriteAuthorization): Promise<AccessUser>;
   authenticateAccess?(authorization: WriteAuthorization): Promise<AccessUser>;
+  endAdministration?(): Promise<void>;
   setAuthorizationHandler?(handler: AuthorizationHandler | null): void;
   readonly mode: "pywebview" | "demo";
   saveReportPresentation?(request: SaveReportPresentationRequest): Promise<ReportPresentation>;
@@ -320,5 +325,5 @@ export type AccessRole = "admin" | "reviewer" | "project_manager";
 export type AccessUser = { can_unlock?: boolean; id: string; display_name: string; role: AccessRole };
 export type AccessStatus = { state: "setup" | "legacy" | "locked" | "ready"; users: AccessUser[]; current_user?: AccessUser };
 export type WriteAuthorization = { signer_id: string; pin: string };
-export type AuthorizationPrompt = { title: string; adminOnly: boolean };
+export type AuthorizationPrompt = { title: string; adminOnly: boolean; confirmLabel?: string };
 export type AuthorizationHandler = (prompt: AuthorizationPrompt, execute: (authorization: WriteAuthorization) => Promise<unknown>) => Promise<unknown>;

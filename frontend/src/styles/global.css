@@ -85,6 +85,10 @@ select:focus-visible {
 }
 
 .workspace-navigation {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 6%);
   display: flex;
   align-items: stretch;
   justify-content: space-between;

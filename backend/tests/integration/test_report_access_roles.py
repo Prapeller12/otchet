@@ -47,8 +47,7 @@ def test_roles_and_fresh_write_authorization(repository: SqliteReportSignersRepo
         repository.authorize(reviewer["id"], "wrong-code-after-success")
     with pytest.raises(ValueError, match="администратора"):
         repository.authorize(reviewer["id"], PIN, admin_only=True)
-    with pytest.raises(ValueError, match="проверяющего"):
-        repository.authorize(manager["id"], PIN)
+    assert repository.authorize(manager["id"], PIN) == manager
     with pytest.raises(ValueError, match="один администратор"):
         repository.create("Второй администратор", PIN, admin["id"], PIN, role="admin")
     with pytest.raises(ValueError, match="администратора"):
@@ -101,7 +100,10 @@ def test_legacy_crypto_identity_survives_role_migration(tmp_path: Path) -> None:
             old_profile,
         )
         connection.commit()
-        assert apply_migrations(connection, ROOT / "backend/migrations") == ("0013",)
+        assert apply_migrations(connection, ROOT / "backend/migrations") == (
+            "0013",
+            "0014",
+        )
         preserved = load_signer(connection, "legacy-reviewer")
         assert preserved == old_profile
         assert unlock_key(preserved, PIN).public_key().public_bytes_raw() == (
@@ -116,22 +118,22 @@ def test_legacy_crypto_identity_survives_role_migration(tmp_path: Path) -> None:
         (
             "save_report_cells",
             {"changes": [{"coordinate": {"metric_code": "WRK_DAILY_RECEIVED"}}]},
-            "reviewer",
+            "responsible",
         ),
         (
             "save_report_cells",
             {"changes": [{"coordinate": {"metric_code": "WRK_DAILY_ASSEMBLY_PLAN_C1"}}]},
-            "admin",
+            "responsible",
         ),
-        ("save_report_presentation", {"actuals": {}}, "reviewer"),
-        ("save_report_presentation", {"plans": {}, "actuals": {}}, "admin"),
-        ("save_report_presentation", {"header": {}}, "admin"),
+        ("save_report_presentation", {"actuals": {}}, "responsible"),
+        ("save_report_presentation", {"plans": {}, "actuals": {}}, "responsible"),
+        ("save_report_presentation", {"header": {}}, "responsible"),
         ("validate_import", {}, "admin"),
         ("commit_import", {}, "admin"),
         ("reference_report", {"action": "transfer"}, "admin"),
         ("reference_report", {"action": "save"}, "admin"),
         ("reference_report", {"action": "get"}, None),
-        ("verify_report", {}, "reviewer"),
+        ("verify_report", {}, "responsible"),
     ],
 )
 def test_policy_covers_plan_bypass_and_staging(

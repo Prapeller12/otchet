@@ -60,10 +60,6 @@ def _fill_form_input(window: Any, scope: str, label: str, value: str) -> None:
     _wait_for_script(window, expression, f"Недоступно поле «{label}» ({scope})")
 
 
-def _fill_signing_input(window: Any, label: str, value: str) -> None:
-    _fill_form_input(window, ".verification-form", label, value)
-
-
 def _unlock_test_window(window: Any) -> None:
     """Use the same locked-screen path that a person uses after restarting."""
     _wait_for_script(window, "!!document.querySelector('.access-page')", "Не открыт вход")
@@ -83,21 +79,40 @@ def _unlock_test_window(window: Any) -> None:
     _wait_for_script(window, _READY, "После входа не открылась рабочая форма")
     if not window.evaluate_js("""(() => {
       const buttons = [...document.querySelectorAll('.matrix-toolbar button')];
-      return buttons.length === 2 && buttons[0].textContent.includes('Сохранить') &&
-        buttons[1].textContent === 'Ещё' &&
+      return buttons.length === 3 && buttons[0].textContent.includes('Сохранить') &&
+        buttons[1].textContent === 'Печать / PDF А4' && buttons[2].textContent === 'Ещё' &&
         document.querySelector('#report-more-actions')?.hidden &&
         !document.querySelector('.admin-navigation');
     })()"""):
         raise RuntimeError("Основное поле заполнения перегружено действиями администратора")
 
 
-def _confirm_write(window: Any, *, reject_wrong_code: bool = False) -> None:
+def _confirm_write(
+    window: Any,
+    *,
+    reject_wrong_code: bool = False,
+    action: str = "Подтвердить",
+    project_manager: bool = False,
+) -> None:
     _wait_for_script(
         window, "!!document.querySelector('.authorization-dialog')", "Нет запроса кода записи"
     )
+    if project_manager:
+        _wait_for_script(
+            window,
+            """(() => {
+          const select = document.querySelector('.authorization-dialog select');
+          const option = [...(select?.options ?? [])]
+            .find(node => node.textContent.includes('Руководитель проверки окна'));
+          if (!option) return false;
+          select.value = option.value;
+          select.dispatchEvent(new Event('change', {bubbles:true})); return true;
+        })()""",
+            "Руководителю проекта недоступно подтверждение своего отчёта",
+        )
     if reject_wrong_code:
         _fill_form_input(window, ".authorization-dialog", "Код подтверждения", "wrong-code")
-        _click_button(window, "Подтвердить")
+        _click_button(window, action)
         _wait_for_script(
             window,
             "!!document.querySelector('.authorization-dialog [role=alert]')",
@@ -107,42 +122,107 @@ def _confirm_write(window: Any, *, reject_wrong_code: bool = False) -> None:
             "document.querySelector('.authorization-dialog input[type=password]').value === ''"
         ):
             raise RuntimeError("Код не очищен после неудачного подтверждения записи")
-    _fill_form_input(window, ".authorization-dialog", "Код подтверждения", "window-test-pin")
-    _click_button(window, "Подтвердить")
+    pin = "project-window-pin" if project_manager else "window-test-pin"
+    _fill_form_input(window, ".authorization-dialog", "Код подтверждения", pin)
+    _click_button(window, action)
     _wait_for_script(
         window, "!document.querySelector('.authorization-dialog')", "Запись не подтверждена"
     )
 
 
-def _exercise_signing(window: Any) -> None:
-    """Exercise the real React → native bridge → crypto roundtrip in the test copy."""
-    _click_button(window, "Ещё")
-    _click_button(window, "Подтвердить данные")
+def _exercise_responsible_person(window: Any) -> None:
+    """An authenticated administrator creates a person without a second PIN prompt."""
+    _click_button(window, "Администратор")
+    _confirm_write(window)
+    _click_button(window, "Ответственные лица")
+    _fill_form_input(window, ".admin-users", "Имя ответственного", "Руководитель проверки окна")
+    _fill_form_input(window, ".admin-users", "Личный код (от 6 символов)", "project-window-pin")
+    _fill_form_input(window, ".admin-users", "Повтор личного кода", "project-window-pin")
+    window.evaluate_js("""(() => {
+      const select = document.querySelector('.admin-users form select');
+      select.value = 'project_manager';
+      select.dispatchEvent(new Event('change', {bubbles:true}));
+    })()""")
+    _click_button(window, "Создать ключ ответственного")
     _wait_for_script(
         window,
-        "!!document.querySelector('.verification-form input[type=checkbox]:not(:disabled)')",
-        "Не открылась проверка отчёта",
+        "document.querySelector('.admin-users [role=status]')?.textContent"
+        ".includes('Ключ создан: Руководитель проверки окна')",
+        "Создание ответственного требует повторного кода или завершилось ошибкой",
     )
-    _fill_signing_input(window, "Код проверяющего или администратора", "incorrect-test-pin")
-    window.evaluate_js("document.querySelector('.verification-form input[type=checkbox]').click()")
-    _click_button(window, "Подтверждаю верность данных")
+    if window.evaluate_js("!!document.querySelector('.authorization-dialog')"):
+        raise RuntimeError("Создание ответственного повторно запрашивает код администратора")
+    _click_button(window, "К заполнению отчётов")
     _wait_for_script(
         window,
-        "document.querySelector('.verification-form [role=alert]')?.textContent.includes('PIN')",
-        "Неверный PIN не отклонён",
+        _READY + " && !document.querySelector('.admin-navigation')",
+        "Не восстановлен экран заполнения",
     )
-    if not window.evaluate_js(
-        "document.querySelector('.verification-form input[type=password]').value === ''"
-    ):
-        raise RuntimeError("PIN не очищен после попытки подписи")
-    _fill_signing_input(window, "Код проверяющего или администратора", "window-test-pin")
-    _click_button(window, "Подтверждаю верность данных")
+
+
+def _exercise_print(window: Any, paths: PortablePaths) -> None:
+    """Print asks for a code, signs the actual report and produces a real PDF."""
+    if window.evaluate_js("""[...document.querySelectorAll('button')]
+        .some(button => button.textContent.trim() === 'Подтвердить данные')"""):
+        raise RuntimeError("Осталась отдельная кнопка подтверждения данных")
+    _click_button(window, "Печать / PDF А4")
+    _confirm_write(window, action="Подтвердить и печатать", reject_wrong_code=True)
     _wait_for_script(
         window,
-        "!document.querySelector('.verification-form') && "
-        "document.querySelector('.monthly-report-actions [role=status]')"
-        "?.textContent.includes('Подтверждено: Контроль окна')",
-        "Подпись не подтверждена в окне программы",
+        "document.querySelector('.monthly-report-actions [role=status]')?.textContent"
+        ".includes('Подтверждено: Контроль окна') && "
+        "document.body.textContent.includes('PDF сохранён:')",
+        "Печать не подтвердила отчёт или не создала PDF",
+    )
+    pdfs = list(paths.temp.glob("*.pdf"))
+    if not pdfs or not all(path.read_bytes().startswith(b"%PDF-") for path in pdfs):
+        raise RuntimeError("Печать не создала настоящий PDF в проверочной папке")
+
+
+def _exercise_daily_columns_and_navigation(window: Any) -> None:
+    if not window.evaluate_js("""(() => {
+      const headers = [...document.querySelectorAll('.report-matrix thead th')];
+      const totals = headers.filter(node => node.textContent.trim() === 'Накопительный итог');
+      return totals.length === 1 &&
+        !headers.some(node => node.textContent.trim() === 'С начала года') &&
+        document.querySelectorAll(
+          '.report-matrix tbody tr:first-child .daily-summary-value').length === 1;
+    })()"""):
+        raise RuntimeError("В ежедневном отчёте должен быть один накопительный итог")
+    window.evaluate_js("window.scrollTo(0, document.documentElement.scrollHeight)")
+    _wait_for_script(
+        window,
+        """(() => {
+      const nav = document.querySelector('.workspace-navigation');
+      const box = nav?.getBoundingClientRect();
+      return window.scrollY > 0 && box && box.top >= -1 && box.top <= 1 &&
+        box.bottom < innerHeight && [...nav.querySelectorAll('.report-tab')]
+          .every(button => button.getBoundingClientRect().top >= 0);
+    })()""",
+        "Переключатель отчётов уходит за верхнюю границу при прокрутке",
+    )
+    window.evaluate_js("window.scrollTo(0, 0)")
+    _wait_for_script(window, "window.scrollY === 0", "Не восстановлено начало отчёта")
+
+
+def _exercise_project_header(window: Any) -> None:
+    _click_button(window, "План и сведения")
+    _fill_form_input(window, ".production-header", "Наименование изделия", "Изделие проверки окна")
+    _fill_form_input(window, ".production-header", "Шифр изделия", "ПРОВЕРКА-27")
+    _click_button(window, "Сохранить")
+    _confirm_write(window, action="Сохранить и подтвердить", project_manager=True)
+    _wait_for_script(
+        window,
+        "document.querySelector('.monthly-report-actions [role=status]')?.textContent"
+        ".includes('Подтверждено: Руководитель проверки окна')",
+        "Руководитель проекта не сохранил и не подтвердил сведения",
+    )
+    _click_button(window, "К заполнению отчётов")
+    _wait_for_script(
+        window,
+        "document.querySelector('.readonly-production-header')?.textContent"
+        ".includes('Изделие проверки окна')",
+        "Изменения руководителя не отображаются в отчёте",
     )
 
 
@@ -186,13 +266,15 @@ def _exercise_matrix_paste(window: Any) -> None:
         "Несохранённый диапазон не защищён от переключения вкладки",
     )
     _click_button(window, "Сохранить (2)")
-    _confirm_write(window, reject_wrong_code=True)
+    _confirm_write(
+        window, action="Сохранить и подтвердить", reject_wrong_code=True, project_manager=True
+    )
     _wait_for_script(
         window,
         "[...document.querySelectorAll('.report-tab')].every(button => !button.disabled) && "
         "document.querySelector('.monthly-report-actions [role=status]')"
-        "?.textContent.includes('Данные изменились')",
-        "Сохранение диапазона не обновило состояние подписи",
+        "?.textContent.includes('Подтверждено: Руководитель проверки окна')",
+        "Сохранение диапазона не подписало новые данные кодом руководителя",
     )
 
 
@@ -230,8 +312,10 @@ def monitor_window(
                     raise RuntimeError("Не загрузились таблица, оформление или связь с базой")
                 time.sleep(0.25)
             if ui_self_test and tab == 0:
-                _exercise_signing(window)
+                _exercise_responsible_person(window)
+                _exercise_print(window, paths)
                 _exercise_matrix_paste(window)
+                _exercise_daily_columns_and_navigation(window)
             if ui_self_test and tab == 1:
                 importlib.import_module("PIL.ImageGrab").grab().save(
                     paths.temp / "window-head-header.png"
@@ -256,6 +340,7 @@ def monitor_window(
                     raise RuntimeError(
                         f"Шапка головной площадки не помещается в одну строку: {geometry}"
                     )
+                _exercise_project_header(window)
             if ui_self_test and tab == 2:
                 if not window.evaluate_js("""(() => {
                     const table = document.querySelector('.subsidiary-matrix');
@@ -312,7 +397,11 @@ def monitor_window(
                 )
                 window.evaluate_js("document.querySelector('.settings-header button').click()")
                 _click_button(window, "К заполнению отчётов")
-                _wait_for_script(window, _READY, "Не восстановлен экран заполнения")
+                _wait_for_script(
+                    window,
+                    _READY + " && !document.querySelector('.admin-navigation')",
+                    "Не восстановлен экран заполнения",
+                )
             if ui_self_test:
                 grab = importlib.import_module("PIL.ImageGrab")
                 grab.grab().save(paths.temp / f"window-{tab + 1}.png")

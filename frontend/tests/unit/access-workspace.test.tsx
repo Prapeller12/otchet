@@ -54,15 +54,15 @@ it("first administrator setup checks repeated code and sends no duplicate role",
   expect(setup).toHaveBeenCalledWith({ display_name: "Анна", pin: "secret-code" });
 });
 
-it("write authorization excludes project managers and retries a wrong code without completing the write", async () => {
+it("write authorization includes project managers and retries a wrong code without completing the write", async () => {
   const gateway = Object.assign(new DemoGateway(), { listReportSigners: async () => [admin, reviewer, manager] });
   const execute = vi.fn().mockRejectedValueOnce(new Error("Неверный код")).mockResolvedValue({ saved: true });
   const resolve = vi.fn(); const close = vi.fn();
   render(<AuthorizationDialog gateway={gateway} pending={{ title: "Сохранить изменения отчёта", adminOnly: false, execute, resolve, reject: vi.fn() }} onClose={close} />);
   const user = userEvent.setup();
   await screen.findByRole("option", { name: /Иван/ });
-  expect(screen.queryByRole("option", { name: /Ольга/ })).toBeNull();
-  await user.selectOptions(screen.getByLabelText("Ответственное лицо"), "r");
+  expect(screen.getByRole("option", { name: /Ольга/ })).toBeVisible();
+  await user.selectOptions(screen.getByLabelText("Ответственное лицо"), "m");
   await user.type(screen.getByLabelText("Код подтверждения"), "wrong-code");
   await user.click(screen.getByRole("button", { name: "Подтвердить" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Неверный код");
@@ -71,7 +71,7 @@ it("write authorization excludes project managers and retries a wrong code witho
   await user.type(screen.getByLabelText("Код подтверждения"), "right-code");
   await user.click(screen.getByRole("button", { name: "Подтвердить" }));
   await waitFor(() => expect(resolve).toHaveBeenCalledWith({ saved: true }));
-  expect(execute).toHaveBeenLastCalledWith({ signer_id: "r", pin: "right-code" });
+  expect(execute).toHaveBeenLastCalledWith({ signer_id: "m", pin: "right-code" });
 });
 
 it("onboarding explains blank versus zero and code on save in three short steps", async () => {
@@ -80,7 +80,7 @@ it("onboarding explains blank versus zero and code on save in three short steps"
   await user.click(screen.getByRole("button", { name: "Далее" }));
   expect(screen.getByText(/Ноль означает/)).toHaveTextContent("Пустая ячейка");
   await user.click(screen.getByRole("button", { name: "Далее" }));
-  expect(screen.getByText(/Проверяющий или администратор/)).toBeVisible();
+  expect(screen.getByText(/личный код руководителя проекта/)).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Начать заполнение" }));
   expect(close).toHaveBeenCalledTimes(1);
 });
@@ -93,4 +93,81 @@ it("does not offer database-unlock enrollment for a project manager", async () =
   expect(screen.queryByRole("button", { name: "Разрешить вход" })).toBeNull();
   await userEvent.setup().selectOptions(screen.getByLabelText("Роль"), "project_manager");
   expect(screen.getByText(/Заполняет отчёт после открытия программы/)).toBeVisible();
+});
+
+
+it("opens report planning without administrator access and keeps users and structure private", async () => {
+  const gateway = new DemoGateway();
+  const user = userEvent.setup();
+  render(<ApplicationGatewayProvider gateway={gateway}><App /></ApplicationGatewayProvider>);
+  await screen.findByText("Ежедневное движение и остатки");
+  await user.click(screen.getByRole("button", { name: "План и сведения" }));
+  expect(screen.getByRole("button", { name: "К заполнению отчётов" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Ответственные лица" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Настроить рабочее поле" })).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "К заполнению отчётов" }));
+  expect(screen.getByRole("button", { name: "Администратор" })).toBeVisible();
+});
+
+it("creates a responsible person inside one administrator session and ends it on exit", async () => {
+  localStorage.setItem("reporting-onboarding-v1", "done");
+  const authenticate = vi.fn(async () => admin);
+  const end = vi.fn(async () => undefined);
+  const create = vi.fn(async () => reviewer);
+  const gateway = Object.assign(new DemoGateway(), {
+    listReportSigners: async () => [admin, manager],
+    authenticateAccess: authenticate, endAdministration: end, createReportSigner: create,
+  });
+  Object.defineProperty(gateway, "mode", { value: "pywebview" });
+  const user = userEvent.setup();
+  render(<ApplicationGatewayProvider gateway={gateway}><App /></ApplicationGatewayProvider>);
+  await screen.findByText("Ежедневное движение и остатки");
+  await user.click(screen.getByRole("button", { name: "Администратор" }));
+  await screen.findByRole("option", { name: /Анна/ });
+  expect(screen.queryByRole("option", { name: /Ольга/ })).toBeNull();
+  await user.type(screen.getByLabelText("Код подтверждения"), "secret-code");
+  await user.click(screen.getByRole("button", { name: "Подтвердить" }));
+  await user.click(await screen.findByRole("button", { name: "Ответственные лица" }));
+  await user.type(screen.getByLabelText("Имя ответственного"), "Иван");
+  await user.type(screen.getByLabelText("Личный код (от 6 символов)"), "new-code");
+  await user.type(screen.getByLabelText("Повтор личного кода"), "new-code");
+  await user.click(screen.getByRole("button", { name: "Создать ключ ответственного" }));
+  await screen.findByText(/Ключ создан: Иван/);
+  expect(create).toHaveBeenCalledWith({ display_name: "Иван", pin: "new-code", role: "reviewer" });
+  expect(authenticate).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "К заполнению отчётов" }));
+  await screen.findByRole("button", { name: "Администратор" });
+  expect(end).toHaveBeenCalledTimes(1);
+});
+
+it("does not show ordinary entry until the administrator session has ended", async () => {
+  const end = vi.fn().mockRejectedValueOnce(new Error("Повторите выход")).mockResolvedValueOnce(undefined);
+  const gateway = Object.assign(new DemoGateway(), { endAdministration: end });
+  const user = userEvent.setup();
+  render(<ApplicationGatewayProvider gateway={gateway}><App /></ApplicationGatewayProvider>);
+  await screen.findByText("Ежедневное движение и остатки");
+  await user.click(screen.getByRole("button", { name: "Администратор" }));
+  await user.click(screen.getByRole("button", { name: "К заполнению отчётов" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Повторите выход");
+  expect(screen.getByRole("button", { name: "Ответственные лица" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Администратор" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "К заполнению отчётов" }));
+  await screen.findByRole("button", { name: "Администратор" });
+  expect(end).toHaveBeenCalledTimes(2);
+});
+
+it("cancels confirmation without calling the operation or retaining the entered code", async () => {
+  const gateway = Object.assign(new DemoGateway(), { listReportSigners: async () => [manager] });
+  const execute = vi.fn(); const reject = vi.fn(); const close = vi.fn();
+  render(<AuthorizationDialog gateway={gateway} pending={{ title: "Проверить отчёт перед печатью", adminOnly: false, confirmLabel: "Подтвердить и печатать", execute, resolve: vi.fn(), reject }} onClose={close} />);
+  const user = userEvent.setup();
+  await screen.findByRole("option", { name: /Ольга/ });
+  await user.type(screen.getByLabelText("Код подтверждения"), "secret-code");
+  await user.click(screen.getByRole("button", { name: "Отмена" }));
+  expect(execute).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("Код подтверждения")).toHaveValue("");
+  expect(reject).toHaveBeenCalledWith(expect.objectContaining({ message: "Действие отменено. Введённые изменения остались в форме." }));
+  expect(close).toHaveBeenCalledTimes(1);
 });

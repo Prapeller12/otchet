@@ -139,6 +139,8 @@ def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
         return Path(selected[0]) if selected else None
 
     def save_pdf_file(suggested_name: str) -> Path | None:
+        if ui_self_test:
+            return paths.temp / suggested_name
         selected = window.create_file_dialog(
             webview.FileDialog.SAVE,
             directory=str(paths.exports),

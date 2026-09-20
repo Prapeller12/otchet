@@ -231,6 +231,7 @@ def test_bridge_exposes_health_bootstrap_and_safe_revision_error(database_path: 
             "0011",
             "0012",
             "0013",
+            "0014",
         ],
         "newly_applied": [],
         "contract_status": "WORKING_REFERENCE",

@@ -60,11 +60,11 @@ class SqliteReportSignersRepository:
         with closing(connect_sqlite(self.database_path)) as connection:
             profile = load_signer(connection, signer_id)
             role = access_role(connection, signer_id)
-            if role not in ({"admin"} if admin_only else {"admin", "reviewer"}):
+            if role not in ({"admin"} if admin_only else {"admin", "reviewer", "project_manager"}):
                 raise ValueError(
                     "Нужен код администратора"
                     if admin_only
-                    else "Для сохранения нужен код проверяющего или администратора"
+                    else "Для сохранения нужен код ответственного лица"
                 )
             unlock_key(profile, pin)
             return summary(profile, role)
@@ -79,8 +79,8 @@ class SqliteReportSignersRepository:
             raise ValueError("Некорректная запись журнала доступа")
         with closing(connect_sqlite(self.database_path)) as connection, connection:
             role = access_role(connection, profile["id"])
-            if role not in {"admin", "reviewer"}:
-                raise ValueError("Запись требует кода проверяющего или администратора")
+            if role not in {"admin", "reviewer", "project_manager"}:
+                raise ValueError("Запись требует кода ответственного лица")
             connection.execute(
                 "INSERT INTO report_access_events(signer_id,role,command,outcome) VALUES (?,?,?,?)",
                 (profile["id"], role, command, outcome),
@@ -88,6 +88,21 @@ class SqliteReportSignersRepository:
 
     def create(
         self, name: str, pin: str, admin_id: str, admin_pin: str, *, role: str = "reviewer"
+    ) -> dict[str, Any]:
+        return self._create(name, pin, admin_id, admin_pin, role=role)
+
+    def create_in_session(
+        self, name: str, pin: str, admin_id: str, *, role: str = "reviewer"
+    ) -> dict[str, Any]:
+        """Internal trusted boundary: caller has authenticated the admin session.
+
+        This method is not exposed through the desktop bridge; client-supplied
+        administrator IDs never reach it. No administrator PIN is retained.
+        """
+        return self._create(name, pin, admin_id, None, role=role)
+
+    def _create(
+        self, name: str, pin: str, admin_id: str, admin_pin: str | None, *, role: str
     ) -> dict[str, Any]:
         if role not in {"admin", "reviewer", "project_manager"}:
             raise ValueError("Неизвестная роль пользователя")
@@ -104,7 +119,8 @@ class SqliteReportSignersRepository:
                 admin = load_signer(connection, admin_id)
                 if access_role(connection, admin_id) != "admin":
                     raise ValueError("Создание профиля требует PIN администратора ключей")
-                unlock_key(admin, admin_pin)
+                if admin_pin is not None:
+                    unlock_key(admin, admin_pin)
             profile = protect_key(
                 {
                     "id": uuid4().hex,

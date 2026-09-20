@@ -38,7 +38,7 @@ import "./matrix.css";
 
 type ReportMatrixProps = {
   gateway: ApplicationGateway;
-  workspaceMode?: "entry" | "admin";
+  workspaceMode?: "entry" | "report-settings" | "admin";
   matrix: ReportMatrixContract;
   onChange(matrix: ReportMatrixContract): void;
   onStatusChange(status: string): void;
@@ -141,6 +141,10 @@ export function ReportMatrix({
   onNavigationBlockedChange,
 }: ReportMatrixProps) {
   const adminMode = workspaceMode === "admin";
+  const reportSettings = workspaceMode !== "entry";
+  const headerSave = useRef<(() => Promise<void>) | null>(null);
+  const [printing, setPrinting] = useState(false);
+  const [verificationRefresh, setVerificationRefresh] = useState(0);
   const [moreOpen, setMoreOpen] = useState(adminMode);
   const controlsSave = useRef<(() => Promise<void>) | null>(null);
   const [active, setActive] = useState<MatrixPosition>({ row: 0, column: 0 });
@@ -171,7 +175,7 @@ export function ReportMatrix({
   });
   const [subsidiaryMonth, setSubsidiaryMonth] = useState([...expandedMonths][0] ?? "");
   const [stockWeeks, setStockWeeks] = useState<Record<string, string>>({});
-  const temporalIndices = matrix.time_columns.flatMap((column, index) => expandedMonths.has(column.group_label) && (!matrix.subsidiary || (matrix.head_site ? ["PLAN", "FACT"] : ["USED"]).includes(column.kind ?? "")) ? [index] : []);
+  const temporalIndices = matrix.time_columns.flatMap((column, index) => (matrix.subsidiary ? expandedMonths.has(column.group_label) : column.group_label === subsidiaryMonth) && (!matrix.subsidiary || (matrix.head_site ? ["PLAN", "FACT"] : ["USED"]).includes(column.kind ?? "")) ? [index] : []);
   const summaryIndices = matrix.time_columns.flatMap((column, index) => matrix.subsidiary && column.group_label === subsidiaryMonth && (matrix.head_site ? ["OPENING", "USED", "VARIANCE"] : ["OPENING", "RECEIVED"]).includes(column.kind ?? "") ? [index] : []);
   const visibleIndices = matrix.subsidiary ? [
     ...summaryIndices.filter(index => matrix.time_columns[index]?.kind === "RECEIVED"),
@@ -184,11 +188,13 @@ export function ReportMatrix({
   const visibleMatrix = { ...matrix, left_columns: leftColumns, time_columns: visibleIndices.map(index => timeColumns[index]!), rows: matrix.rows.map((row) => ({ ...row, cells: visibleIndices.map(index => row.cells[index]!) })) };
   const query = { report_type: matrix.report_type, organization_id: matrix.organization_id, ...(matrix.year ? { year: matrix.year } : {}) };
 
+  const confirmation = { ...(matrix.year ? { year: matrix.year } : {}), month: Number(subsidiaryMonth.slice(5, 7)) || 1, ...(stockWeeks[subsidiaryMonth] ? { week_start: stockWeeks[subsidiaryMonth] } : {}) };
+
   const spans = useMemo(() => groupSpans(matrix), [matrix]);
   const groups = headerGroups(visibleMatrix);
   const offsets = stickyOffsets(visibleMatrix);
 
-  const navigationBlocked = headerDirty || controlsDirty || dirtyKeys.size > 0 || editing !== null || saving || excelBusy !== null || presentationBusy || importPreview !== null || pastePreview !== null || renaming;
+  const navigationBlocked = headerDirty || controlsDirty || dirtyKeys.size > 0 || editing !== null || saving || excelBusy !== null || presentationBusy || importPreview !== null || pastePreview !== null || renaming || printing;
   useEffect(() => { onNavigationBlockedChange?.(navigationBlocked); }, [navigationBlocked, onNavigationBlockedChange]);
   useEffect(() => () => { onNavigationBlockedChange?.(false); }, [onNavigationBlockedChange]);
   useEffect(() => () => { previewSequence.current += 1; }, []);
@@ -199,8 +205,12 @@ export function ReportMatrix({
 
   async function saveHeader(patch: ProductionHeaderPatch) {
     if (!gateway.saveReportPresentation) throw new Error("Сохранение шапки недоступно");
-    await gateway.saveReportPresentation({ ...query, expected_revision: matrix.matrix_revision, ...patch });
-    onChange(await gateway.getReportMatrix(query));
+    const result = await gateway.saveReportPresentation({ report_type: matrix.report_type, organization_id: matrix.organization_id, expected_revision: matrix.matrix_revision, confirmation, ...patch });
+    setSaveError(result.verification_error ? `Сохранено, но не подтверждено: ${result.verification_error.message}` : null);
+    setVerificationRefresh(value => value + 1);
+    onChange({ ...latestMatrix.current, presentation: result });
+    try { onChange(await gateway.getReportMatrix(query)); }
+    catch { setSaveError(`${result.verification_error ? `Сохранено, но не подтверждено: ${result.verification_error.message}. ` : "Шапка сохранена. "}Не удалось обновить отчёт. Перезагрузите форму перед следующим изменением.`); }
   }
 
   function sharedColumn(column: number) {
@@ -254,9 +264,13 @@ export function ReportMatrix({
     if (!titleDraft.trim() || !gateway.saveReportPresentation) return;
     setPresentationBusy(true);
     try {
-      const result = await gateway.saveReportPresentation({ report_type: matrix.report_type, organization_id: matrix.organization_id, title: titleDraft.trim() });
+      const result = await gateway.saveReportPresentation({ report_type: matrix.report_type, organization_id: matrix.organization_id, expected_revision: matrix.matrix_revision, confirmation, title: titleDraft.trim() });
+      setSaveError(result.verification_error ? `Сохранено, но не подтверждено: ${result.verification_error.message}` : null);
+      setVerificationRefresh(value => value + 1);
       onChange({ ...latestMatrix.current, title: result.title ?? titleDraft.trim() });
       setRenaming(false);
+      try { onChange(await gateway.getReportMatrix(query)); }
+      catch { setSaveError(`${result.verification_error ? `Сохранено, но не подтверждено: ${result.verification_error.message}. ` : "Название сохранено. "}Не удалось обновить отчёт. Перезагрузите форму перед следующим изменением.`); }
     } catch (error) { setSaveError(error instanceof Error ? error.message : "Название не сохранено"); }
     finally { setPresentationBusy(false); }
   }
@@ -291,12 +305,12 @@ export function ReportMatrix({
 
   function entryLocked(cell: MatrixCellContract, column: number): boolean {
     const metric = cell.coordinate.metric_code ?? "";
-    return !adminMode && (cell.state.admin_only ?? (matrix.time_columns[column]?.kind === "PLAN" || metric.split("_").includes("PLAN")));
+    return !reportSettings && (cell.state.admin_only ?? (matrix.time_columns[column]?.kind === "PLAN" || metric.split("_").includes("PLAN")));
   }
 
   function beginEdit(position: MatrixPosition): void {
     const cell = matrix.rows[position.row]?.cells[position.column];
-    if (cell?.state.access !== "editable" || entryLocked(cell, position.column) || renaming || headerDirty || controlsDirty || saving || presentationBusy || excelBusy !== null || pastePreview !== null) return;
+    if (cell?.state.access !== "editable" || printing || entryLocked(cell, position.column) || renaming || headerDirty || controlsDirty || saving || presentationBusy || excelBusy !== null || pastePreview !== null) return;
     setActive(position);
     setEditing({ ...position, draft: inputValue(cell.value) });
   }
@@ -448,7 +462,10 @@ export function ReportMatrix({
         base_revision: matrix.matrix_revision,
         idempotency_key: newIdempotencyKey(),
         changes,
+        confirmation,
       });
+      setSaveError(result.verification_error ? `Сохранено, но не подтверждено: ${result.verification_error.message}` : null);
+      setVerificationRefresh(value => value + 1);
       const savedCells = new Map(
         result.cells.map((cell) => [coordinateKey(cell.coordinate), cell]),
       );
@@ -464,11 +481,11 @@ export function ReportMatrix({
         keysAtStart.forEach((key) => next.delete(key));
         return next;
       });
-      if (matrix.rows.some((row) => row.cells.some((cell) => cell.formula))) {
+      if (matrix.daily_summary || matrix.subsidiary || matrix.rows.some((row) => row.cells.some((cell) => cell.formula))) {
         try {
           onChange(await gateway.getReportMatrix(query));
         } catch {
-          setSaveError("Данные сохранены, но не удалось обновить расчёты. Перезагрузите отчёт.");
+          setSaveError(`${result.verification_error ? `Сохранено, но не подтверждено: ${result.verification_error.message}. ` : "Данные сохранены. "}Не удалось обновить расчёты. Перезагрузите отчёт.`);
         }
       }
     } catch (reason: unknown) {
@@ -572,7 +589,7 @@ export function ReportMatrix({
   function renderValueCell(rowIndex: number, columnIndex: number) {
     const row = matrix.rows[rowIndex]!;
     const originalCell = row.cells[columnIndex]!;
-    const cell = entryLocked(originalCell, columnIndex) ? { ...originalCell, state: { ...originalCell.state, access: "locked" as const }, lock_reason: "План задаёт администратор" } : originalCell;
+    const cell = entryLocked(originalCell, columnIndex) ? { ...originalCell, state: { ...originalCell.state, access: "locked" as const }, lock_reason: "План можно изменить в разделе «План и сведения»" } : originalCell;
                   const shared = sharedColumn(columnIndex);
                   if (shared && !spans.has(rowIndex)) return null;
                   const position = { row: rowIndex, column: columnIndex };
@@ -608,10 +625,19 @@ export function ReportMatrix({
                   );
   }
 
-  const summaryMonthNumber = Number(([...expandedMonths].sort().at(-1) ?? `${matrix.year}-01`).slice(5, 7));
+  async function printReport() {
+    if (!gateway.exportPdf || navigationBlocked || previewBusy) return;
+    setPrinting(true); setSaveError(null); setExcelMessage(null);
+    try {
+      const result = await gateway.exportPdf({ ...query, ...confirmation, expected_revision: matrix.matrix_revision });
+      if (!result.cancelled) setExcelMessage(`PDF сохранён: ${result.file_name}`);
+      setVerificationRefresh(value => value + 1);
+    } catch (reason) { setSaveError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setPrinting(false); }
+  }
+
   const dailySummaryColumns = matrix.daily_summary ? [
-    { id: "ytd", label: "С начала года", kind: "through_month" as const, index: summaryMonthNumber - 1 },
-    ...Array.from({ length: Math.max(0, summaryMonthNumber - 1) }, (_, index) => ({ id: `prior-${index}`, label: monthName(`${matrix.year}-${String(index + 1).padStart(2, "0")}`), kind: "monthly" as const, index })),
+    { id: "ytd", label: "Накопительный итог", kind: "through_month" as const, index: confirmation.month - 1 },
   ] : [];
   const dailyRows = new Map(matrix.daily_summary?.rows.map(row => [row.row_id, row]));
 
@@ -632,7 +658,7 @@ export function ReportMatrix({
               <button className="button primary" disabled={presentationBusy || !titleDraft.trim()}>Применить название</button>
               <button className="button secondary" type="button" disabled={presentationBusy} onClick={() => setRenaming(false)}>Отмена</button>
             </form> : <h2 id="matrix-title">{matrix.title}</h2>}
-            {adminMode && !renaming && gateway.saveReportPresentation && <button type="button" className="mini-button" aria-label="Переименовать отчёт" disabled={navigationBlocked} onClick={() => { setTitleDraft(matrix.title); setRenaming(true); }}><UiIcon name="edit" /> Переименовать отчёт</button>}
+            {reportSettings && !renaming && gateway.saveReportPresentation && <button type="button" className="mini-button" aria-label="Переименовать отчёт" disabled={navigationBlocked} onClick={() => { setTitleDraft(matrix.title); setRenaming(true); }}><UiIcon name="edit" /> Переименовать отчёт</button>}
           </div>
           {previewBusy && <p role="status">Пересчёт…</p>}
         </div>
@@ -640,12 +666,13 @@ export function ReportMatrix({
           <button
             type="button"
             className="button primary"
-            disabled={headerDirty || (!controlsDirty && dirtyKeys.size === 0) || editing !== null || saving || excelBusy !== null || presentationBusy || !matrix.capabilities.save.enabled}
-            onClick={() => { if (controlsDirty) void controlsSave.current?.(); else void saveChanges(); }}
+            disabled={(!headerDirty && !controlsDirty && dirtyKeys.size === 0) || editing !== null || saving || printing || excelBusy !== null || presentationBusy || !matrix.capabilities.save.enabled}
+            onClick={() => { if (headerDirty) void headerSave.current?.(); else if (controlsDirty) void controlsSave.current?.(); else void saveChanges(); }}
           >
             {saving ? "Сохранение…" : `Сохранить${dirtyKeys.size > 0 ? ` (${dirtyKeys.size})` : ""}`}
             <UiIcon name="save" />
           </button>
+          <button type="button" className="button secondary" disabled={!gateway.exportPdf || navigationBlocked || previewBusy} title={headerDirty || controlsDirty || dirtyKeys.size > 0 ? "Сначала сохраните изменения" : undefined} onClick={() => void printReport()}>{printing ? "Подготовка PDF…" : "Печать / PDF А4"}</button>
           <button type="button" className="button secondary" aria-expanded={moreOpen} aria-controls="report-more-actions" onClick={() => setMoreOpen(open => !open)}>Ещё</button>
         </div>
       </div>
@@ -676,19 +703,20 @@ export function ReportMatrix({
             <UiIcon name="export" />
           </button>
         </div>
-        <MonthlyReportActions controlledMonth={subsidiaryMonth} onMonthChange={month => { setSubsidiaryMonth(month); setExpandedMonths(new Set([month])); }} weeks={stockWeeks} gateway={gateway} query={query} revision={matrix.matrix_revision} title={matrix.title} blocked={headerDirty || controlsDirty || dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} />
-      </div>
 
-      {matrix.subsidiary && <ProductionHeader workspaceMode={workspaceMode} presentation={matrix.presentation ?? {}} year={matrix.year!} headSite={!!matrix.head_site}
-        blocked={renaming || dirtyKeys.size > 0 || controlsDirty || editing !== null || saving || excelBusy !== null}
+      </div>
+      <MonthlyReportActions controlledMonth={subsidiaryMonth} weeks={stockWeeks} gateway={gateway} query={query} revision={matrix.matrix_revision} title={matrix.title} refresh={verificationRefresh} blocked={navigationBlocked || previewBusy} />
+
+      {matrix.subsidiary && <ProductionHeader onSaveReady={save => { headerSave.current = save; }} workspaceMode={workspaceMode} presentation={matrix.presentation ?? {}} year={matrix.year!} headSite={!!matrix.head_site}
+        blocked={printing || renaming || dirtyKeys.size > 0 || controlsDirty || editing !== null || saving || excelBusy !== null}
         onSave={saveHeader} onDirtyChange={setHeaderDirty} onBusyChange={setPresentationBusy} />}
-      {matrix.subsidiary && <SubsidiaryControls workspaceMode={workspaceMode} onSaveReady={save => { controlsSave.current = save; }} onDirtyChange={setControlsDirty} matrix={matrix} gateway={gateway} onBusy={setPresentationBusy} blocked={renaming || headerDirty || dirtyKeys.size > 0 || editing !== null || saving || previewBusy || excelBusy !== null} onChange={onChange} month={subsidiaryMonth}
+      {matrix.subsidiary && <SubsidiaryControls onVerified={() => setVerificationRefresh(value => value + 1)} workspaceMode={workspaceMode} onSaveReady={save => { controlsSave.current = save; }} onDirtyChange={setControlsDirty} matrix={matrix} gateway={gateway} onBusy={setPresentationBusy} blocked={printing || renaming || headerDirty || dirtyKeys.size > 0 || editing !== null || saving || previewBusy || excelBusy !== null} onChange={onChange} month={subsidiaryMonth}
         onMonth={month => { setSubsidiaryMonth(month); setExpandedMonths(new Set([month])); }} week={stockWeeks[subsidiaryMonth] ?? ""} onWeek={week => setStockWeeks(current => ({ ...current, [subsidiaryMonth]: week }))} />}
       {!!matrix.legacy_cells?.length && <details className="legacy-facts"><summary>Данные прежней формы — {matrix.legacy_cells.length} ячеек (не включены в расход)</summary><p>Значения сохранены в исходном смысле. Для переноса в новую структуру используйте проверку импорта.</p><table><thead><tr><th>Позиция / ID</th><th>Показатель</th><th>Период</th><th>Значение</th></tr></thead><tbody>{matrix.legacy_cells.map((cell, i) => <tr key={i}><td>{cell.coordinate.component_id ?? cell.coordinate.product_id}</td><td>{cell.coordinate.metric_code}</td><td>{cell.coordinate.period_start}</td><td>{inputValue(cell.value)}</td></tr>)}</tbody></table></details>}
       {matrix.calendar_notice && <p role="note">{matrix.calendar_notice}</p>}
 
-      {!matrix.subsidiary && <label className="entry-month">Месяц отчёта<select value={subsidiaryMonth} disabled={editing !== null} onChange={event => { setSubsidiaryMonth(event.target.value); setExpandedMonths(new Set([event.target.value])); }}>{monthLabels.map(month => <option key={month} value={month}>{monthName(month)} {matrix.year}</option>)}</select></label>}
-      <details className="report-month-options" open={adminMode || undefined}><summary>Показать несколько месяцев</summary>
+      {!matrix.subsidiary && <label className="entry-month">Месяц отчёта<select value={subsidiaryMonth} disabled={editing !== null || printing} onChange={event => { setSubsidiaryMonth(event.target.value); setExpandedMonths(new Set([event.target.value])); }}>{monthLabels.map(month => <option key={month} value={month}>{monthName(month)} {matrix.year}</option>)}</select></label>}
+      {matrix.subsidiary && <details className="report-month-options" open={adminMode || undefined}><summary>Показать несколько месяцев</summary>
       <nav className="month-controls" aria-label="Месяцы отчёта">
         <button type="button" disabled={editing !== null} onClick={() => {
           const next = { ...widths, ...Object.fromEntries(matrix.time_columns.map(column => [column.id, matrix.subsidiary && column.kind !== "USED" ? 110 : 64])) };
@@ -699,7 +727,7 @@ export function ReportMatrix({
           onClick={() => toggleMonth(month)}>{expandedMonths.has(month) ? "▾" : "▸"} {monthName(month)}</button>)}
         <button type="button" disabled={editing !== null} onClick={() => setExpandedMonths(new Set(monthLabels))}>Раскрыть все</button>
         <button type="button" disabled={editing !== null} onClick={() => setExpandedMonths(new Set())}>Свернуть все</button>
-      </nav></details>
+      </nav></details>}
 
       {saveError !== null && (
         <div className="save-error" role="alert">
@@ -722,7 +750,7 @@ export function ReportMatrix({
         <table
           onPaste={previewPaste}
           className={matrix.subsidiary ? "report-matrix subsidiary-matrix" : "report-matrix"}
-          style={{ width: leftColumns.reduce((sum, column) => sum + column.width, 0) + visibleMatrix.time_columns.reduce((sum, column) => sum + column.width, 0) + dailySummaryColumns.length * 100, minWidth: 0 }}
+          style={{ width: leftColumns.reduce((sum, column) => sum + column.width, 0) + visibleMatrix.time_columns.reduce((sum, column) => sum + column.width, 0) + dailySummaryColumns.length * 140, minWidth: 0 }}
           aria-label={matrix.title}
           aria-rowcount={matrix.rows.length + 2}
           aria-colcount={matrix.left_columns.length + visibleMatrix.time_columns.length + dailySummaryColumns.length}
@@ -731,7 +759,7 @@ export function ReportMatrix({
             {leftColumns.map((column) => (
               <col key={column.id} style={{ width: column.width }} />
             ))}
-            {dailySummaryColumns.map(column => <col key={column.id} style={{ width: 100 }} />)}
+            {dailySummaryColumns.map(column => <col key={column.id} style={{ width: 140 }} />)}
             {visibleMatrix.time_columns.map((column) => (
               <col key={column.id} style={{ width: column.width }} />
             ))}
@@ -750,10 +778,10 @@ export function ReportMatrix({
                   {resizeHandle(column.id, column.label, column.width)}
                 </th>
               ))}
-              {dailySummaryColumns.map(column => <th key={column.id} rowSpan={2} scope="col">{column.label}</th>)}
+              {dailySummaryColumns.map(column => <th key={column.id} rowSpan={2} scope="col" title="С начала года по выбранный месяц включительно. Для остатков — значение на конец месяца.">{column.label}</th>)}
               {groups.map((group, index) => (
                 <th key={`${group.label}-${index}`} colSpan={group.span} scope="colgroup">
-                  <button className="month-heading" type="button" disabled={editing !== null} onClick={() => toggleMonth(group.label)}>▾ {monthName(group.label)}</button>
+                  {matrix.subsidiary ? <button className="month-heading" type="button" disabled={editing !== null} onClick={() => toggleMonth(group.label)}>▾ {monthName(group.label)}</button> : monthName(group.label)}
                 </th>
               ))}
             </tr>
@@ -796,7 +824,7 @@ export function ReportMatrix({
                       <img className="matrix-position-image" src={row.image} alt={`Изображение: ${row.group_label}`} />
                     )}
                     {leftIndex === matrix.left_columns.length - 2 &&
-                      row.indicator_detail != null && (
+                      row.indicator_detail != null && !(matrix.daily_summary && row.indicator_detail.kind === "SUM") && (
                         <span className="indicator-detail">
                           <span>{row.indicator_detail.label}</span>
                           {row.indicator_detail.kind === "SUM" && (

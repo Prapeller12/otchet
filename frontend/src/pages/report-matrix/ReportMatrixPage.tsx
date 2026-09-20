@@ -6,7 +6,7 @@ import type { ReportType } from "../../shared/api/report-cell-contract";
 import { ReportMatrix } from "../../widgets/report-matrix/ReportMatrix";
 
 type ReportMatrixPageProps = {
-  workspaceMode?: "entry" | "admin";
+  workspaceMode?: "entry" | "report-settings" | "admin";
   reportType: ReportType;
   organizationId: string;
   reloadKey: number;

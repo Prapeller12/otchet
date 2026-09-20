@@ -46,14 +46,16 @@ def test_native_action_timeout_reports_visible_error(monkeypatch: pytest.MonkeyP
         window_health._wait_for_script(window, "false", "Подтверждение не завершилось")
 
 
-def test_native_signing_stops_if_secret_is_left_in_input(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_native_confirmation_stops_if_secret_is_left_in_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     window = Mock()
-    window.evaluate_js.side_effect = [None, False]
+    window.evaluate_js.side_effect = [False]
     monkeypatch.setattr(window_health, "_click_button", Mock())
     monkeypatch.setattr(window_health, "_wait_for_script", Mock())
-    monkeypatch.setattr(window_health, "_fill_signing_input", Mock())
-    with pytest.raises(RuntimeError, match="PIN не очищен"):
-        window_health._exercise_signing(window)
+    monkeypatch.setattr(window_health, "_fill_form_input", Mock())
+    with pytest.raises(RuntimeError, match="Код не очищен"):
+        window_health._confirm_write(window, reject_wrong_code=True)
 
 
 def test_input_waits_until_asynchronous_access_field_is_ready(

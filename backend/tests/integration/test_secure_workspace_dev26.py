@@ -49,6 +49,7 @@ def workspace(tmp_path: Path) -> tuple[SecureDesktopBridge, dict[str, str]]:
 def account(
     app: SecureDesktopBridge, authorization: dict[str, str], role: str, pin: str
 ) -> dict[str, Any]:
+    data(app.authenticate_access(authorization))
     return dict(
         data(
             app.create_report_signer(
@@ -56,7 +57,6 @@ def account(
                     "display_name": f"QA {role} {uuid4().hex[:6]}",
                     "pin": pin,
                     "role": role,
-                    "authorization": authorization,
                 }
             )
         )
@@ -73,6 +73,7 @@ def cell_request(app: SecureDesktopBridge, quantity: str = "17") -> dict[str, An
     )
     return {
         **QUERY,
+        "confirmation": {"year": 2026, "month": 9},
         "base_revision": matrix["matrix_revision"],
         "idempotency_key": uuid4().hex,
         "changes": [
@@ -115,7 +116,6 @@ def test_each_changed_save_requires_fresh_reviewer_or_admin_code(
     for credentials in (
         None,
         {"signer_id": reviewer["id"], "pin": "wrong-code"},
-        {"signer_id": manager["id"], "pin": MANAGER_PIN},
     ):
         rejected = app.save_report_cells(
             {**request, **({} if credentials is None else {"authorization": credentials})}
@@ -125,6 +125,14 @@ def test_each_changed_save_requires_fresh_reviewer_or_admin_code(
     data(
         app.save_report_cells(
             {**request, "authorization": {"signer_id": reviewer["id"], "pin": REVIEWER_PIN}}
+        )
+    )
+    data(
+        app.save_report_cells(
+            {
+                **cell_request(app, "19"),
+                "authorization": {"signer_id": manager["id"], "pin": MANAGER_PIN},
+            }
         )
     )
     # Successful authorization is not a session-wide write grant.
@@ -176,10 +184,10 @@ def test_reviewer_cannot_change_administrator_configuration(
     app, authorization = workspace
     reviewer = account(app, authorization, "reviewer", REVIEWER_PIN)
     credentials = {"signer_id": reviewer["id"], "pin": REVIEWER_PIN}
+    data(app.end_administration())
     before = (tmp_path / "data/reports.sqlite3").read_bytes()
     for method, payload in (
         ("create_organization", {"name": "Недоступно"}),
-        ("save_report_presentation", {**QUERY, "title": "Недоступно"}),
         ("create_report_signer", {"display_name": "Недоступно", "pin": PIN, "role": "reviewer"}),
     ):
         result = getattr(app, method)({**payload, "authorization": credentials})
@@ -291,12 +299,12 @@ def test_failed_account_enrollment_recovers_without_second_profile(
     app, authorization = workspace
     original = app._vault.enroll
     monkeypatch.setattr(app._vault, "enroll", lambda *_args: (_ for _ in ()).throw(OSError("full")))
+    data(app.authenticate_access(authorization))
     response = app.create_report_signer(
         {
             "display_name": "Восстановление доступа",
             "role": "reviewer",
             "pin": REVIEWER_PIN,
-            "authorization": authorization,
         }
     )
     assert not response["ok"]
@@ -331,7 +339,7 @@ def test_missing_established_database_fails_closed_without_silent_recreation(
 
 
 @pytest.mark.parametrize("report_type", ["DAILY_MOVEMENT", "HEAD_SITE"])
-def test_plan_matrix_values_require_administrator_even_with_valid_reviewer_code(
+def test_responsible_reviewer_can_save_plan_matrix_values(
     workspace: tuple[SecureDesktopBridge, dict[str, str]], tmp_path: Path, report_type: str
 ) -> None:
     app, authorization = workspace
@@ -347,18 +355,18 @@ def test_plan_matrix_values_require_administrator_even_with_valid_reviewer_code(
     )
     request = {
         **query,
+        "confirmation": {"year": 2026, "month": 9},
         "base_revision": matrix["matrix_revision"],
         "idempotency_key": uuid4().hex,
         "changes": [
             {"coordinate": cell["coordinate"], "value": {"kind": "QUANTITY", "quantity": "125"}}
         ],
     }
-    before = (tmp_path / "data/reports.sqlite3").read_bytes()
-    assert not app.save_report_cells(
-        {**request, "authorization": {"signer_id": reviewer["id"], "pin": REVIEWER_PIN}}
-    )["ok"]
-    assert (tmp_path / "data/reports.sqlite3").read_bytes() == before
-    data(app.save_report_cells({**request, "authorization": authorization}))
+    data(
+        app.save_report_cells(
+            {**request, "authorization": {"signer_id": reviewer["id"], "pin": REVIEWER_PIN}}
+        )
+    )
 
 
 def test_project_manager_never_receives_database_key_and_cannot_unlock_file(
@@ -380,7 +388,8 @@ def test_project_manager_never_receives_database_key_and_cannot_unlock_file(
     # Their identity can be checked while a responsible person has opened the app.
     assert data(app.authenticate_access(credentials))["role"] == "project_manager"
     assert data(app.get_report_matrix(QUERY))["rows"]
-    assert not app.save_report_cells({**cell_request(app), "authorization": credentials})["ok"]
+    data(app.save_report_cells({**cell_request(app), "authorization": credentials}))
+    before_database = database.read_bytes()
     # Even an administrator cannot accidentally grant a manager the master-key envelope.
     assert not app.enroll_access({**credentials, "authorization": authorization})["ok"]
     assert database.read_bytes() == before_database
@@ -422,6 +431,7 @@ def test_reviewer_code_facts_preserve_plan_identity_and_other_months(
         app.save_report_presentation(
             {
                 **query,
+                "confirmation": {"year": 2026, "month": 9},
                 "expected_revision": matrix["matrix_revision"],
                 "production_codes": codes,
                 "authorization": authorization,
@@ -434,6 +444,7 @@ def test_reviewer_code_facts_preserve_plan_identity_and_other_months(
         app.save_report_presentation(
             {
                 **query,
+                "confirmation": {"year": 2026, "month": 9},
                 "expected_revision": matrix["matrix_revision"],
                 "authorization": credentials,
                 "production_code_actuals": {"A": {"2026-09": "0"}, "B": {"2026-09": "2"}},
@@ -448,14 +459,15 @@ def test_reviewer_code_facts_preserve_plan_identity_and_other_months(
         assert updated["actuals"]["2026-01"] == original["actuals"]["2026-01"]
     assert result["production_codes"][0]["actuals"]["2026-09"] == "0"
     matrix = data(app.get_report_matrix({**query, "year": 2026}))
-    before = (tmp_path / "data/reports.sqlite3").read_bytes()
-    assert not app.save_report_presentation(
-        {
-            **query,
-            "expected_revision": matrix["matrix_revision"],
-            "authorization": credentials,
-            "production_code_actuals": {"A": {"2026-09": "5"}},
-            "plans": {"2026-09": "100"},
-        }
-    )["ok"]
-    assert (tmp_path / "data/reports.sqlite3").read_bytes() == before
+    data(
+        app.save_report_presentation(
+            {
+                **query,
+                "confirmation": {"year": 2026, "month": 9},
+                "expected_revision": matrix["matrix_revision"],
+                "authorization": credentials,
+                "production_code_actuals": {"A": {"2026-09": "5"}},
+                "plans": {"2026-09": "100"},
+            }
+        )
+    )

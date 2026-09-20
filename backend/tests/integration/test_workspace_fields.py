@@ -170,6 +170,7 @@ def test_upgrade_preserves_opening_date_and_repairs_previous_preset(tmp_path: Pa
             "0011",
             "0012",
             "0013",
+            "0014",
         )
         assert apply_migrations(conn, ROOT / "backend/migrations") == ()
     finally:
