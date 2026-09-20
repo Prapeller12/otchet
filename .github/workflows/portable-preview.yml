@@ -9,6 +9,7 @@ on:
       - codex/compact-head-header-dev25
       - codex/roles-and-simple-workspace-dev26
       - codex/report-workflow-dev27
+      - codex/reference-frontend-dev29
   workflow_dispatch:
 
 permissions:
@@ -135,5 +136,5 @@ jobs:
               --target $env:GITHUB_SHA `
               --prerelease `
               --title "Reporting System $version test build" `
-              --notes "Windows x64 alpha. Responsible persons can edit report fields; automatic signing on save and print, sticky report navigation and one daily cumulative column. SQLCipher encrypted database. See docs/test-cases/alpha-dev28.md and docs/user-guide.md. Read TESTING.txt, extract and run start.cmd. WebView2 Fixed Runtime included; real-window startup test required. Windows 10 ACL limitations: docs/decisions/ADR-0001-webview2-fixed-runtime-windows10-acl.md."
+              --notes "Windows x64 alpha. Reference Kit screen design with local Golos Text and semantic SVG action icons. Existing PDF fonts, reporting workflows and encrypted database preserved. See docs/test-cases/alpha-dev29.md and docs/user-guide.md. Read TESTING.txt, extract and run start.cmd. WebView2 Fixed Runtime included; real-window startup test required. Windows 10 ACL limitations: docs/decisions/ADR-0001-webview2-fixed-runtime-windows10-acl.md."
           }

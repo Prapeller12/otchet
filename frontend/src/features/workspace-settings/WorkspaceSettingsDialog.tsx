@@ -1,3 +1,4 @@
+import { UiIcon } from "../../shared/ui/UiIcon";
 import { SubsidiaryDetailEditor } from "./SubsidiaryDetailEditor";
 import { useEffect, useMemo, useState } from "react";
 
@@ -212,7 +213,7 @@ export function WorkspaceSettingsDialog({
             <h2 id="workspace-settings-title">Организации и строки отчёта</h2>
           </div>
           <button className="icon-button" type="button" disabled={saving} onClick={close} aria-label="Закрыть">
-            Закрыть
+            <UiIcon name="close" />Закрыть
           </button>
         </header>
 
@@ -237,11 +238,11 @@ export function WorkspaceSettingsDialog({
             </label>
             <div className="compact-actions">
               <button className="button secondary" type="button" disabled={saving} onClick={() => void renameOrganization()}>
-                Переименовать
+                <UiIcon name="edit" />Переименовать
               </button>
               {selectedOrganization?.kind === "SUBSIDIARY" && (
                 <button className="button danger" type="button" disabled={saving} onClick={() => void archiveOrganization()}>
-                  Убрать общество
+                  <UiIcon name="trash" />Убрать общество
                 </button>
               )}
             </div>
@@ -253,7 +254,7 @@ export function WorkspaceSettingsDialog({
                 onChange={(event) => setNewOrganizationName(event.target.value)}
               />
               <button className="button secondary" type="button" disabled={saving || !newOrganizationName.trim()} onClick={() => void addOrganization()}>
-                Добавить общество
+                <UiIcon name="add" />Добавить общество
               </button>
             </div>
           </aside>
@@ -277,7 +278,7 @@ export function WorkspaceSettingsDialog({
                   {reportType === "DAILY_MOVEMENT" && <button type="button" className="button secondary" onClick={() => {
                     const template = layout.templates.find(t => t.group_kind === "COMPONENT_POSITION");
                     if (template) setRows(current => [...current, { id: null, template_group_id: template.id, party_name: "", position_name: "", configuration: { category: "PART", image: "", norm: "", opening: "", indicators: template.indicators ?? [] } }]);
-                  }}>+ Расход составной части</button>}
+                  }}><UiIcon name="add" />Расход составной части</button>}
 
                   <button
                     className="button secondary"
@@ -287,7 +288,7 @@ export function WorkspaceSettingsDialog({
                       if (row !== null) setRows((current) => [...current, row]);
                     }}
                   >
-                    {reportType === "SUBSIDIARY" ? "+ Добавить деталь" : "+ Добавить строку"}
+                    <UiIcon name="add" />{reportType === "SUBSIDIARY" ? "Добавить деталь" : "Добавить строку"}
                   </button>
                 </div>
                 <div className="layout-row-list">
@@ -325,10 +326,10 @@ export function WorkspaceSettingsDialog({
                         onChange={(event) => updateRow(index, { position_name: event.target.value })}
                       />
                       {layout.templates.find(t => t.id === row.template_group_id)?.repeatable !== false && <div className="row-actions">
-                        <button type="button" className="mini-button" onClick={() => setRows((current) => [...current, { ...row, id: null, position_name: `${row.position_name} — копия` }])}>Копировать позицию</button>
-                        <button type="button" className="mini-button" onClick={() => moveRow(index, -1)} aria-label="Переместить выше">↑ Выше</button>
-                        <button type="button" className="mini-button" onClick={() => moveRow(index, 1)} aria-label="Переместить ниже">↓ Ниже</button>
-                        <button type="button" className="mini-button remove" onClick={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))} aria-label="Убрать строку">Убрать строку</button>
+                        <button type="button" className="mini-button" onClick={() => setRows((current) => [...current, { ...row, id: null, position_name: `${row.position_name} — копия` }])}><UiIcon name="copy" />Копировать позицию</button>
+                        <button type="button" className="mini-button" onClick={() => moveRow(index, -1)} aria-label="Переместить выше"><UiIcon name="arrow-up" />Выше</button>
+                        <button type="button" className="mini-button" onClick={() => moveRow(index, 1)} aria-label="Переместить ниже"><UiIcon name="arrow-down" />Ниже</button>
+                        <button type="button" className="mini-button remove" onClick={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))} aria-label="Убрать строку"><UiIcon name="trash" />Убрать строку</button>
                       </div>}
                       {row.configuration && layout.templates.find(t => t.id === row.template_group_id)?.repeatable === false && <div className="fixed-block-labels">
                         <p>Итоговый блок: названия можно изменить, значения рассчитываются автоматически.</p>
@@ -352,7 +353,7 @@ export function WorkspaceSettingsDialog({
           <div>
             <button className="button secondary" type="button" disabled={saving} onClick={close}>Отмена</button>
             <button className="button primary" type="button" disabled={saving || loading || layout === null} onClick={() => void saveLayout()}>
-              {saving ? "Сохранение…" : "Применить настройки"}
+              <UiIcon name="save" />{saving ? "Сохранение…" : "Применить настройки"}
             </button>
           </div>
         </footer>

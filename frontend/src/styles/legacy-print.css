@@ -1,3 +1,5 @@
+/* Preserved dev.28 presentation, print only. Screen theme lives in reference-theme.css. */
+@media print {
 /* Presentation only: compact workspace shell, registry table and light dialogs. */
 body { min-width: 720px; font-family: var(--pk-font); font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 button, input, select, summary { transition: background 120ms, border-color 120ms; }
@@ -186,3 +188,5 @@ main { padding: 14px 16px 28px; }
 .layout-row-editor { border: 1px solid var(--pk-border); border-radius: 8px; }
 .organization-settings input, .organization-settings select, .layout-settings input, .layout-settings select { border-radius: 5px; color: var(--pk-text); background: white; }
 .position-category { background: #eef2f4; color: #46515b; }
+
+}

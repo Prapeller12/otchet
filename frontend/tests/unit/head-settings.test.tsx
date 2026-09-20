@@ -13,7 +13,7 @@ it("adds a daily component consumption group with the source worksheet row order
   render(<WorkspaceSettingsDialog gateway={gateway} organizations={organizations}
     initialOrganizationId={organizations[0]!.id} initialReportType="DAILY_MOVEMENT"
     onOrganizationsChange={vi.fn()} onApply={vi.fn()} onClose={vi.fn()} />);
-  const button = await screen.findByRole("button", { name: "+ Расход составной части" });
+  const button = await screen.findByRole("button", { name: "Расход составной части" });
   const before = screen.getAllByLabelText("Категория позиции").length;
   await user.click(button);
   expect(screen.getAllByLabelText("Категория позиции")).toHaveLength(before + 1);

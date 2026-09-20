@@ -1,0 +1,147 @@
+{
+  "$schema": "schemas/target-profile.schema.json",
+  "profile_version": "1.0.0",
+  "status": "verified",
+  "target": {
+    "name": "Система производственной отчётности (otchet)",
+    "source_ref": "35e4e6968917b3df5d5de59705caa116620be3bf",
+    "verified": true,
+    "stack": "React 18.3.1 / TypeScript 5.9.3 / Vite 5.4.14; Python 3.12 / PyWebView / Fixed WebView2; SQLCipher",
+    "entry_points": [
+      "frontend/src/main.tsx",
+      "frontend/src/app/App.tsx",
+      "backend/desktop/launcher.py"
+    ]
+  },
+  "strategy": "existing_webview",
+  "reference": {
+    "snapshot": "Frontend_Reference_Kit_v1/reference/reestr (в исходном архиве; SHA-256 в provenance.json)",
+    "tokens": "Frontend_Reference_Kit_v1/tokens/global.tokens.json (источник экранной темы)"
+  },
+  "preserve": {
+    "business_logic": true,
+    "storage": true,
+    "migrations": true,
+    "import_export": true,
+    "user_workflow": true,
+    "offline_launch": true
+  },
+  "screens": [
+    {
+      "id": "daily",
+      "title": "Ежедневный отчёт",
+      "source_path": "frontend/src/widgets/report-matrix/ReportMatrix.tsx",
+      "reference_component": "RegistryView + RegistryToolbar + TabStrip"
+    },
+    {
+      "id": "head",
+      "title": "Головная площадка",
+      "source_path": "frontend/src/widgets/report-matrix/SourceMatrixTable.tsx",
+      "reference_component": "RegistryView + RegistryGroup + FieldsTable"
+    },
+    {
+      "id": "subsidiary",
+      "title": "Дочерние общества",
+      "source_path": "frontend/src/widgets/report-matrix/SourceMatrixTable.tsx",
+      "reference_component": "RegistryView + RegistryGroup + FieldsTable"
+    },
+    {
+      "id": "plans",
+      "title": "План и сведения",
+      "source_path": "frontend/src/widgets/report-matrix/ProductionHeader.tsx",
+      "reference_component": "FieldsTable + EditableField"
+    },
+    {
+      "id": "admin",
+      "title": "Ответственные лица",
+      "source_path": "frontend/src/features/access/ResponsibleUsers.tsx",
+      "reference_component": "FieldsTable + button + ErrorState"
+    },
+    {
+      "id": "settings",
+      "title": "Настроить рабочее поле",
+      "source_path": "frontend/src/features/workspace-settings/WorkspaceSettingsDialog.tsx",
+      "reference_component": "ImportModal + FieldsTable"
+    },
+    {
+      "id": "access",
+      "title": "Открытие программы",
+      "source_path": "frontend/src/features/access/AccessGate.tsx",
+      "reference_component": "card + EditableField + ErrorState"
+    },
+    {
+      "id": "authorization",
+      "title": "Подтверждение действия",
+      "source_path": "frontend/src/features/access/AuthorizationDialog.tsx",
+      "reference_component": "ImportModal + EditableField"
+    },
+    {
+      "id": "onboarding",
+      "title": "Как заполнить",
+      "source_path": "frontend/src/features/access/Onboarding.tsx",
+      "reference_component": "ImportModal + button"
+    },
+    {
+      "id": "import",
+      "title": "Импорт Excel и предпросмотр",
+      "source_path": "frontend/src/widgets/report-matrix/ReportMatrix.tsx",
+      "reference_component": "ImportModal + ImportUploadStep + ImportResultStep"
+    },
+    {
+      "id": "reference",
+      "title": "Импортированный отчёт",
+      "source_path": "frontend/src/features/reference-reports/ReferenceReport.tsx",
+      "reference_component": "RegistryView + RegistryToolbar"
+    },
+    {
+      "id": "transfer",
+      "title": "Сопоставление полей",
+      "source_path": "frontend/src/features/reference-reports/ReferenceTransfer.tsx",
+      "reference_component": "FieldsTable + DocFilterBar + ImportResultStep"
+    }
+  ],
+  "print": {
+    "policy": "preserve_target_requirements",
+    "paper": "A4",
+    "orientation": "landscape",
+    "minimum_font": null,
+    "examples": [
+      "backend/infrastructure/monthly_pdf.py",
+      "backend/infrastructure/subsidiary_pdf.py"
+    ]
+  },
+  "runtime": {
+    "platforms": [
+      "Windows 10 x64 (целевая)",
+      "Windows 11 x64 (целевая)"
+    ],
+    "launch_command": "start.cmd",
+    "data_locations": [
+      "data/",
+      "attachments/",
+      "imports/inbox/",
+      "exports/",
+      "backups/",
+      "temp/"
+    ]
+  },
+  "verification": {
+    "viewports": [],
+    "os_scales": [],
+    "baseline_files": [
+      "Windows native dev.28: window-1.png",
+      "Windows native dev.28: window-2.png",
+      "Windows native dev.28: window-3.png",
+      "Windows native dev.28: window-4.png",
+      "Windows native dev.28: window-head-header.png",
+      "Windows native dev.28: window-settings.png"
+    ]
+  },
+  "notes": [
+    "verified означает проверенную инвентаризацию исходного кода, не завершение приёмки dev.29.",
+    "Фактические проверки и ограничения записываются отдельно в acceptance-checklist.json и docs/test-cases/alpha-dev29.md.",
+    "minimum_font=null: эта задача не назначает новый минимальный размер; все действующие размеры PDF и файлы шрифтов сохраняются побайтно (print-baseline.json).",
+    "React/Tauri и предметная модель Реестра писем не переносятся.",
+    "Профиль является документацией; действующая экранная тема подключается в frontend/src/styles/."
+  ]
+}

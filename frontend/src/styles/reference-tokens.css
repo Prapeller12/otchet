@@ -1,0 +1,156 @@
+/* Authoritative screen tokens from Frontend_Reference_Kit_v1,
+   reference/reestr/src/blocks/page/page.css. No PDF/print overrides. */
+@media screen {
+:root {
+  /* ── акценты ───────────────────────────────────────────── */
+  --color-accent: #e5402b;              /* главное действие: primary-кнопка, отмеченный чекбокс */
+  --color-accent-hover: #d63822;
+  --color-accent-press: #c4301b;
+  --color-dark: #1d2029;                /* выбранный тег/сегмент, btn_dark, плашка «входящее» */
+  --color-dark-hover: #2b2f3a;
+  --color-dark-press: #353a46;
+
+  /* ── фоны ──────────────────────────────────────────────── */
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f3f4f7;
+  --color-bg-tertiary: #e8eaee;
+  --color-bg-quaternary: #dde0e6;
+  --color-neutral-200: #eef0f3;
+  --color-neutral-300: #e8eaef;
+  --color-neutral-400: #d3d6de;
+  --color-neutral-500: #bcc0ca;
+  --color-neutral-700: #878c99;
+  /* Полупрозрачные нейтрали: фон вторичных кнопок, ховеры поверх любого фона */
+  --color-translucent-100: rgba(30, 45, 80, 0.06);
+  --color-translucent-200: rgba(30, 45, 80, 0.08);
+  --color-translucent-300: rgba(30, 45, 80, 0.11);
+  --color-translucent-400: rgba(30, 45, 80, 0.18);
+  --color-overlay: rgba(10, 14, 24, 0.55);
+
+  /* ── границы ───────────────────────────────────────────── */
+  --color-border-primary: #d6d9e0;
+  --color-border-secondary: #e8eaef;
+  --color-border-tertiary: #f3f4f7;
+  --color-border-underline: #babec8;
+  --color-border-key: #000000;
+
+  /* ── текст (полупрозрачный — так он одинаково читается на белом и на сером) ── */
+  --color-text-primary: rgba(12, 16, 28, 0.9);
+  --color-text-primary-hover: rgba(12, 16, 28, 0.65);
+  --color-text-secondary: rgba(12, 16, 28, 0.56);
+  --color-text-tertiary: rgba(12, 16, 28, 0.4);
+  --color-text-disabled: rgba(12, 16, 28, 0.2);
+  --color-text-inverted: rgba(255, 255, 255, 0.95);
+  --color-text-link: #2f6fe0;
+  --color-text-link-hover: #265cc4;
+  --color-text-positive: #158a41;
+  --color-text-negative: #d93a2b;
+  --color-text-negative-hover: #bb2f22;
+  --color-text-attention: #d9790f;
+  --color-text-info: #2f6fe0;
+
+  /* ── статусы (яркие и приглушённые) ────────────────────── */
+  --color-status-positive: #1fb45c;
+  --color-status-negative: #f0503f;
+  --color-status-attention: #f29a24;
+  --color-status-info: #3182ec;
+  --color-muted-positive: #e2f5e7;
+  --color-muted-negative: #fdece9;
+  --color-muted-attention: #fdf1dd;
+  --color-muted-info: #e6effc;
+  --color-muted-alt-positive: #d3eedb;
+  --color-muted-alt-negative: #fbdcd8;
+  --color-muted-alt-attention: #fbe7cb;
+  --color-muted-alt-info: #d7e6fb;
+  /* Насыщенные цвета статусов: заливка + белый текст */
+  --color-contrast-positive: #1fb45c;
+  --color-contrast-negative: #ee5a45;
+  --color-contrast-attention: #f29a24;
+  --color-contrast-info: #3a86ee;
+
+  /* ── скругления ────────────────────────────────────────── */
+  --radius-4: 4px;
+  --radius-6: 6px;
+  --radius-8: 8px;       /* кнопка 32, чип 24–32 */
+  --radius-10: 10px;     /* кнопка 40/48, статус 32 */
+  --radius-12: 12px;     /* кнопка 56, поле ввода, выпадающее меню */
+  --radius-16: 16px;     /* поповер, календарь */
+  --radius-20: 20px;
+  --radius-24: 24px;     /* карточка, модальное окно, панель */
+  --radius-32: 32px;     /* крупная промо-карточка сайта */
+  --radius-pill: 99px;   /* теги-фильтры, сегментированный переключатель */
+  --radius-circle: 50%;
+
+  /* ── тени ──────────────────────────────────────────────── */
+  --shadow-xs: 0 4px 8px rgba(0, 0, 0, 0.04), 0 0 1px rgba(0, 0, 0, 0.04);
+  --shadow-s: 0 12px 16px rgba(0, 0, 0, 0.04), 0 4px 8px rgba(0, 0, 0, 0.04),
+    0 0 1px rgba(0, 0, 0, 0.04);
+  --shadow-m: 0 20px 24px rgba(0, 0, 0, 0.08), 0 12px 16px rgba(0, 0, 0, 0.04),
+    0 4px 8px rgba(0, 0, 0, 0.04), 0 0 1px rgba(0, 0, 0, 0.04);
+  --shadow-l: 0 24px 32px rgba(0, 0, 0, 0.08), 0 20px 24px rgba(0, 0, 0, 0.08),
+    0 12px 16px rgba(0, 0, 0, 0.04), 0 4px 8px rgba(0, 0, 0, 0.04), 0 0 1px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 32px 40px rgba(0, 0, 0, 0.08), 0 24px 32px rgba(0, 0, 0, 0.08),
+    0 20px 24px rgba(0, 0, 0, 0.08), 0 12px 16px rgba(0, 0, 0, 0.04),
+    0 4px 8px rgba(0, 0, 0, 0.04), 0 0 1px rgba(0, 0, 0, 0.04);
+
+  /* ── высоты контролов и фокус ──────────────────────────── */
+  --size-24: 24px;
+  --size-32: 32px;
+  --size-40: 40px;
+  --size-48: 48px;
+  --size-56: 56px;
+  --focus-ring: 0 0 0 2px var(--color-status-info);
+
+  /* ── Поле ввода — лёгкая заливка, скругление только сверху,
+     линия снизу 2px; ховер/фокус — заливка темнее, в фокусе линия тёмная 1px, ошибка — красная.
+     Линия рисуется inset-тенью, чтобы смена толщины не сдвигала вёрстку. ── */
+  --input-bg: var(--color-translucent-100);
+  --input-bg-hover: var(--color-translucent-400);
+  --input-bg-focus: var(--color-translucent-400);
+  --input-line: inset 0 -2px 0 0 var(--color-neutral-500);
+  --input-line-focus: inset 0 -1px 0 0 var(--color-text-primary);
+  --input-line-error: inset 0 -1px 0 0 var(--color-status-negative);
+  --input-radius: var(--radius-4) var(--radius-4) 0 0;
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --duration: 0.2s;
+
+  /* ── шрифт ─────────────────────────────────────────────── */
+  --font-ui: 'Golos Text', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Helvetica, sans-serif;
+
+  /* Report adapter aliases: a single screen source, no business constants. */
+  --pk-bg: var(--color-bg-secondary);
+  --pk-surface: var(--color-bg-primary);
+  --pk-paper: var(--color-bg-secondary);
+  --pk-sunken: var(--color-neutral-200);
+  --pk-border-subtle: var(--color-border-secondary);
+  --pk-border: var(--color-border-primary);
+  --pk-border-strong: var(--color-border-underline);
+  --pk-muted: var(--color-text-secondary);
+  --pk-secondary: var(--color-text-secondary);
+  --pk-text: var(--color-text-primary);
+  --pk-header: var(--color-dark);
+  --pk-primary-soft: var(--color-muted-info);
+  --pk-primary-border: var(--color-muted-alt-info);
+  --pk-primary: var(--color-accent);
+  --pk-primary-hover: var(--color-accent-hover);
+  --pk-primary-strong: var(--color-accent-press);
+  --pk-warning-soft: var(--color-muted-attention);
+  --pk-warning-border: var(--color-muted-alt-attention);
+  --pk-warning: var(--color-status-attention);
+  --pk-warning-text: var(--color-text-attention);
+  --pk-error-soft: var(--color-muted-negative);
+  --pk-error-border: var(--color-muted-alt-negative);
+  --pk-error: var(--color-status-negative);
+  --pk-error-text: var(--color-text-negative-hover);
+  --pk-success-soft: var(--color-muted-positive);
+  --pk-success: var(--color-status-positive);
+  --pk-success-text: var(--color-text-positive);
+  --pk-font: var(--font-ui);
+  --pk-mono: var(--font-ui);
+  --pk-shadow: var(--shadow-xs);
+  --pk-shadow-dialog: var(--shadow-l);
+  --report-content-max: 2200px;
+  --report-page-inset: 32px;
+}
+}

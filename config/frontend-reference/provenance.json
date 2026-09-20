@@ -1,0 +1,53 @@
+{
+  "kit_filename": "Frontend_Reference_Kit_v1(2).zip",
+  "kit_sha256": "f2efa57c925e51d784b7c9f7caf6f5249058a776867e889a28bfb703fc1fe953",
+  "kit_version": "1.0.0",
+  "reference_source": {
+    "source_filename": "reestr-main (1).zip",
+    "sha256": "c8926c9be7fa560c9ebc9429821b40697acd282f425e216253ae60a7dbbad006",
+    "bytes": 632471,
+    "source_identity": "user_attached_archive",
+    "source_snapshot": "reference/reestr/",
+    "source_archive_prefix": "reestr-main/",
+    "snapshot_mutations": "none; archive prefix relocated only",
+    "kit_version": "1.0.0",
+    "latest_repository_version_verified": false,
+    "target_sources_inspected": false
+  },
+  "verification": {
+    "command": "python tools/verify_package.py",
+    "result": "passed",
+    "scope": "Package integrity and static specification only",
+    "source_files_checked": 206,
+    "source_references_checked": 9922,
+    "manifest_files_checked": 375
+  },
+  "baseline_commit": "35e4e6968917b3df5d5de59705caa116620be3bf",
+  "baseline_screenshots": [
+    {
+      "name": "window-1.png",
+      "sha256": "1b3492228f51fd03d7fabc1c0e686e8ac7cd215c44b21d27b9ec5d0d7b4526f3"
+    },
+    {
+      "name": "window-2.png",
+      "sha256": "29f8169f68a9528fc1759e2e8a6fe4d458a87798e13f7232d87eeabfbb3449d4"
+    },
+    {
+      "name": "window-3.png",
+      "sha256": "3684bf0c30e21104a9e8912f072d92fb3f1fe02b28a31b74faa38e32893f61aa"
+    },
+    {
+      "name": "window-4.png",
+      "sha256": "3b372de55cb41dcfad50462e63cdd95e8be78a9eaeb986e06bf417e7d1ea1881"
+    },
+    {
+      "name": "window-head-header.png",
+      "sha256": "f6897b51b3fdd769f65e0098b27a64e298142dd0f2a943f3bcc3fbfc17ff7981"
+    },
+    {
+      "name": "window-settings.png",
+      "sha256": "c6263145d4101ca38bf6eb29c2daaee9ef876dac249fe4c9d3addb40c1eccf8f"
+    }
+  ],
+  "schema_source": "Unmodified schemas/*.schema.json from kit; local $schema paths resolve inside config/frontend-reference."
+}

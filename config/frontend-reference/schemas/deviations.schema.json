@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Documented visual deviations",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "profile_version": {
+      "const": "1.0.0"
+    },
+    "target_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "reference_element": {
+            "type": "string"
+          },
+          "target_decision": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "requirement_source": {
+            "type": "string"
+          },
+          "verification": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "reference_element",
+          "target_decision",
+          "reason",
+          "requirement_source",
+          "verification"
+        ]
+      }
+    }
+  },
+  "required": [
+    "$schema",
+    "profile_version",
+    "target_name",
+    "items"
+  ]
+}

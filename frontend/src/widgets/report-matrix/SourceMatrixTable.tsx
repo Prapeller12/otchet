@@ -1,3 +1,4 @@
+import { UiIcon } from "../../shared/ui/UiIcon";
 import type { ClipboardEventHandler, ReactNode } from "react";
 import type { MatrixCellContract, MatrixRowContract, ReportMatrixContract } from "../../shared/api/application-gateway";
 import type { ReportCellValue } from "../../shared/api/report-cell-contract";
@@ -98,7 +99,7 @@ export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndi
           return <tr key={row.id}>
             {fixed.map((column, index) => column.shared && !span ? null : <th key={column.id} rowSpan={column.shared ? span : undefined} scope={column.shared ? "rowgroup" : "row"} className="sticky-left source-identity-cell" style={{ left: offsets[index] }}>
               {column.id === "photo" ? row.image ? <img className="source-position-image" src={row.image} alt={`Изображение: ${row.left_values.position ?? row.group_label}`} /> : <span aria-label="Изображение не задано">—</span> : row.left_values[column.id] || "—"}
-              {column.id === "party" && onRemoveSupplier && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button supplier-remove" aria-label="Убрать производителя" title="Убрать производителя" disabled={blocked} onClick={() => onRemoveSupplier(row.workspace_id!, row.supplier_id!)}>×</button>}
+              {column.id === "party" && onRemoveSupplier && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button supplier-remove" aria-label="Убрать производителя" title="Убрать производителя" disabled={blocked} onClick={() => onRemoveSupplier(row.workspace_id!, row.supplier_id!)}><UiIcon name="trash" /></button>}
             </th>)}
             {span && <td rowSpan={span} className="source-calculated" data-shared="detail"><ReadonlyValue value={!head && stockWeek ? row.stock_by_week?.[stockWeek] : undefined} cell={stock} /></td>}
             <td className={head ? "source-calculated" : "source-reference-value"}>{head ? (row as MatrixRowContract & { manufactured_total?: string }).manufactured_total || "—" : row.left_values.contract || "—"}</td>

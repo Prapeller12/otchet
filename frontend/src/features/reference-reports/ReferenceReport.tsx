@@ -1,3 +1,4 @@
+import { UiIcon } from "../../shared/ui/UiIcon";
 import { useEffect, useMemo, useState } from "react";
 import type { ApplicationGateway, ReferenceWorkbook, ReferenceSheet, ExportResult } from "../../shared/api/application-gateway";
 import "./reference-report.css";
@@ -85,10 +86,10 @@ export function ReferenceReport({ gateway, organizationId, identity, onBack, onD
   }
   return <section className="reference-report">
     <div className="reference-toolbar"><h2>{book?.file_name ?? "Загрузка отчёта…"}</h2>
-      <button disabled={busy || changed} onClick={onBack}>К рабочей форме</button>
-      <button disabled={busy || changed || !book} onClick={() => void exportBook()}>Экспорт Excel</button>
-      <button disabled={busy || !changed} onClick={() => setDrafts({})}>Отменить изменения</button>
-      <button disabled={busy || !changed} onClick={() => void save()}>Сохранить изменения</button>
+      <button disabled={busy || changed} onClick={onBack}><UiIcon name="arrow-left" />К рабочей форме</button>
+      <button disabled={busy || changed || !book} onClick={() => void exportBook()}><UiIcon name="export" />Экспорт Excel</button>
+      <button disabled={busy || !changed} onClick={() => setDrafts({})}><UiIcon name="undo" />Отменить изменения</button>
+      <button disabled={busy || !changed} onClick={() => void save()}><UiIcon name="save" />Сохранить изменения</button>
     </div>
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {book?.warnings.map(w => <p key={w} className="reference-warning">{w}</p>)}

@@ -1,3 +1,4 @@
+import { UiIcon } from "../../shared/ui/UiIcon";
 import { useEffect, useState, type ReactNode } from "react";
 import type { AccessStatus, ApplicationGateway } from "../../shared/api/application-gateway";
 import "./access.css";
@@ -47,7 +48,7 @@ export function AccessGate({ gateway, children }: { gateway: ApplicationGateway;
         : <label>Пользователь<select value={identity} disabled={busy} onChange={e => { setIdentity(e.target.value); setPin(""); }}>{users.map(user => <option key={user.id} value={user.id}>{user.display_name} · {ROLE_LABELS[user.role]}</option>)}</select></label>}
       <label>{first ? "Код администратора (от 6 символов)" : "Код доступа"}<input type="password" required minLength={6} maxLength={128} autoComplete={first ? "new-password" : "off"} value={pin} disabled={busy} onChange={e => setPin(e.target.value)} /></label>
       {first && <><label>Повторите код<input type="password" required minLength={6} maxLength={128} autoComplete="new-password" value={repeat} disabled={busy} onChange={e => setRepeat(e.target.value)} /></label><p>Запишите код и храните его в надёжном месте отдельно от программы. Без кода доступ к защищённым данным восстановить нельзя.</p></>}
-      <button className="button primary" disabled={busy || pin.length < 6 || (first ? !name.trim() || !repeat : !identity)}>{busy ? "Открываем…" : first ? "Создать администратора и начать" : legacy ? "Включить защиту и открыть" : "Открыть отчёты"}</button>
+      <button className="button primary" disabled={busy || pin.length < 6 || (first ? !name.trim() || !repeat : !identity)}><UiIcon name="key" />{busy ? "Открываем…" : first ? "Создать администратора и начать" : legacy ? "Включить защиту и открыть" : "Открыть отчёты"}</button>
     </>}
     {error && <p role="alert">{error}</p>}
   </form></main>;

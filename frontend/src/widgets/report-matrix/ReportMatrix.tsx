@@ -655,7 +655,7 @@ export function ReportMatrix({
           <div className="title-line">
             {renaming ? <form className="rename-report" onSubmit={(event) => { event.preventDefault(); void renameReport(); }}>
               <input aria-label="Название отчёта" autoFocus maxLength={200} value={titleDraft} onChange={(event) => setTitleDraft(event.target.value)} disabled={presentationBusy} />
-              <button className="button primary" disabled={presentationBusy || !titleDraft.trim()}>Применить название</button>
+              <button className="button primary" disabled={presentationBusy || !titleDraft.trim()}><UiIcon name="check" />Применить название</button>
               <button className="button secondary" type="button" disabled={presentationBusy} onClick={() => setRenaming(false)}>Отмена</button>
             </form> : <h2 id="matrix-title">{matrix.title}</h2>}
             {reportSettings && !renaming && gateway.saveReportPresentation && <button type="button" className="mini-button" aria-label="Переименовать отчёт" disabled={navigationBlocked} onClick={() => { setTitleDraft(matrix.title); setRenaming(true); }}><UiIcon name="edit" /> Переименовать отчёт</button>}
@@ -672,8 +672,8 @@ export function ReportMatrix({
             {saving ? "Сохранение…" : `Сохранить${dirtyKeys.size > 0 ? ` (${dirtyKeys.size})` : ""}`}
             <UiIcon name="save" />
           </button>
-          <button type="button" className="button secondary" disabled={!gateway.exportPdf || navigationBlocked || previewBusy} title={headerDirty || controlsDirty || dirtyKeys.size > 0 ? "Сначала сохраните изменения" : undefined} onClick={() => void printReport()}>{printing ? "Подготовка PDF…" : "Печать / PDF А4"}</button>
-          <button type="button" className="button secondary" aria-expanded={moreOpen} aria-controls="report-more-actions" onClick={() => setMoreOpen(open => !open)}>Ещё</button>
+          <button type="button" className="button secondary" disabled={!gateway.exportPdf || navigationBlocked || previewBusy} title={headerDirty || controlsDirty || dirtyKeys.size > 0 ? "Сначала сохраните изменения" : undefined} onClick={() => void printReport()}><UiIcon name="print" />{printing ? "Подготовка PDF…" : "Печать / PDF А4"}</button>
+          <button type="button" className="button secondary" aria-expanded={moreOpen} aria-controls="report-more-actions" onClick={() => setMoreOpen(open => !open)}>Ещё<UiIcon name={moreOpen ? "chevron-up" : "chevron-down"} /></button>
         </div>
       </div>
       <div id="report-more-actions" className="report-more-actions" hidden={!moreOpen}>
@@ -725,8 +725,8 @@ export function ReportMatrix({
         {matrix.year && <strong>{matrix.year}</strong>}
         {monthLabels.map((month) => <button key={month} type="button" aria-expanded={expandedMonths.has(month)} disabled={editing !== null}
           onClick={() => toggleMonth(month)}>{expandedMonths.has(month) ? "▾" : "▸"} {monthName(month)}</button>)}
-        <button type="button" disabled={editing !== null} onClick={() => setExpandedMonths(new Set(monthLabels))}>Раскрыть все</button>
-        <button type="button" disabled={editing !== null} onClick={() => setExpandedMonths(new Set())}>Свернуть все</button>
+        <button type="button" disabled={editing !== null} onClick={() => setExpandedMonths(new Set(monthLabels))}><UiIcon name="chevron-down" />Раскрыть все</button>
+        <button type="button" disabled={editing !== null} onClick={() => setExpandedMonths(new Set())}><UiIcon name="chevron-up" />Свернуть все</button>
       </nav></details>}
 
       {saveError !== null && (
@@ -816,7 +816,7 @@ export function ReportMatrix({
                     scope="row"
                   >
                     <span>{row.left_values[column.id]}</span>
-                    {adminMode && matrix.subsidiary && column.id === "party" && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button supplier-remove" title="Убрать производителя" aria-label="Убрать производителя" disabled={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} onClick={() => void removeSupplier(row.workspace_id!, row.supplier_id!)}>×</button>}
+                    {adminMode && matrix.subsidiary && column.id === "party" && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button supplier-remove" title="Убрать производителя" aria-label="Убрать производителя" disabled={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} onClick={() => void removeSupplier(row.workspace_id!, row.supplier_id!)}><UiIcon name="trash" /></button>}
                     {(matrix.subsidiary ? column.id === "position" : leftIndex === 0) && row.category && row.category !== "UNSPECIFIED" && (
                       <small className="position-category">{CATEGORY_LABELS[row.category] ?? row.category}</small>
                     )}
@@ -856,7 +856,7 @@ export function ReportMatrix({
             <p>После вставки нажмите «Сохранить», чтобы записать значения.</p>
             <div className="excel-dialog-actions">
               <button type="button" className="button secondary" autoFocus onClick={() => setPastePreview(null)}>Отмена вставки</button>
-              <button type="button" className="button primary" onClick={applyPaste}>Вставить проверенный диапазон</button>
+              <button type="button" className="button primary" onClick={applyPaste}><UiIcon name="paste" />Вставить проверенный диапазон</button>
             </div>
           </section>
         </div>
@@ -904,7 +904,7 @@ export function ReportMatrix({
                 disabled={excelBusy === "commit"}
                 onClick={() => setImportPreview(null)}
               >
-                Закрыть
+                <UiIcon name="close" />Закрыть
               </button>
               <button
                 className="button primary"
@@ -917,7 +917,7 @@ export function ReportMatrix({
                 }
                 onClick={() => void confirmImport()}
               >
-                {excelBusy === "commit" ? "Импорт…" : "Подтвердить импорт"}
+                <UiIcon name="import" />{excelBusy === "commit" ? "Импорт…" : "Подтвердить импорт"}
               </button>
             </div>
           </section>

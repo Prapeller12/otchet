@@ -1,0 +1,335 @@
+{
+  "$schema": "schemas/target-mapping.schema.json",
+  "profile_version": "1.0.0",
+  "status": "verified",
+  "target_name": "otchet",
+  "screens": [
+    {
+      "target_screen": "Ежедневный отчёт",
+      "reference_pattern": "RegistryView + RegistryToolbar + TabStrip",
+      "target_source": "frontend/src/widgets/report-matrix/ReportMatrix.tsx",
+      "notes": "Сохраняются порядок строк, один накопительный итог и дни выбранного месяца."
+    },
+    {
+      "target_screen": "Головная площадка",
+      "reference_pattern": "RegistryView + RegistryGroup + FieldsTable",
+      "target_source": "frontend/src/widgets/report-matrix/SourceMatrixTable.tsx",
+      "notes": "Матрица плана/факта, сводки и компактная шапка изделия сохраняются."
+    },
+    {
+      "target_screen": "Дочерние общества",
+      "reference_pattern": "RegistryView + RegistryGroup + FieldsTable",
+      "target_source": "frontend/src/widgets/report-matrix/SourceMatrixTable.tsx",
+      "notes": "Недели, поставщики, договорные объёмы, расход и отклонения сохраняются."
+    },
+    {
+      "target_screen": "План и сведения",
+      "reference_pattern": "FieldsTable + EditableField",
+      "target_source": "frontend/src/widgets/report-matrix/ProductionHeader.tsx",
+      "notes": "Шифр, название, изготовитель, изображение и коды выпуска; редактирование ответственным."
+    },
+    {
+      "target_screen": "Ответственные лица",
+      "reference_pattern": "FieldsTable + button + ErrorState",
+      "target_source": "frontend/src/features/access/ResponsibleUsers.tsx",
+      "notes": "Единственный администратор, несколько проверяющих/руководителей; повторный код не добавляется."
+    },
+    {
+      "target_screen": "Настроить рабочее поле",
+      "reference_pattern": "ImportModal + FieldsTable",
+      "target_source": "frontend/src/features/workspace-settings/WorkspaceSettingsDialog.tsx",
+      "notes": "Существующие поля структуры, связи и библиотека формул; права администратора сохраняются."
+    },
+    {
+      "target_screen": "Открытие программы",
+      "reference_pattern": "card + EditableField + ErrorState",
+      "target_source": "frontend/src/features/access/AccessGate.tsx",
+      "notes": "Создание администратора, открытие зашифрованной базы и восстановление остаются прежними."
+    },
+    {
+      "target_screen": "Подтверждение действия",
+      "reference_pattern": "ImportModal + EditableField",
+      "target_source": "frontend/src/features/access/AuthorizationDialog.tsx",
+      "notes": "Свежий личный код автоматически при сохранении/печати; отмена сохраняет черновик."
+    },
+    {
+      "target_screen": "Как заполнить",
+      "reference_pattern": "ImportModal + button",
+      "target_source": "frontend/src/features/access/Onboarding.tsx",
+      "notes": "Три шага, пропуск, возвращение из помощи; текстовые подписи обязательны."
+    },
+    {
+      "target_screen": "Импорт Excel и предпросмотр",
+      "reference_pattern": "ImportModal + ImportUploadStep + ImportResultStep",
+      "target_source": "frontend/src/widgets/report-matrix/ReportMatrix.tsx",
+      "notes": "Предварительная проверка, явное подтверждение импорта и существующая идемпотентность."
+    },
+    {
+      "target_screen": "Импортированный отчёт",
+      "reference_pattern": "RegistryView + RegistryToolbar",
+      "target_source": "frontend/src/features/reference-reports/ReferenceReport.tsx",
+      "notes": "Листы, исходные объединения и формулы; существующие ограничения редактирования."
+    },
+    {
+      "target_screen": "Сопоставление полей",
+      "reference_pattern": "FieldsTable + DocFilterBar + ImportResultStep",
+      "target_source": "frontend/src/features/reference-reports/ReferenceTransfer.tsx",
+      "notes": "Ручное сопоставление с рабочей матрицей, причина исключения, проверка перед переносом."
+    }
+  ],
+  "field_mappings": [
+    {
+      "screen": "reports",
+      "target_field": "Ячейки количества",
+      "target_type": "ReportCellValue",
+      "reference_role": "numeric table cell",
+      "target_validation_source": "frontend/src/shared/api/report-cell-contract.ts",
+      "format_rule": "Decimal передаётся строкой; DATA_NOT_PROVIDED и подтверждённый 0 различаются; расчёты backend."
+    },
+    {
+      "screen": "reports",
+      "target_field": "Организация и год",
+      "target_type": "ReportMatrixQuery",
+      "reference_role": "filter select",
+      "target_validation_source": "frontend/src/shared/api/application-gateway.ts",
+      "format_rule": "Идентификаторы организации и report_type сохраняются; год целый."
+    },
+    {
+      "screen": "daily",
+      "target_field": "Месяц отчёта",
+      "target_type": "YYYY-MM",
+      "reference_role": "filter select",
+      "target_validation_source": "frontend/src/widgets/report-matrix/ReportMatrix.tsx",
+      "format_rule": "Дни выбранного месяца и Накопительный итог из backend; без суммы на frontend."
+    },
+    {
+      "screen": "plans",
+      "target_field": "Шифр и наименование изделия",
+      "target_type": "ProductionHeaderPatch",
+      "reference_role": "EditableField",
+      "target_validation_source": "frontend/src/widgets/report-matrix/ProductionHeader.tsx",
+      "format_rule": "Существующий ввод, очистка и валидация сохраняются."
+    },
+    {
+      "screen": "plans",
+      "target_field": "План и факт выпуска",
+      "target_type": "ProductionHeaderPatch / ProductionCode",
+      "reference_role": "numeric field",
+      "target_validation_source": "backend/application/report_header.py",
+      "format_rule": "Пустое значение не заменяется нулём; производственные коды и связи сохраняются."
+    },
+    {
+      "screen": "authorization",
+      "target_field": "Личный код",
+      "target_type": "string (password)",
+      "reference_role": "password field",
+      "target_validation_source": "frontend/src/features/access/AuthorizationDialog.tsx",
+      "format_rule": "Не записывать в localStorage, логи, экспорт или конфигурацию темы."
+    },
+    {
+      "screen": "settings",
+      "target_field": "Позиция/поставщик/входимость",
+      "target_type": "ReportLayoutContract",
+      "reference_role": "FieldsTable",
+      "target_validation_source": "frontend/src/features/workspace-settings/PositionFieldsEditor.tsx",
+      "format_rule": "Существующие типы и проверки; расчётные значения не становятся полями ввода."
+    },
+    {
+      "screen": "transfer",
+      "target_field": "Сопоставление исходного поля",
+      "target_type": "ReferenceWorkbook",
+      "reference_role": "select + validation message",
+      "target_validation_source": "frontend/src/features/reference-reports/ReferenceTransfer.tsx",
+      "format_rule": "Показатель и период выбираются явно; исключение требует причины."
+    }
+  ],
+  "action_mappings": [
+    {
+      "screen": "reports",
+      "action": "Сохранить",
+      "existing_handler": "frontend/src/widgets/report-matrix/ReportMatrix.tsx::saveChanges",
+      "reference_visual": "primary button + save",
+      "verification_case": "frontend/tests/unit/authorized-gateway.test.ts"
+    },
+    {
+      "screen": "reports",
+      "action": "Печать / PDF",
+      "existing_handler": "frontend/src/widgets/report-matrix/ReportMatrix.tsx::printReport",
+      "reference_visual": "secondary button + print",
+      "verification_case": "frontend/tests/unit/monthly-report-actions.test.tsx"
+    },
+    {
+      "screen": "reports",
+      "action": "Ещё",
+      "existing_handler": "frontend/src/widgets/report-matrix/ReportMatrix.tsx::setMoreOpen",
+      "reference_visual": "secondary button + chevron-down/up + aria-expanded",
+      "verification_case": "frontend/tests/unit/entry-workspace.test.tsx"
+    },
+    {
+      "screen": "reports",
+      "action": "Импорт Excel",
+      "existing_handler": "frontend/src/widgets/report-matrix/ReportMatrix.tsx::startImport",
+      "reference_visual": "secondary button + import",
+      "verification_case": "frontend/tests/unit/excel-actions.test.tsx"
+    },
+    {
+      "screen": "reports",
+      "action": "Подтвердить импорт",
+      "existing_handler": "frontend/src/widgets/report-matrix/ReportMatrix.tsx::confirmImport",
+      "reference_visual": "primary button + check",
+      "verification_case": "frontend/tests/unit/excel-actions.test.tsx"
+    },
+    {
+      "screen": "reports",
+      "action": "Экспорт Excel",
+      "existing_handler": "frontend/src/widgets/report-matrix/ReportMatrix.tsx::exportExcel",
+      "reference_visual": "secondary button + export",
+      "verification_case": "frontend/tests/unit/excel-actions.test.tsx"
+    },
+    {
+      "screen": "plans",
+      "action": "Переименовать отчёт",
+      "existing_handler": "frontend/src/widgets/report-matrix/ReportMatrix.tsx::renameReport",
+      "reference_visual": "secondary button + edit",
+      "verification_case": "frontend/tests/unit/production-header.test.tsx"
+    },
+    {
+      "screen": "settings",
+      "action": "Применить настройки",
+      "existing_handler": "frontend/src/features/workspace-settings/WorkspaceSettingsDialog.tsx::saveLayout",
+      "reference_visual": "primary button + check",
+      "verification_case": "frontend/tests/unit/workspace-settings.test.tsx"
+    },
+    {
+      "screen": "admin",
+      "action": "Создать ответственное лицо",
+      "existing_handler": "frontend/src/features/access/ResponsibleUsers.tsx::create",
+      "reference_visual": "primary button + user/add",
+      "verification_case": "frontend/tests/unit/access-workspace.test.tsx"
+    },
+    {
+      "screen": "reference",
+      "action": "Сохранить изменения",
+      "existing_handler": "frontend/src/features/reference-reports/ReferenceReport.tsx::save",
+      "reference_visual": "primary button + save",
+      "verification_case": "frontend/tests/unit/reference-reports.test.tsx"
+    },
+    {
+      "screen": "transfer",
+      "action": "Проверить сопоставление",
+      "existing_handler": "frontend/src/features/reference-reports/ReferenceTransfer.tsx::check",
+      "reference_visual": "primary button + check",
+      "verification_case": "frontend/tests/unit/reference-transfer.test.tsx"
+    },
+    {
+      "screen": "onboarding",
+      "action": "Назад / Далее / Понятно",
+      "existing_handler": "frontend/src/features/access/Onboarding.tsx",
+      "reference_visual": "text + direction arrow/check; Пропустить без обязательной пиктограммы",
+      "verification_case": "frontend/tests/unit/access-workspace.test.tsx"
+    }
+  ],
+  "status_mappings": [
+    {
+      "target_status": "DATA_NOT_PROVIDED",
+      "label": "Данные не представлены",
+      "background_token": "--pk-surface",
+      "foreground_token": "--pk-secondary",
+      "source_of_status": "frontend/src/widgets/report-matrix/ReportCellView.tsx"
+    },
+    {
+      "target_status": "zero",
+      "label": "Подтверждённый ноль",
+      "background_token": "--pk-surface",
+      "foreground_token": "--pk-text",
+      "source_of_status": "frontend/src/widgets/report-matrix/cell-value.ts"
+    },
+    {
+      "target_status": "calculated",
+      "label": "Рассчитано",
+      "background_token": "--pk-sunken",
+      "foreground_token": "--pk-secondary",
+      "source_of_status": "frontend/src/widgets/report-matrix/ReportCellView.tsx"
+    },
+    {
+      "target_status": "locked",
+      "label": "Редактирование запрещено",
+      "background_token": "--pk-sunken",
+      "foreground_token": "--pk-secondary",
+      "source_of_status": "frontend/src/widgets/report-matrix/ReportCellView.tsx"
+    },
+    {
+      "target_status": "dirty",
+      "label": "Не сохранено",
+      "background_token": "--pk-warning-soft",
+      "foreground_token": "--pk-warning-text",
+      "source_of_status": "frontend/src/widgets/report-matrix/ReportCellView.tsx"
+    },
+    {
+      "target_status": "error",
+      "label": "Ошибка",
+      "background_token": "--pk-error-soft",
+      "foreground_token": "--pk-error-text",
+      "source_of_status": "frontend/src/widgets/report-matrix/ReportCellView.tsx"
+    },
+    {
+      "target_status": "VERIFIED",
+      "label": "Подтверждено",
+      "background_token": "--pk-success-soft",
+      "foreground_token": "--pk-success-text",
+      "source_of_status": "frontend/src/widgets/report-matrix/MonthlyReportActions.tsx"
+    },
+    {
+      "target_status": "STALE",
+      "label": "Данные изменились",
+      "background_token": "--pk-warning-soft",
+      "foreground_token": "--pk-warning-text",
+      "source_of_status": "frontend/src/widgets/report-matrix/MonthlyReportActions.tsx"
+    },
+    {
+      "target_status": "INVALID",
+      "label": "Подпись недействительна",
+      "background_token": "--pk-error-soft",
+      "foreground_token": "--pk-error-text",
+      "source_of_status": "frontend/src/widgets/report-matrix/MonthlyReportActions.tsx"
+    }
+  ],
+  "protected_business_rules": [
+    {
+      "id": "matrix",
+      "description": "Матричный ввод, порядок строк и горизонтальная ось времени сохраняются.",
+      "source": "AGENTS.md §4.2, §5",
+      "baseline_case": "frontend/tests/unit/source-matrix-table.test.tsx"
+    },
+    {
+      "id": "precision",
+      "description": "Пусто и подтверждённый ноль различаются; Decimal вычисляется backend.",
+      "source": "frontend/src/shared/api/report-cell-contract.ts",
+      "baseline_case": "backend/tests/integration/test_report_cell_schema.py"
+    },
+    {
+      "id": "authorization",
+      "description": "Существующие права ролей, один администратор, автоматическое подтверждение сохранения/печати.",
+      "source": "backend/api/secure_desktop_bridge.py",
+      "baseline_case": "backend/tests/integration/test_automatic_confirmation_dev27.py"
+    },
+    {
+      "id": "crypto",
+      "description": "Коды и закрытые ключи не сохраняются в UI/теме; SQLCipher и подписи не меняются.",
+      "source": "backend/infrastructure/access_vault.py",
+      "baseline_case": "backend/tests/integration/test_encrypted_storage.py"
+    },
+    {
+      "id": "io",
+      "description": "Проверка, предпросмотр, подтверждение импорта и значения экспорта сохраняются.",
+      "source": "backend/repositories/excel_imports.py",
+      "baseline_case": "backend/tests/integration/test_excel_roundtrip.py"
+    },
+    {
+      "id": "print",
+      "description": "Печатные шрифты, размеры и генераторы PDF сохраняются побайтно.",
+      "source": "Текущее прямое указание пользователя; config/frontend-reference/print-baseline.json",
+      "baseline_case": "backend/tests/integration/test_monthly_publication.py"
+    }
+  ]
+}

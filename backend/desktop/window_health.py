@@ -13,7 +13,9 @@ _READY = """(() => {
   const header = document.querySelector('.app-header');
   return !!(window.pywebview && window.pywebview.api && table &&
     table.querySelector('tbody tr') && table.getBoundingClientRect().width > 500 &&
-    header && getComputedStyle(header).backgroundColor === 'rgb(17, 26, 34)' &&
+    header && getComputedStyle(document.body).fontFamily.includes('Golos Text') &&
+    getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim()
+      === '#e5402b' &&
     document.querySelector('.status-database')?.textContent.includes('Данные на этом компьютере'));
 })()"""
 
@@ -25,6 +27,145 @@ def _wait_for_script(window: Any, expression: str, message: str) -> None:
             error = window.evaluate_js("document.querySelector('[role=alert]')?.textContent || ''")
             raise RuntimeError(f"{message}: {error}" if error else message)
         time.sleep(0.1)
+
+
+def _settle_window_paint(window: Any) -> None:
+    """Wait for fonts, two render frames and the native compositor before capture."""
+    window.evaluate_js("""(() => {
+      window.__reportCapturePaintReady = false;
+      document.fonts.ready.then(() => requestAnimationFrame(() =>
+        requestAnimationFrame(() => { window.__reportCapturePaintReady = true; })));
+      return true;
+    })()""")
+    _wait_for_script(
+        window,
+        "window.__reportCapturePaintReady === true",
+        "Шрифты или отрисовка окна не завершились",
+    )
+    # ImageGrab captures the OS compositor, which can lag WebView's DOM/rAF.
+    time.sleep(0.25)
+
+
+def _capture_window(window: Any, paths: PortablePaths, filename: str) -> None:
+    _settle_window_paint(window)
+    importlib.import_module("PIL.ImageGrab").grab().save(paths.temp / filename)
+
+
+def _resize_test_window(window: Any, *, compact: bool) -> None:
+    window.resize(1024 if compact else 1440, 768 if compact else 900)
+    width_range = "innerWidth >= 980 && innerWidth <= 1024" if compact else "innerWidth > 1200"
+    _wait_for_script(window, width_range, "Не изменился размер проверочного окна")
+    _settle_window_paint(window)
+
+
+def _check_reference_theme(window: Any, *, controls: bool = True) -> None:
+    _wait_for_script(
+        window,
+        """(() => {
+          const body = getComputedStyle(document.body);
+          const faces = [...document.fonts].filter(face => face.family.replace(/["']/g, '')
+            === 'Golos Text');
+          return body.fontFamily.includes('Golos Text') &&
+            body.backgroundColor === 'rgb(243, 244, 247)' &&
+            faces.some(face => face.status === 'loaded') &&
+            document.fonts.check('14px "Golos Text"', 'Отчёт 0123456789');
+        })()""",
+        "Локальный Golos Text или светлая тема образца не загрузились",
+    )
+    if controls and not window.evaluate_js("""(() => {
+      const buttons = [...document.querySelectorAll('.matrix-toolbar button')];
+      return buttons.length === 3 && buttons.every(button => {
+        const style = getComputedStyle(button);
+        return button.getBoundingClientRect().height >= 40 &&
+          parseFloat(style.borderTopLeftRadius) === 10 &&
+          style.fontFamily.includes('Golos Text');
+      });
+    })()"""):
+        raise RuntimeError("Основные кнопки не соответствуют размерам и шрифту образца")
+
+
+def _check_action_icons(window: Any) -> None:
+    """Check useful, painted SVGs and accessible names, not just icon imports."""
+    if not window.evaluate_js("""(() => {
+      const buttons = [...document.querySelectorAll('.matrix-toolbar button')];
+      const names = ['save', 'print', 'chevron-down'];
+      return buttons.length === 3 && buttons.every((button, index) => {
+        const icon = button.querySelector('svg[data-icon="' + names[index] + '"]');
+        const box = icon?.getBoundingClientRect();
+        return icon && box.width >= 12 && box.height >= 12 &&
+          getComputedStyle(icon).visibility === 'visible' &&
+          getComputedStyle(icon).display !== 'none' &&
+          icon.getAttribute('aria-hidden') === 'true' &&
+          icon.getAttribute('focusable') === 'false' && !!icon.querySelector('path');
+      });
+    })()"""):
+        raise RuntimeError("У сохранения, печати или «Ещё» отсутствует видимая SVG-иконка")
+    _click_button(window, "Ещё")
+    _wait_for_script(
+        window,
+        """!!document.querySelector('.matrix-toolbar button[aria-expanded=true] '
+          + 'svg[data-icon="chevron-up"]') &&
+          document.querySelector('#report-more-actions')?.hidden === false""",
+        "Иконка «Ещё» не показывает раскрытое состояние",
+    )
+    _click_button(window, "Ещё")
+    _wait_for_script(
+        window,
+        """!!document.querySelector('.matrix-toolbar button[aria-expanded=false] '
+          + 'svg[data-icon="chevron-down"]') &&
+          document.querySelector('#report-more-actions')?.hidden === true""",
+        "Меню «Ещё» не закрывается со сменой иконки",
+    )
+    _check_icon_accessibility(window)
+
+
+def _check_icon_accessibility(window: Any) -> None:
+    if not window.evaluate_js("""(() => {
+      const buttons = [...document.querySelectorAll('button')]
+        .filter(button => button.getClientRects().length && button.querySelector('svg'));
+      const previousFocus = document.activeElement;
+      const accessible = buttons.every(button => {
+        const text = button.textContent.trim();
+        const label = button.getAttribute('aria-label') || text ||
+          (button.getAttribute('aria-labelledby') || '').split(/\\s+/)
+            .map(id => document.getElementById(id)?.textContent || '').join('').trim();
+        if (!text && !button.disabled) {
+          if (button.tabIndex < 0) return false;
+          button.focus({preventScroll: true});
+          if (document.activeElement !== button) return false;
+        }
+        return !!label && [...button.querySelectorAll('svg')].every(icon =>
+          icon.getAttribute('aria-hidden') === 'true' &&
+          icon.getAttribute('focusable') === 'false');
+      });
+      previousFocus?.focus({preventScroll: true});
+      return accessible;
+    })()"""):
+        raise RuntimeError("У кнопки с иконкой отсутствует доступное имя или SVG мешает фокусу")
+
+
+def _capture_report_viewports(window: Any, paths: PortablePaths, tab: int) -> None:
+    _check_reference_theme(window)
+    _check_action_icons(window)
+    _capture_window(window, paths, f"window-{tab + 1}.png")
+    _resize_test_window(window, compact=True)
+    _check_reference_theme(window)
+    if not window.evaluate_js("""document.documentElement.scrollWidth <= innerWidth + 1 &&
+        [...document.querySelectorAll('.matrix-toolbar button')].every(button => {
+          const box = button.getBoundingClientRect();
+          return box.left >= 0 && box.right <= innerWidth && box.bottom <= innerHeight;
+        })"""):
+        raise RuntimeError("При ширине 1024 кнопки отчёта или страница выходят за окно")
+    if tab == 1 and not window.evaluate_js("""(() => {
+      const header = document.querySelector('.readonly-production-header');
+      const fields = header ? [...header.children] : [];
+      return !!header && header.getBoundingClientRect().height <= 60 && fields.length === 3 &&
+        fields.every(node => Math.abs(node.getBoundingClientRect().top -
+          fields[0].getBoundingClientRect().top) <= 10);
+    })()"""):
+        raise RuntimeError("Шапка головной площадки не помещается в одну строку при ширине 1024")
+    _capture_window(window, paths, f"window-{tab + 1}-compact.png")
+    _resize_test_window(window, compact=False)
 
 
 def _click_button(window: Any, label: str) -> None:
@@ -60,9 +201,18 @@ def _fill_form_input(window: Any, scope: str, label: str, value: str) -> None:
     _wait_for_script(window, expression, f"Недоступно поле «{label}» ({scope})")
 
 
-def _unlock_test_window(window: Any) -> None:
+def _unlock_test_window(window: Any, paths: PortablePaths) -> None:
     """Use the same locked-screen path that a person uses after restarting."""
     _wait_for_script(window, "!!document.querySelector('.access-page')", "Не открыт вход")
+    _wait_for_script(
+        window,
+        "!!document.querySelector('.access-page input[type=password]')",
+        "Нет поля кода доступа",
+    )
+    _resize_test_window(window, compact=True)
+    _check_reference_theme(window, controls=False)
+    _capture_window(window, paths, "window-access-compact.png")
+    _resize_test_window(window, compact=False)
     _fill_form_input(window, ".access-page", "Код доступа", "window-test-pin")
     _click_button(window, "Открыть отчёты")
     _wait_for_script(
@@ -93,10 +243,25 @@ def _confirm_write(
     reject_wrong_code: bool = False,
     action: str = "Подтвердить",
     project_manager: bool = False,
+    capture_paths: PortablePaths | None = None,
 ) -> None:
     _wait_for_script(
         window, "!!document.querySelector('.authorization-dialog')", "Нет запроса кода записи"
     )
+    if capture_paths is not None:
+        _wait_for_script(
+            window,
+            "document.querySelector('.authorization-dialog select')?.options.length > 0",
+            "В подтверждении не загрузились ответственные лица",
+        )
+        if not window.evaluate_js("""(() => {
+          const box = document.querySelector('.authorization-dialog').getBoundingClientRect();
+          return box.top >= 0 && box.left >= 0 && box.bottom <= innerHeight &&
+            box.right <= innerWidth;
+        })()"""):
+            raise RuntimeError("Окно подтверждения не помещается при ширине 1024")
+        _check_icon_accessibility(window)
+        _capture_window(window, capture_paths, "window-confirmation-compact.png")
     if project_manager:
         _wait_for_script(
             window,
@@ -165,8 +330,12 @@ def _exercise_print(window: Any, paths: PortablePaths) -> None:
     if window.evaluate_js("""[...document.querySelectorAll('button')]
         .some(button => button.textContent.trim() === 'Подтвердить данные')"""):
         raise RuntimeError("Осталась отдельная кнопка подтверждения данных")
+    _resize_test_window(window, compact=True)
     _click_button(window, "Печать / PDF А4")
-    _confirm_write(window, action="Подтвердить и печатать", reject_wrong_code=True)
+    _confirm_write(
+        window, action="Подтвердить и печатать", reject_wrong_code=True, capture_paths=paths
+    )
+    _resize_test_window(window, compact=False)
     _wait_for_script(
         window,
         "document.querySelector('.monthly-report-actions [role=status]')?.textContent"
@@ -286,7 +455,7 @@ def monitor_window(
         if not window.events.loaded.wait(45):
             raise RuntimeError("WebView2 не загрузил страницу за 45 секунд")
         if ui_self_test:
-            _unlock_test_window(window)
+            _unlock_test_window(window, paths)
         for tab in range(3 if ui_self_test else 1):
             if tab:
                 window.evaluate_js(f"document.querySelectorAll('.report-tab')[{tab}].click()")
@@ -317,9 +486,7 @@ def monitor_window(
                 _exercise_matrix_paste(window)
                 _exercise_daily_columns_and_navigation(window)
             if ui_self_test and tab == 1:
-                importlib.import_module("PIL.ImageGrab").grab().save(
-                    paths.temp / "window-head-header.png"
-                )
+                _capture_window(window, paths, "window-head-header.png")
                 if not window.evaluate_js("""(() => {
                     const header = document.querySelector('.readonly-production-header');
                     const fields = header ? [...header.children] : [];
@@ -392,9 +559,11 @@ def monitor_window(
                             rows[0].getBoundingClientRect().bottom;
                 })()"""):
                     raise RuntimeError("Производители в настройках не выровнены")
-                importlib.import_module("PIL.ImageGrab").grab().save(
-                    paths.temp / "window-settings.png"
-                )
+                _check_icon_accessibility(window)
+                _capture_window(window, paths, "window-settings.png")
+                _resize_test_window(window, compact=True)
+                _capture_window(window, paths, "window-settings-compact.png")
+                _resize_test_window(window, compact=False)
                 window.evaluate_js("document.querySelector('.settings-header button').click()")
                 _click_button(window, "К заполнению отчётов")
                 _wait_for_script(
@@ -403,8 +572,7 @@ def monitor_window(
                     "Не восстановлен экран заполнения",
                 )
             if ui_self_test:
-                grab = importlib.import_module("PIL.ImageGrab")
-                grab.grab().save(paths.temp / f"window-{tab + 1}.png")
+                _capture_report_viewports(window, paths, tab)
         if ui_self_test:
             window.evaluate_js("""(() => {
               const select = document.querySelector('.reference-selector select');
@@ -422,8 +590,8 @@ def monitor_window(
                 "document.querySelector('.reference-grid').textContent.includes('675')"
             ):
                 raise RuntimeError("Не отображается результат формулы импортированного отчёта")
-            grab = importlib.import_module("PIL.ImageGrab")
-            grab.grab().save(paths.temp / "window-4.png")
+            _check_icon_accessibility(window)
+            _capture_window(window, paths, "window-4.png")
             window.destroy()
     except Exception as exc:
         if ui_self_test:

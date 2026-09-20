@@ -37,7 +37,7 @@ describe("configurable position fields", () => {
     expect(screen.getAllByLabelText("Формула")[3]).toHaveValue(presets.presets[0]!.indicators[1]!.formula);
     await user.type(screen.getByLabelText("Норма входимости"), "3");
     await user.type(screen.getByLabelText("Начальный остаток"), "71");
-    await user.click(screen.getByRole("button", { name: "+ Показатель" }));
+    await user.click(screen.getByRole("button", { name: "Показатель" }));
     expect(screen.getAllByLabelText("Название показателя")).toHaveLength(5);
     await user.click(screen.getAllByRole("button", { name: "Показатель выше" })[4]!);
     expect(screen.getAllByLabelText("Название показателя")[3]).toHaveValue("");

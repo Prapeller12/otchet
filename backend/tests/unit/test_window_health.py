@@ -100,3 +100,64 @@ def test_failed_native_self_test_captures_screen_before_close(
     importer.assert_called_once_with("PIL.ImageGrab")
     capture.grab.return_value.save.assert_called_once_with(tmp_path / "temp/window-error.png")
     window.destroy.assert_called_once()
+
+
+def test_screen_capture_waits_for_font_paint_and_native_compositor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    window = Mock()
+    evaluations = iter((True, False, True))
+
+    def evaluate(expression: str) -> bool:
+        events.append("evaluate")
+        return next(evaluations)
+
+    window.evaluate_js.side_effect = evaluate
+    monkeypatch.setattr(
+        "backend.desktop.window_health.time.sleep", lambda delay: events.append(f"sleep:{delay}")
+    )
+    image = Mock()
+
+    def capture() -> Mock:
+        events.append("capture")
+        return image
+
+    image.grab.side_effect = capture
+    monkeypatch.setattr("backend.desktop.window_health.importlib.import_module", lambda name: image)
+    window_health._capture_window(window, PortablePaths(tmp_path), "window-test.png")
+    script = window.evaluate_js.call_args_list[0].args[0]
+    assert "document.fonts.ready" in script
+    assert script.count("requestAnimationFrame") == 2
+    assert events == ["evaluate", "evaluate", "sleep:0.1", "evaluate", "sleep:0.25", "capture"]
+    image.save.assert_called_once_with(tmp_path / "temp/window-test.png")
+
+
+def test_screen_capture_does_not_save_stale_frame_if_paint_never_finishes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = Mock()
+    window.evaluate_js.side_effect = [True, False, ""]
+    clock = iter((0, 16))
+    monkeypatch.setattr("backend.desktop.window_health.time.monotonic", lambda: next(clock))
+    importer = Mock()
+    monkeypatch.setattr("backend.desktop.window_health.importlib.import_module", importer)
+    with pytest.raises(RuntimeError, match="отрисовка"):
+        window_health._capture_window(window, PortablePaths(tmp_path), "window-test.png")
+    importer.assert_not_called()
+
+
+def test_icon_check_rejects_missing_or_invisible_print_icon() -> None:
+    window = Mock()
+    window.evaluate_js.return_value = False
+    with pytest.raises(RuntimeError, match="видимая SVG"):
+        window_health._check_action_icons(window)
+
+
+def test_icon_accessibility_rejects_unnamed_button() -> None:
+    window = Mock()
+    window.evaluate_js.return_value = False
+    with pytest.raises(RuntimeError, match="доступное имя"):
+        window_health._check_icon_accessibility(window)

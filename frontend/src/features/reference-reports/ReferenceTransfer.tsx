@@ -1,3 +1,4 @@
+import { UiIcon } from "../../shared/ui/UiIcon";
 import { useMemo, useState } from "react";
 import type { ApplicationGateway, ImportPreview, ReferenceWorkbook, ReferenceSheet, ReportMatrixContract } from "../../shared/api/application-gateway";
 import "./reference-report.css";
@@ -105,9 +106,9 @@ export function ReferenceTransfer({ book, matrix, gateway, onReady }: {
         </tr>;
       })}
     </tbody></table></div>
-    <div className="reference-toolbar"><button disabled={busy || page === 0} onClick={() => setPage(p => p - 1)}>Предыдущие поля</button>
+    <div className="reference-toolbar"><button disabled={busy || page === 0} onClick={() => setPage(p => p - 1)}><UiIcon name="arrow-left" />Предыдущие поля</button>
       <span>Поля {visible.length ? page * 30 + 1 : 0}–{Math.min((page + 1) * 30, visible.length)} из {visible.length}</span>
-      <button disabled={busy || (page + 1) * 30 >= visible.length} onClick={() => setPage(p => p + 1)}>Следующие поля</button>
+      <button disabled={busy || (page + 1) * 30 >= visible.length} onClick={() => setPage(p => p + 1)}><UiIcon name="arrow-right" />Следующие поля</button>
       <button disabled={busy || book.report_type !== matrix.report_type} onClick={() => void check()}>{busy ? "Проверка…" : "Проверить сопоставление"}</button></div>
   </section>;
 }

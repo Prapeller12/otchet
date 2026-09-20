@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Target to reference mapping",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "profile_version": {
+      "const": "1.0.0"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "verified"
+      ]
+    },
+    "target_name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "screens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "target_screen": {
+            "type": "string"
+          },
+          "reference_pattern": {
+            "type": "string"
+          },
+          "target_source": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_screen",
+          "reference_pattern",
+          "target_source",
+          "notes"
+        ]
+      }
+    },
+    "field_mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "screen": {
+            "type": "string"
+          },
+          "target_field": {
+            "type": "string"
+          },
+          "target_type": {
+            "type": "string"
+          },
+          "reference_role": {
+            "type": "string"
+          },
+          "target_validation_source": {
+            "type": "string"
+          },
+          "format_rule": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "screen",
+          "target_field",
+          "target_type",
+          "reference_role",
+          "target_validation_source",
+          "format_rule"
+        ]
+      }
+    },
+    "action_mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "screen": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "existing_handler": {
+            "type": "string"
+          },
+          "reference_visual": {
+            "type": "string"
+          },
+          "verification_case": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "screen",
+          "action",
+          "existing_handler",
+          "reference_visual",
+          "verification_case"
+        ]
+      }
+    },
+    "status_mappings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "target_status": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "background_token": {
+            "type": "string"
+          },
+          "foreground_token": {
+            "type": "string"
+          },
+          "source_of_status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_status",
+          "label",
+          "background_token",
+          "foreground_token",
+          "source_of_status"
+        ]
+      }
+    },
+    "protected_business_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "baseline_case": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "description",
+          "source",
+          "baseline_case"
+        ]
+      }
+    }
+  },
+  "required": [
+    "$schema",
+    "profile_version",
+    "status",
+    "target_name",
+    "screens",
+    "field_mappings",
+    "action_mappings",
+    "status_mappings",
+    "protected_business_rules"
+  ]
+}
