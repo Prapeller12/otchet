@@ -32,8 +32,10 @@ def _click_button(window: Any, label: str) -> None:
 
     expression = f"""(() => {{
       const button = [...document.querySelectorAll('button')]
-        .find(node => node.textContent.trim() === {json.dumps(label)});
-      if (!button || button.disabled) return false;
+        .find(node => node.textContent.trim() === {json.dumps(label)} &&
+          !node.disabled && node.getClientRects().length > 0 &&
+          getComputedStyle(node).visibility === 'visible');
+      if (!button) return false;
       button.click(); return true;
     }})()"""
     _wait_for_script(window, expression, f"Недоступна кнопка «{label}»")
@@ -42,15 +44,20 @@ def _click_button(window: Any, label: str) -> None:
 def _fill_form_input(window: Any, scope: str, label: str, value: str) -> None:
     import json
 
-    window.evaluate_js(f"""(() => {{
+    # The access page first renders its shell, then waits for the native status.
+    # Readiness and input happen in one evaluation so a rerender cannot race them.
+    expression = f"""(() => {{
       const label = [...document.querySelectorAll({json.dumps(scope + " label")})]
         .find(node => node.textContent.trim() === {json.dumps(label)});
       const input = label?.querySelector('input');
-      if (!input || input.disabled) throw new Error('Requested input is not available');
+      if (!input || input.disabled || input.readOnly || !input.getClientRects().length ||
+          getComputedStyle(input).visibility !== 'visible') return false;
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')
         .set.call(input, {json.dumps(value)});
       input.dispatchEvent(new Event('input', {{bubbles: true}}));
-    }})()""")
+      return true;
+    }})()"""
+    _wait_for_script(window, expression, f"Недоступно поле «{label}» ({scope})")
 
 
 def _fill_signing_input(window: Any, label: str, value: str) -> None:
@@ -330,6 +337,13 @@ def monitor_window(
             grab.grab().save(paths.temp / "window-4.png")
             window.destroy()
     except Exception as exc:
+        if ui_self_test:
+            try:
+                importlib.import_module("PIL.ImageGrab").grab().save(
+                    paths.temp / "window-error.png"
+                )
+            except Exception:
+                pass  # Preserve the original failure if capture is unavailable.
         failures.append(
             f"Ошибка загрузки окна: {exc}. Распакуйте полный ZIP в новую локальную папку. "
             "В комплекте должен быть каталог runtime/webview2."
