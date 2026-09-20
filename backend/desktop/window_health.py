@@ -153,7 +153,11 @@ def _exercise_responsible_person(window: Any) -> None:
     if window.evaluate_js("!!document.querySelector('.authorization-dialog')"):
         raise RuntimeError("Создание ответственного повторно запрашивает код администратора")
     _click_button(window, "К заполнению отчётов")
-    _wait_for_script(window, _READY, "Не восстановлен экран заполнения")
+    _wait_for_script(
+        window,
+        _READY + " && !document.querySelector('.admin-navigation')",
+        "Не восстановлен экран заполнения",
+    )
 
 
 def _exercise_print(window: Any, paths: PortablePaths) -> None:
@@ -198,6 +202,7 @@ def _exercise_daily_columns_and_navigation(window: Any) -> None:
         "Переключатель отчётов уходит за верхнюю границу при прокрутке",
     )
     window.evaluate_js("window.scrollTo(0, 0)")
+    _wait_for_script(window, "window.scrollY === 0", "Не восстановлено начало отчёта")
 
 
 def _exercise_project_header(window: Any) -> None:
@@ -392,7 +397,11 @@ def monitor_window(
                 )
                 window.evaluate_js("document.querySelector('.settings-header button').click()")
                 _click_button(window, "К заполнению отчётов")
-                _wait_for_script(window, _READY, "Не восстановлен экран заполнения")
+                _wait_for_script(
+                    window,
+                    _READY + " && !document.querySelector('.admin-navigation')",
+                    "Не восстановлен экран заполнения",
+                )
             if ui_self_test:
                 grab = importlib.import_module("PIL.ImageGrab")
                 grab.grab().save(paths.temp / f"window-{tab + 1}.png")

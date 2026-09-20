@@ -750,7 +750,7 @@ export function ReportMatrix({
         <table
           onPaste={previewPaste}
           className={matrix.subsidiary ? "report-matrix subsidiary-matrix" : "report-matrix"}
-          style={{ width: leftColumns.reduce((sum, column) => sum + column.width, 0) + visibleMatrix.time_columns.reduce((sum, column) => sum + column.width, 0) + dailySummaryColumns.length * 100, minWidth: 0 }}
+          style={{ width: leftColumns.reduce((sum, column) => sum + column.width, 0) + visibleMatrix.time_columns.reduce((sum, column) => sum + column.width, 0) + dailySummaryColumns.length * 140, minWidth: 0 }}
           aria-label={matrix.title}
           aria-rowcount={matrix.rows.length + 2}
           aria-colcount={matrix.left_columns.length + visibleMatrix.time_columns.length + dailySummaryColumns.length}
@@ -759,7 +759,7 @@ export function ReportMatrix({
             {leftColumns.map((column) => (
               <col key={column.id} style={{ width: column.width }} />
             ))}
-            {dailySummaryColumns.map(column => <col key={column.id} style={{ width: 100 }} />)}
+            {dailySummaryColumns.map(column => <col key={column.id} style={{ width: 140 }} />)}
             {visibleMatrix.time_columns.map((column) => (
               <col key={column.id} style={{ width: column.width }} />
             ))}
