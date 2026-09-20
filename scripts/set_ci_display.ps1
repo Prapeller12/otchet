@@ -39,7 +39,14 @@ namespace ReportingCi {
     public static class Display {
         [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        public static extern bool EnumDisplaySettingsW(string device, int mode, ref DisplayMode value);
+        private static extern bool EnumDisplaySettingsW(string device, int mode, ref DisplayMode value);
+
+        // Keep the null device pointer inside C#: PowerShell converts its $null
+        // to String.Empty when binding a string parameter, which is not the
+        // documented NULL default-display selector.
+        public static bool ReadMode(int mode, ref DisplayMode value) {
+            return EnumDisplaySettingsW(null, mode, ref value);
+        }
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
         public static extern int ChangeDisplaySettingsW(ref DisplayMode value, uint flags);
@@ -57,7 +64,10 @@ namespace ReportingCi {
         public static DisplayMode NewMode() {
             var value = new DisplayMode();
             int size = Marshal.SizeOf(typeof(DisplayMode));
-            if (size != 220) throw new InvalidOperationException("Invalid DEVMODEW layout: " + size);
+            if (size != 220 || Marshal.OffsetOf(typeof(DisplayMode), "dmPelsWidth").ToInt32() != 172 ||
+                Marshal.OffsetOf(typeof(DisplayMode), "dmPelsHeight").ToInt32() != 176) {
+                throw new InvalidOperationException("Invalid DEVMODEW layout: " + size);
+            }
             value.dmSize = (ushort)size;
             value.dmDriverExtra = 0;
             return value;
@@ -73,8 +83,10 @@ if ($dpi -ne 96) {
 }
 
 $current = [ReportingCi.Display]::NewMode()
-if (-not [ReportingCi.Display]::EnumDisplaySettingsW($null, -1, [ref]$current)) {
-    throw 'Cannot read the current physical display mode.'
+if (-not [ReportingCi.Display]::ReadMode(-1, [ref]$current)) {
+    $screenWidth = [ReportingCi.Display]::GetSystemMetrics(0)
+    $screenHeight = [ReportingCi.Display]::GetSystemMetrics(1)
+    throw "Cannot read current physical display mode; GetSystemMetrics reports ${screenWidth}x${screenHeight}, DPI $dpi."
 }
 Write-Host "CI display before: $($current.dmPelsWidth)x$($current.dmPelsHeight), DPI $dpi."
 
@@ -83,7 +95,7 @@ if ($current.dmPelsWidth -ne $Width -or $current.dmPelsHeight -ne $Height) {
     $available = [System.Collections.Generic.HashSet[string]]::new()
     for ($index = 0; ; $index++) {
         $mode = [ReportingCi.Display]::NewMode()
-        if (-not [ReportingCi.Display]::EnumDisplaySettingsW($null, $index, [ref]$mode)) { break }
+        if (-not [ReportingCi.Display]::ReadMode($index, [ref]$mode)) { break }
         [void]$available.Add("$($mode.dmPelsWidth)x$($mode.dmPelsHeight)")
         if ($mode.dmPelsWidth -eq $Width -and $mode.dmPelsHeight -eq $Height -and $mode.dmBitsPerPel -ge 32) {
             if ($null -eq $candidate -or $mode.dmDisplayFrequency -eq $current.dmDisplayFrequency) {
@@ -106,7 +118,7 @@ if ($current.dmPelsWidth -ne $Width -or $current.dmPelsHeight -ne $Height) {
 $deadline = [DateTime]::UtcNow.AddSeconds(10)
 do {
     $actual = [ReportingCi.Display]::NewMode()
-    $read = [ReportingCi.Display]::EnumDisplaySettingsW($null, -1, [ref]$actual)
+    $read = [ReportingCi.Display]::ReadMode(-1, [ref]$actual)
     $screenWidth = [ReportingCi.Display]::GetSystemMetrics(0) # SM_CXSCREEN
     $screenHeight = [ReportingCi.Display]::GetSystemMetrics(1) # SM_CYSCREEN
     if ($read -and $actual.dmPelsWidth -eq $Width -and $actual.dmPelsHeight -eq $Height -and
