@@ -30,7 +30,9 @@ export function App() {
 
 function Workspace() {
   const gateway = useApplicationGateway();
-  const [workspaceMode, setWorkspaceMode] = useState<"entry" | "admin">("entry");
+  const [workspaceMode, setWorkspaceMode] = useState<"entry" | "report-settings" | "admin">("entry");
+  const [modeError, setModeError] = useState("");
+  const [leavingAdministration, setLeavingAdministration] = useState(false);
   const [adminSection, setAdminSection] = useState<"reports" | "users">("reports");
   const [onboardingOpen, setOnboardingOpen] = useState(() => {
     try { return gateway.mode === "pywebview" && localStorage.getItem("reporting-onboarding-v1") !== "done"; } catch { return gateway.mode === "pywebview"; }
@@ -56,7 +58,18 @@ function Workspace() {
     setOnboardingOpen(false);
     try { localStorage.setItem("reporting-onboarding-v1", "done"); } catch { /* Optional local preference. */ }
   }
+  async function leaveEditing() {
+    setModeError("");
+    setLeavingAdministration(true);
+    try {
+      if (workspaceMode === "admin") await gateway.endAdministration?.();
+      setWorkspaceMode("entry"); setAdminSection("reports");
+    } catch (reason) {
+      setModeError(reason instanceof Error ? reason.message : "Не удалось закрыть раздел администратора. Повторите выход.");
+    } finally { setLeavingAdministration(false); }
+  }
   async function openAdministration() {
+    setModeError("");
     if (gateway.mode === "demo") { setWorkspaceMode("admin"); return; }
     try {
       await requestAuthorization({ title: "Открыть раздел администратора", adminOnly: true }, async authorization => {
@@ -138,13 +151,15 @@ function Workspace() {
     <div className="app-shell">
       <header className="app-header">
         <div className="app-brand">
-          <p className="app-eyebrow">{workspaceMode === "admin" ? "Раздел администратора" : "Заполнение отчётов"}</p>
+          <p className="app-eyebrow">{workspaceMode === "admin" ? "Раздел администратора" : workspaceMode === "report-settings" ? "План и сведения" : "Заполнение отчётов"}</p>
           <h1>Производственная отчётность</h1>
         </div>
         <div className="workspace-mode-actions">
           <button type="button" disabled={navigationBlocked} onClick={() => setOnboardingOpen(true)}>Как заполнить</button>
-          {workspaceMode === "entry" ? <button type="button" disabled={navigationBlocked} onClick={() => void openAdministration()}>Администратор</button>
-            : <button type="button" disabled={navigationBlocked} onClick={() => { setWorkspaceMode("entry"); setAdminSection("reports"); }}>К заполнению отчётов</button>}
+          {workspaceMode === "entry" ? <>
+            <button type="button" disabled={navigationBlocked || !!referenceId} onClick={() => setWorkspaceMode("report-settings")}>План и сведения</button>
+            <button type="button" disabled={navigationBlocked} onClick={() => void openAdministration()}>Администратор</button>
+          </> : <button type="button" disabled={navigationBlocked || leavingAdministration} onClick={() => void leaveEditing()}>К заполнению отчётов</button>}
         </div>
       </header>
       {workspaceMode === "admin" && <div className="admin-navigation" aria-label="Разделы администратора">
@@ -190,6 +205,7 @@ function Workspace() {
         </select>
       </label>}
       {matrixBlocked && <p className="workspace-edit-notice" role="status">Завершите ввод и сохраните изменения перед переходом в другую форму, организацию или настройки.</p>}
+      {modeError && <p className="workspace-edit-notice" role="alert">{modeError}</p>}
       <main>
         {workspaceMode === "admin" && adminSection === "users" ? <ResponsibleUsers gateway={gateway} /> : loadError !== null ? (
           <section className="load-state load-state-error" role="alert">{loadError}</section>

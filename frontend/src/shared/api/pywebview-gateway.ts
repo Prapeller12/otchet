@@ -32,6 +32,7 @@ type PyWebViewApi = {
   unlock_access(request: WriteAuthorization): Promise<BridgeEnvelope>;
   enroll_access(request: WriteAuthorization): Promise<BridgeEnvelope>;
   authenticate_access(request: WriteAuthorization): Promise<BridgeEnvelope>;
+  end_administration(request: Record<string, never>): Promise<BridgeEnvelope>;
   reference_report(request: ReferenceRequest): Promise<BridgeEnvelope>;
   export_pdf(request: MonthlyReportQuery): Promise<BridgeEnvelope>;
   get_report_verification(request: MonthlyReportQuery): Promise<BridgeEnvelope>;
@@ -85,9 +86,10 @@ export class PyWebViewGateway implements ApplicationGateway {
   async unlockAccess(request: WriteAuthorization): Promise<AccessStatus> { return unwrap(await this.#api.unlock_access(request)) as AccessStatus; }
   async enrollAccess(request: WriteAuthorization): Promise<AccessUser> { return await this.#write("Разрешить вход пользователю", true, request, value => this.#api.enroll_access(value)) as AccessUser; }
   async authenticateAccess(request: WriteAuthorization): Promise<AccessUser> { return unwrap(await this.#api.authenticate_access(request)) as AccessUser; }
-  async #write<T>(title: string, adminOnly: boolean, request: T, execute: (request: T & { authorization: WriteAuthorization }) => Promise<BridgeEnvelope>): Promise<unknown> {
+  async endAdministration(): Promise<void> { unwrap(await this.#api.end_administration({})); }
+  async #write<T>(title: string, adminOnly: boolean, request: T, execute: (request: T & { authorization: WriteAuthorization }) => Promise<BridgeEnvelope>, confirmLabel?: string): Promise<unknown> {
     if (!this.#authorizationHandler) throw new Error("Подтверждение записи недоступно. Вернитесь к рабочему экрану.");
-    return this.#authorizationHandler({ title, adminOnly }, async authorization => unwrap(await execute({ ...request, authorization })));
+    return this.#authorizationHandler({ title, adminOnly, ...(confirmLabel ? { confirmLabel } : {}) }, async authorization => unwrap(await execute({ ...request, authorization })));
   }
 
   constructor(api: PyWebViewApi) {
@@ -122,7 +124,7 @@ export class PyWebViewGateway implements ApplicationGateway {
   }
 
   async exportPdf(request: MonthlyReportQuery): Promise<ExportResult> {
-    return unwrap(await this.#api.export_pdf(request)) as ExportResult;
+    return await this.#write("Проверить отчёт перед печатью", false, request, value => this.#api.export_pdf(value), "Подтвердить и печатать") as ExportResult;
   }
   async getReportVerification(request: MonthlyReportQuery): Promise<ReportVerification> {
     return unwrap(await this.#api.get_report_verification(request)) as ReportVerification;
@@ -131,7 +133,7 @@ export class PyWebViewGateway implements ApplicationGateway {
     return unwrap(await this.#api.list_report_signers({})) as ReportSigner[];
   }
   async createReportSigner(request: CreateReportSignerRequest): Promise<ReportSigner> {
-    return await this.#write("Создать ключ ответственного лица", true, request, value => this.#api.create_report_signer(value)) as ReportSigner;
+    return unwrap(await this.#api.create_report_signer(request)) as ReportSigner;
   }
   async verifyReport(request: VerifyReportRequest): Promise<ReportVerification> {
     return unwrap(await this.#api.verify_report({ ...request, authorization: { signer_id: request.signer_id, pin: request.pin } } as VerifyReportRequest)) as ReportVerification;
@@ -144,15 +146,13 @@ export class PyWebViewGateway implements ApplicationGateway {
   }
 
   async saveReportPresentation(request: SaveReportPresentationRequest): Promise<ReportPresentation> {
-    const adminOnly = Object.keys(request).some(key => ["title", "header", "plans", "production_codes", "widths"].includes(key));
-    return await this.#write("Сохранить сведения отчёта", adminOnly, request, value => this.#api.save_report_presentation(value)) as ReportPresentation;
+    return await this.#write("Проверить и сохранить сведения отчёта", false, request, value => this.#api.save_report_presentation(value), "Сохранить и подтвердить") as ReportPresentation;
   }
 
   async saveReportCells(
     request: SaveReportCellsRequest,
   ): Promise<SaveReportCellsResponse> {
-    const adminOnly = request.changes.some(change => (change.coordinate.metric_code ?? "").split("_").includes("PLAN"));
-    return parseSaveResponse(await this.#write("Сохранить изменения отчёта", adminOnly, request, value => this.#api.save_report_cells(value)));
+    return parseSaveResponse(await this.#write("Проверить и сохранить изменения отчёта", false, request, value => this.#api.save_report_cells(value), "Сохранить и подтвердить"));
   }
 
   async validateImport(request: ImportRequest): Promise<ImportPreview> {

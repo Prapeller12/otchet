@@ -51,3 +51,30 @@ def test_error_does_not_publish_an_incomplete_total() -> None:
     assert result["rows"][0]["through_month"][0] == "3"
     assert result["rows"][0]["through_month"][1] == ""
     assert result["components"] == []  # An incomplete position is not a receipt/usage trio.
+
+
+def test_cumulative_selected_month_excludes_future_and_preserves_missing_and_zero() -> None:
+    rows = [
+        row("WRK_DAILY_RECEIVED", ["0.1", "0.2", "90000000000000000000.7"]),
+        row("WRK_DAILY_USED", [None, "0", "100"]),
+        row("WRK_DAILY_BALANCE", [None, "0", "8"]),
+    ]
+    summary = summarize_daily_rows(rows, 2026, [])
+    received, used, balance = summary["rows"]
+    # February includes January and February, with exact decimal addition. Later
+    # submitted months must not leak into a previously selected reporting period.
+    assert received["through_month"][1] == "0.3"
+    assert received["through_month"][11] == "90000000000000000001.0"
+    assert used["through_month"][0] == ""
+    assert used["through_month"][1] == "0"
+    assert balance["through_month"][0] == ""
+    assert balance["through_month"][1] == "0"
+    assert balance["through_month"][11] == "8"
+
+
+def test_cumulative_balance_is_period_end_value_not_sum_or_last_nonblank() -> None:
+    summary = summarize_daily_rows([row("WRK_DAILY_BALANCE", ["5", "3", None])], 2026, [])
+    assert summary["rows"][0]["through_month"][1] == "3"
+    # A missing calculated year-end value is not silently replaced by an older
+    # balance. This is consistent with the monthly publication snapshot.
+    assert summary["rows"][0]["through_month"][11] == ""

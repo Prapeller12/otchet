@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Literal
 
-Permission = Literal["admin", "reviewer"]
+Permission = Literal["admin", "responsible"]
 READ_COMMANDS = frozenset(
     {
         "health",
@@ -16,7 +16,6 @@ READ_COMMANDS = frozenset(
         "list_report_signers",
         "list_organizations",
         "export_report",
-        "export_pdf",
     }
 )
 ADMIN_COMMANDS = frozenset(
@@ -52,26 +51,8 @@ def classify_permission(method: str, payload: object) -> Permission | None:
     if method in ADMIN_COMMANDS:
         return "admin"
     request = payload if isinstance(payload, Mapping) else {}
-    if method == "save_report_cells":
-        changes = request.get("changes", [])
-        if (
-            isinstance(changes, Sequence)
-            and not isinstance(changes, (str, bytes))
-            and any(
-                isinstance(change, Mapping) and is_plan_coordinate(change.get("coordinate"))
-                for change in changes
-            )
-        ):
-            return "admin"
-        return "reviewer"
-    if method == "save_report_presentation":
-        return (
-            "admin"
-            if request.keys() & {"plans", "header", "title", "production_codes"}
-            else "reviewer"
-        )
-    if method == "verify_report":
-        return "reviewer"
+    if method in {"save_report_cells", "save_report_presentation", "verify_report", "export_pdf"}:
+        return "responsible"
     if method == "reference_report":
         action = request.get("action")
         if action in {"list", "get", "export"}:

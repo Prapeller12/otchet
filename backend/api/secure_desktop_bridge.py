@@ -8,9 +8,17 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 
+from backend.api.report_confirmation import (
+    confirm_print_report,
+    confirm_saved_report,
+    prepare_save_confirmation,
+)
 from backend.api.working_reference_bridge import WorkingReferenceApplicationBridge
 from backend.application.access_policy import classify_permission
+from backend.application.report_cells import ReportCellError
+from backend.desktop.database_bootstrap import backup_and_migrate
 from backend.infrastructure.access_vault import AccessVault
+from backend.infrastructure.database.migrator import MigrationError, connect_sqlite
 from backend.infrastructure.database.sqlite_report_signers import (
     SqliteReportSignersRepository,
     load_signer,
@@ -62,6 +70,7 @@ class SecureDesktopBridge:
         self._vault = AccessVault(self._database, backups)
         self._application: WorkingReferenceApplicationBridge | None = None
         self._current_user: dict[str, Any] | None = None
+        self._administrator: dict[str, Any] | None = None
         self._mutex = threading.RLock()
         self._dialogs: dict[str, Any] = {}
 
@@ -107,7 +116,14 @@ class SecureDesktopBridge:
         with self._mutex:
             try:
                 return _success(self._status())
-            except (OSError, ValueError, KeyError, sqlite3.Error) as error:
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                sqlite3.Error,
+                MigrationError,
+                ReportCellError,
+            ) as error:
                 return _failure(error)
 
     def _open(self, *, initialize: bool) -> None:
@@ -184,17 +200,45 @@ class SecureDesktopBridge:
                 self._vault.unlock(signer_id, pin)
                 repo = SqliteReportSignersRepository(str(self._database))
                 profile = repo.authenticate(signer_id, pin)
+                self._migrate_after_unlock()
                 self._open(initialize=False)
                 self._current_user = profile
                 return _success(self._status())
-            except (OSError, ValueError, KeyError, sqlite3.Error) as error:
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                sqlite3.Error,
+                MigrationError,
+                ReportCellError,
+            ) as error:
                 self._application = None
                 self._current_user = None
                 self._vault.lock()
                 return _failure(error)
 
+    def _migrate_after_unlock(self) -> None:
+        """Upgrade only after a valid vault code, preserving ordinary read-only reopen."""
+        migrations = Path(self._kwargs["migrations_directory"])
+        available = tuple(path.name.split("_", 1)[0] for path in sorted(migrations.glob("*.sql")))
+        with closing(connect_sqlite(self._database)) as connection:
+            applied = tuple(
+                row[0]
+                for row in connection.execute(
+                    "SELECT version FROM schema_migrations ORDER BY version"
+                )
+            )
+        if applied != available:
+            backup_and_migrate(
+                self._database,
+                migrations,
+                Path(self._kwargs["backups_directory"] or self._database.parent.parent / "backups"),
+                self._kwargs["application_version"],
+            )
+
     def authenticate_access(self, payload: object) -> dict[str, Any]:
         with self._mutex:
+            self._administrator = None
             try:
                 if self._application is None:
                     raise ValueError("Сначала войдите в программу")
@@ -202,14 +246,29 @@ class SecureDesktopBridge:
                 profile = self._application._signers.authenticate(
                     _text(request, "signer_id"), _text(request, "pin")
                 )
+                if profile["role"] == "admin":
+                    self._administrator = profile
                 return _success(profile)
-            except (OSError, ValueError, KeyError, sqlite3.Error) as error:
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                sqlite3.Error,
+                MigrationError,
+                ReportCellError,
+            ) as error:
                 return _failure(error)
+
+    def end_administration(self, payload: object = None) -> dict[str, Any]:
+        with self._mutex:
+            self._administrator = None
+            return _success({"ended": True})
 
     def _lock(self) -> None:
         with self._mutex:
             self._application = None
             self._current_user = None
+            self._administrator = None
             self._vault.lock()
 
     def enroll_access(self, payload: object) -> dict[str, Any]:
@@ -231,7 +290,14 @@ class SecureDesktopBridge:
                 repo.record_access(admin, "enroll_access", "authorized")
                 self._vault.enroll(profile, request["pin"])
                 return _success(profile)
-            except (OSError, ValueError, KeyError, sqlite3.Error) as error:
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                sqlite3.Error,
+                MigrationError,
+                ReportCellError,
+            ) as error:
                 return _failure(error)
 
     def _call(self, method: str, payload: object = None) -> dict[str, Any]:
@@ -243,6 +309,7 @@ class SecureDesktopBridge:
                 authorization = request.pop("authorization", None)
                 permission = classify_permission(method, request)
                 approver = None
+                auth: dict[str, Any] = {}
                 if permission is not None:
                     auth = _request(authorization)
                     approver = self._application._signers.authorize(
@@ -251,26 +318,34 @@ class SecureDesktopBridge:
                         admin_only=permission == "admin",
                     )
                     self._application._signers.record_access(approver, method, "authorized")
-                    if method == "create_report_signer":
-                        request["admin_id"] = auth["signer_id"]
-                        request["admin_pin"] = auth["pin"]
+                context = None
+                print_verification = None
+                if method in {"save_report_cells", "save_report_presentation"}:
+                    request, context = prepare_save_confirmation(self._application, method, request)
+                if method == "export_pdf":
+                    print_verification = confirm_print_report(self._application, request, auth)
                 function = getattr(self._application, method)
                 result: dict[str, Any] = (
                     function() if method in {"health", "bootstrap"} else function(request)
                 )
-                if (
-                    result.get("ok")
-                    and method == "create_report_signer"
-                    and result["data"]["role"] in {"admin", "reviewer"}
-                ):
-                    self._vault.enroll(result["data"], _text(request, "pin"))
+                if method in {"save_report_cells", "save_report_presentation"}:
+                    result = confirm_saved_report(self._application, result, context, auth)
+                if result.get("ok") and print_verification is not None:
+                    result["data"]["verification"] = print_verification
                 if result.get("ok") and method == "list_report_signers":
                     enrolled = {p["id"] for p in self._vault.users()}
                     result["data"] = [
                         {**p, "can_unlock": p["id"] in enrolled} for p in result["data"]
                     ]
                 return result
-            except (OSError, ValueError, KeyError, sqlite3.Error) as error:
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                sqlite3.Error,
+                MigrationError,
+                ReportCellError,
+            ) as error:
                 return _failure(error)
 
     def _configure_excel_dialogs(self, **dialogs: Any) -> None:
@@ -328,7 +403,33 @@ class SecureDesktopBridge:
         return self._call("list_report_signers", payload)
 
     def create_report_signer(self, payload: object) -> dict[str, Any]:
-        return self._call("create_report_signer", payload)
+        with self._mutex:
+            try:
+                if self._application is None or self._administrator is None:
+                    raise ValueError("Сначала откройте раздел администратора своим кодом")
+                request = _request(payload)
+                if request.keys() - {"display_name", "pin", "role"}:
+                    raise ValueError("Некорректный запрос создания ответственного лица")
+                repo = self._application._signers
+                repo.record_access(self._administrator, "create_report_signer", "authorized")
+                profile = repo.create_in_session(
+                    _text(request, "display_name"),
+                    _text(request, "pin"),
+                    self._administrator["id"],
+                    role=_text(request, "role"),
+                )
+                if profile["role"] in {"admin", "reviewer"}:
+                    self._vault.enroll(profile, request["pin"])
+                return _success(profile)
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                sqlite3.Error,
+                MigrationError,
+                ReportCellError,
+            ) as error:
+                return _failure(error)
 
     def get_report_verification(self, payload: object) -> dict[str, Any]:
         return self._call("get_report_verification", payload)

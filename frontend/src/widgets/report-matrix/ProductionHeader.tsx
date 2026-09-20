@@ -19,7 +19,8 @@ export type ProductionHeaderPatch = {
 const EMPTY_HEADER: ReportHeaderFields = { product_designation: "", product_name: "", factory_name: "", product_image: "" };
 
 export type ProductionHeaderProps = {
-  workspaceMode?: "entry" | "admin";
+  workspaceMode?: "entry" | "report-settings" | "admin";
+  onSaveReady?(save: (() => Promise<void>) | null): void;
   presentation: ProductionHeaderPresentation; year: number; headSite: boolean; blocked: boolean;
   onSave(patch: ProductionHeaderPatch): Promise<void>;
   onDirtyChange(dirty: boolean): void; onBusyChange?(busy: boolean): void;
@@ -31,11 +32,11 @@ export function ProductionHeader(props: ProductionHeaderProps) {
     <span>Название изделия: <strong>{props.presentation.header?.product_name || "Не задано"}</strong></span>
     <span>Шифр: <strong>{props.presentation.header?.product_designation || "Не задан"}</strong></span>
   </section>;
-  if (props.workspaceMode === "admin") return <DetailedProductionHeader {...props} />;
+  if (props.workspaceMode === "admin" || props.workspaceMode === "report-settings") return <DetailedProductionHeader {...props} />;
   return props.headSite ? <CompactProductionHeader {...props} /> : <DetailedProductionHeader {...props} />;
 }
 
-function DetailedProductionHeader({ presentation, year, headSite, blocked, onSave, onDirtyChange, onBusyChange }: ProductionHeaderProps) {
+function DetailedProductionHeader({ presentation, year, headSite, blocked, onSave, onDirtyChange, onBusyChange, onSaveReady }: ProductionHeaderProps) {
   const baseline = JSON.stringify({ header: { ...EMPTY_HEADER, ...presentation.header }, codes: presentation.production_codes ?? [] });
   const [draft, setDraft] = useState<{header: ReportHeaderFields; codes: ProductionCode[]}>(() => JSON.parse(baseline));
   const [busy, setBusy] = useState(false);
@@ -71,6 +72,8 @@ function DetailedProductionHeader({ presentation, year, headSite, blocked, onSav
     reader.readAsDataURL(file);
   }
   async function save() {
+    if (!dirty || disabled) return;
+    if (draft.codes.some(code => !code.label.trim())) { setError("Введите название каждого кода выпуска или уберите пустой код."); return; }
     setBusy(true); onBusyChange?.(true); setError("");
     try {
       await onSave({ header: draft.header, ...(headSite ? { production_codes: draft.codes, confirm_production_totals: confirmed } : {}) });
@@ -78,6 +81,7 @@ function DetailedProductionHeader({ presentation, year, headSite, blocked, onSav
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); onBusyChange?.(false); }
   }
+  useEffect(() => { onSaveReady?.(save); return () => onSaveReady?.(null); });
   return <section className="production-header" aria-label="Шапка отчёта и выпуск изделий">
     <fieldset disabled={disabled}>
       <legend>Изделие и изготовитель</legend>
@@ -112,9 +116,9 @@ function DetailedProductionHeader({ presentation, year, headSite, blocked, onSav
         {dirty && draft.codes.length > 0 && <label className="production-confirmation"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />При отличии от прежнего общего выпуска использовать суммы по кодам. Прежние общие значения сохранятся в базе.</label>}
       </>}
       <div className="compact-actions">
-        <button type="button" className="button primary" disabled={!dirty || draft.codes.some(code => !code.label.trim())} onClick={() => void save()}>Сохранить шапку и выпуск</button>
+        {!onSaveReady && <button type="button" className="button primary" disabled={!dirty || draft.codes.some(code => !code.label.trim())} onClick={() => void save()}>Сохранить шапку и выпуск</button>}
         <button type="button" className="button secondary" disabled={!dirty} onClick={() => { setDraft(JSON.parse(baseline)); setConfirmed(false); setError(""); }}>Отменить изменения шапки</button>
-        <span role="status">{busy ? "Сохранение…" : dirty ? "Есть несохранённые изменения шапки" : "Шапка сохранена"}</span>
+        <span role="status">{busy ? "Сохранение…" : dirty ? "Есть изменения. Нажмите «Сохранить» вверху." : "Шапка сохранена"}</span>
       </div>
     </fieldset>
     {error && <p role="alert">{error}</p>}

@@ -33,31 +33,33 @@ function show(gateway: ApplicationGateway, initial = calendar()) {
   return () => latest;
 }
 
-it("expands months independently, skips hidden dates and keeps unsaved values", async () => {
+it("shows only the selected daily month and keeps drafts while switching months", async () => {
   const latest = show(new DemoGateway());
   const user = userEvent.setup();
-  const january = screen.getByRole("button", { name: "▾ январь", expanded: true });
-  expect(january).toBeVisible();
+  const month = screen.getByRole("combobox", { name: "Месяц отчёта" });
+  expect(month).toHaveValue("2026-01");
+  expect(screen.queryByText("Показать несколько месяцев")).toBeNull();
   expect(screen.getAllByRole("cell")).toHaveLength(3);
   await user.dblClick(screen.getAllByRole("button", { name: /доступна для ввода/ })[0]!);
   await user.type(screen.getByRole("textbox"), "20{Enter}");
-  await user.click(screen.getByRole("button", { name: "▸ февраль" }));
-  expect(screen.getAllByRole("cell")).toHaveLength(6);
-  await user.click(january);
+  await user.selectOptions(month, "2026-02");
   expect(screen.getAllByRole("cell")).toHaveLength(3);
+  expect(screen.queryByRole("button", { name: "значение 20, доступна для ввода" })).toBeNull();
   expect(latest().rows[0]!.cells[0]!.value).toEqual({ kind: "QUANTITY", quantity: "20" });
-  await user.click(screen.getByRole("button", { name: "▸ январь" }));
+  await user.selectOptions(month, "2026-01");
   expect(screen.getByRole("button", { name: "значение 20, доступна для ввода" })).toBeVisible();
   expect(screen.getByRole("button", { name: "Сохранить (1)" })).toBeEnabled();
-  await user.click(screen.getByRole("button", { name: "Свернуть все" }));
-  expect(screen.queryAllByRole("cell")).toHaveLength(0);
-  await user.click(screen.getByRole("button", { name: "Раскрыть все" }));
-  expect(screen.getAllByRole("cell")).toHaveLength(6);
+  expect(screen.getAllByRole("cell")).toHaveLength(3);
+  expect(screen.queryByRole("button", { name: "Раскрыть все" })).toBeNull();
 });
 
 it("renames the heading, saves resize gestures and removes the technical banner", async () => {
-  const save = vi.fn(async (request: SaveReportPresentationRequest) => request);
-  const gateway = Object.assign(new DemoGateway(), { saveReportPresentation: save });
+  let stored = calendar();
+  const save = vi.fn(async (request: SaveReportPresentationRequest) => {
+    if (request.title) stored = { ...stored, title: request.title, matrix_revision: "renamed-revision" };
+    return request;
+  });
+  const gateway = Object.assign(new DemoGateway(), { saveReportPresentation: save, getReportMatrix: vi.fn(async () => stored) });
   show(gateway);
   const user = userEvent.setup();
   expect(screen.queryByRole("note")).toBeNull();

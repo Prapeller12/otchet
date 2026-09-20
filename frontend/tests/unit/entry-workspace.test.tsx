@@ -35,7 +35,7 @@ it("keeps configuration and extra tools out of the main entry screen and resizes
   expect(screen.queryByRole("button", { name: "Переименовать отчёт" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Убрать производителя" })).toBeNull();
   expect(screen.queryByRole("button", { name: "Импорт Excel" })).toBeNull();
-  expect(within(view.container.querySelector(".matrix-toolbar") as HTMLElement).getAllByRole("button").map(button => button.textContent)).toEqual(["Сохранить", "Ещё"]);
+  expect(within(view.container.querySelector(".matrix-toolbar") as HTMLElement).getAllByRole("button").map(button => button.textContent)).toEqual(["Сохранить", "Печать / PDF А4", "Ещё"]);
   fireEvent.keyDown(screen.getByRole("separator", { name: "Ширина: Наименование" }), { key: "ArrowRight" });
   expect(save).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Ещё" }));
@@ -55,7 +55,7 @@ it("saves the monthly fact through the main Save action, never includes the admi
   expect(screen.queryByRole("button", { name: "Сохранить план и выпуск" })).toBeNull();
   await user.type(screen.getByLabelText("Выпущено, шт."), "0");
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
-  await waitFor(() => expect(save).toHaveBeenCalledWith({ report_type: initial.report_type, organization_id: initial.organization_id, expected_revision: initial.matrix_revision, actuals: { "2026-09": "0" } }));
+  await waitFor(() => expect(save).toHaveBeenCalledWith({ report_type: initial.report_type, organization_id: initial.organization_id, expected_revision: initial.matrix_revision, confirmation: { year: 2026, month: 9 }, actuals: { "2026-09": "0" } }));
 });
 
 it("keeps plan rows visible while refusing entry edits and pastes into plans", async () => {
@@ -71,7 +71,7 @@ it("keeps plan rows visible while refusing entry edits and pastes into plans", a
   show(initial, gateway);
   const cell = screen.getAllByRole("button", { name: "подтверждённый ноль, заблокированная ячейка" })[0]!;
   const user = userEvent.setup();
-  expect(cell).toHaveAttribute("title", "План задаёт администратор");
+  expect(cell).toHaveAttribute("title", "План можно изменить в разделе «План и сведения»");
   await user.dblClick(cell);
   expect(screen.queryByLabelText(/Редактирование:/)).toBeNull();
   fireEvent.paste(cell, { clipboardData: { getData: () => "222" } });
@@ -112,7 +112,80 @@ it("lets entry workers save code facts without sending administrator-owned label
   await user.type(code, "0");
   await user.click(screen.getByRole("button", { name: "Сохранить" }));
   await waitFor(() => expect(save).toHaveBeenCalledWith({
-    report_type: "HEAD_SITE", organization_id: initial.organization_id, expected_revision: initial.matrix_revision,
+    report_type: "HEAD_SITE", organization_id: initial.organization_id, expected_revision: initial.matrix_revision, confirmation: { year: 2026, month: 9 },
     production_code_actuals: { A: { "2026-09": "0" }, B: { "2026-09": "2" } }, confirm_production_totals: false,
   }));
+});
+
+it("prints next to Save using the selected period and blocks printing unsaved facts", async () => {
+  const initial = sourceMatrix();
+  const pdf = vi.fn(async () => ({ cancelled: true }));
+  const gateway = Object.assign(new DemoGateway(), { exportPdf: pdf });
+  const view = show(initial, gateway);
+  const user = userEvent.setup();
+  const toolbar = within(view.container.querySelector(".matrix-toolbar") as HTMLElement);
+  const print = toolbar.getByRole("button", { name: "Печать / PDF А4" });
+  expect(toolbar.getAllByRole("button").map(button => button.textContent)).toEqual(["Сохранить", "Печать / PDF А4", "Ещё"]);
+  expect(screen.queryByRole("button", { name: "Подтвердить данные" })).toBeNull();
+  await user.click(print);
+  expect(pdf).toHaveBeenCalledWith(expect.objectContaining({ report_type: initial.report_type, organization_id: initial.organization_id, year: 2026, month: 9, expected_revision: initial.matrix_revision }));
+  await user.type(screen.getByLabelText("Выпущено, шт."), "5");
+  expect(print).toBeDisabled();
+  expect(pdf).toHaveBeenCalledTimes(1);
+});
+
+it("lets responsible persons edit report metadata and plans without structural administration", async () => {
+  const initial = sourceMatrix();
+  initial.rows[0]!.workspace_id = "detail-a";
+  initial.rows[0]!.supplier_id = "supplier-a";
+  const save = vi.fn(async () => ({ ...initial.presentation, header: { ...initial.presentation!.header!, product_name: "Новое изделие" } }));
+  const gateway = Object.assign(new DemoGateway(), { saveReportPresentation: save,
+    getReportMatrix: vi.fn(async () => ({ ...initial, presentation: { ...initial.presentation, header: { ...initial.presentation!.header!, product_name: "Новое изделие" } } })) });
+  function Workspace() {
+    const [matrix, setMatrix] = useState(initial);
+    return <ReportMatrix workspaceMode="report-settings" gateway={gateway} matrix={matrix} onChange={setMatrix} onStatusChange={() => {}} />;
+  }
+  render(<Workspace />);
+  const user = userEvent.setup();
+  expect(screen.getByLabelText("План выпуска, шт.")).not.toHaveAttribute("readonly");
+  expect(screen.getByRole("button", { name: "Переименовать отчёт" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Убрать производителя" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Сохранить шапку и выпуск" })).toBeNull();
+  await user.type(screen.getByLabelText("Наименование изделия"), "Новое изделие");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+  await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ header: expect.objectContaining({ product_name: "Новое изделие" }), confirmation: { year: 2026, month: 9 } })));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled());
+});
+
+it("clears a successfully saved fact draft but reports a failed signature explicitly", async () => {
+  const initial = sourceMatrix();
+  const save = vi.fn(async () => ({ actuals: { "2026-09": "12" }, verification_error: { code: "SIGNATURE_FAILED", message: "Проверьте расчётные значения" } }));
+  const gateway = Object.assign(new DemoGateway(), { saveReportPresentation: save, getReportMatrix: vi.fn(async () => ({ ...initial, presentation: { ...initial.presentation, actuals: { "2026-09": "12" } } })) });
+  show(initial, gateway);
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Выпущено, шт."), "12");
+  await user.click(screen.getByRole("button", { name: "Сохранить" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Сохранено, но не подтверждено: Проверьте расчётные значения");
+  await waitFor(() => expect(screen.getByRole("button", { name: "Сохранить" })).toBeDisabled());
+  expect(screen.getByLabelText("Выпущено, шт.")).toHaveValue("12");
+});
+
+it("reloads backend cumulative totals after saving even without formula rows", async () => {
+  const initial = createDemoMatrix("DAILY_MOVEMENT");
+  initial.year = 2026;
+  initial.time_columns.forEach(column => { column.group_label = "2026-09"; });
+  initial.daily_summary = { year: 2026, periods: [], rows: initial.rows.map(row => ({ row_id: row.id, annual: "", monthly: [], through_month: Array(12).fill("7") })), components: [] };
+  initial.rows.forEach(row => row.cells.forEach(cell => { delete cell.formula; }));
+  const updated = { ...initial, daily_summary: { ...initial.daily_summary, rows: initial.daily_summary.rows.map(row => ({ ...row, through_month: Array(12).fill("23") })) } };
+  const read = vi.fn(async () => updated);
+  const gateway = Object.assign(new DemoGateway(), { getReportMatrix: read, saveReportCells: vi.fn(async () => ({ matrix_revision: "r2", cells: [] })) });
+  show(initial, gateway);
+  const user = userEvent.setup();
+  const first = screen.getAllByRole("button", { name: /доступна для ввода/ })[0]!;
+  await user.dblClick(first);
+  await user.clear(screen.getByRole("textbox"));
+  await user.type(screen.getByRole("textbox"), "16{Enter}");
+  await user.click(screen.getByRole("button", { name: "Сохранить (1)" }));
+  await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+  expect(document.querySelector(".daily-summary-value")).toHaveTextContent("23");
 });

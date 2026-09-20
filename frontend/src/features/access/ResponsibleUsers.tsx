@@ -47,7 +47,7 @@ export function ResponsibleUsers({ gateway }: { gateway: ApplicationGateway }) {
     <form className="access-card" onSubmit={e => { e.preventDefault(); void create(); }}><h3>Добавить ответственное лицо</h3>
       <label>Имя ответственного<input required maxLength={120} disabled={busy} value={name} onChange={e => setName(e.target.value)} /></label>
       <label>Роль<select value={role} disabled={busy} onChange={e => setRole(e.target.value as AccessRole)}><option value="reviewer">Проверяющий</option><option value="project_manager">Руководитель проекта</option></select></label>
-      <p>{role === "reviewer" ? "Проверяет и сохраняет фактические данные, подтверждает отчёты своим кодом." : "Заполняет отчёт после открытия программы ответственным лицом. Сохранение подтверждает проверяющий или администратор."}</p>
+      <p>{role === "reviewer" ? "Редактирует планы, сведения и значения отчёта. Сохраняет и подтверждает данные своим кодом." : "Заполняет отчёт после открытия программы ответственным лицом. Редактирует планы и сведения, сохраняет и подтверждает данные своим кодом."}</p>
       <label>Личный код (от 6 символов)<input type="password" autoComplete="new-password" minLength={6} maxLength={128} disabled={busy} value={pin} onChange={e => setPin(e.target.value)} /></label>
       <label>Повтор личного кода<input type="password" autoComplete="new-password" minLength={6} maxLength={128} disabled={busy} value={repeat} onChange={e => setRepeat(e.target.value)} /></label>
       <button className="button primary" disabled={busy || !gateway.createReportSigner || !name.trim() || pin.length < 6 || !repeat}>{busy ? "Создаём…" : "Создать ключ ответственного"}</button>

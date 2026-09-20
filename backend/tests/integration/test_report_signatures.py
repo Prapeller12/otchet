@@ -176,7 +176,7 @@ def test_legacy_migration_preserves_old_attestation(tmp_path: Path) -> None:
             ),
         )
         conn.commit()
-        assert apply_migrations(conn, ROOT / "backend/migrations") == ("0012", "0013")
+        assert apply_migrations(conn, ROOT / "backend/migrations") == ("0012", "0013", "0014")
         assert apply_migrations(conn, ROOT / "backend/migrations") == ()
     finally:
         conn.close()

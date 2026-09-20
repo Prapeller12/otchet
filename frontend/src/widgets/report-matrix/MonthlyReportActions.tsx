@@ -1,65 +1,34 @@
-import { ReportSigningDialog } from "./ReportSigningDialog";
 import { useEffect, useState } from "react";
 import type { ApplicationGateway, ExportRequest, ReportVerification } from "../../shared/api/application-gateway";
 
-const months = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
-
-export function MonthlyReportActions({ gateway, query, revision, title, blocked, weeks = {}, controlledMonth, onMonthChange }: {
+/** Status only: Save and Print own their automatic confirmation workflow. */
+export function MonthlyReportActions({ gateway, query, revision, title, blocked, weeks = {}, controlledMonth, refresh = 0 }: {
   weeks?: Record<string, string>; gateway: ApplicationGateway; query: ExportRequest; revision: string; title?: string; blocked: boolean;
-  controlledMonth?: string; onMonthChange?(month: string): void;
+  controlledMonth: string; refresh?: number;
 }) {
-  const [localMonth, setLocalMonth] = useState(new Date().getMonth() + 1);
-  const month = controlledMonth ? Number(controlledMonth.slice(5, 7)) : localMonth;
   const [verification, setVerification] = useState<ReportVerification | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [opened, setOpened] = useState(false);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const { report_type, organization_id, year } = query;
-  const selectedWeek = weeks[`${year ?? new Date().getFullYear()}-${String(month).padStart(2, "0")}`];
-  const weekQuery = selectedWeek ? { week_start: selectedWeek } : {};
+  const month = Number(controlledMonth.slice(5, 7)) || 1;
+  const selectedWeek = weeks[controlledMonth];
   useEffect(() => {
     let active = true;
-    setVerification(null); setError(""); setMessage(""); setOpened(false);
+    setVerification(null); setError("");
     if (!blocked && gateway.getReportVerification) {
-      void gateway.getReportVerification({ report_type, organization_id, ...(year ? { year } : {}), month, ...weekQuery, expected_revision: revision })
+      void gateway.getReportVerification({ report_type, organization_id, ...(year ? { year } : {}), month,
+        ...(selectedWeek ? { week_start: selectedWeek } : {}), expected_revision: revision })
         .then(result => { if (active) setVerification(result); })
-        .catch(reason => { if (active) setError(String(reason instanceof Error ? reason.message : reason)); });
+        .catch(reason => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
     }
     return () => { active = false; };
-  }, [gateway, report_type, organization_id, year, month, revision, title, blocked, selectedWeek]);
-  if (!gateway.exportPdf || !gateway.getReportVerification || !gateway.verifyReport || !gateway.listReportSigners) return null;
-
-  async function pdf() {
-    setBusy(true); setError(""); setMessage("");
-    try {
-      const result = await gateway.exportPdf!({ ...query, month, ...weekQuery, expected_revision: revision });
-      if (!result.cancelled) setMessage(`PDF сохранён: ${result.file_name}`);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
-    finally { setBusy(false); }
-  }
-  async function verify(signerId: string, pin: string) {
-    if (!verification) return;
-    setBusy(true); setError("");
-    try {
-      const result = await gateway.verifyReport!({ ...query, month, ...weekQuery, expected_revision: revision, signer_id: signerId, pin, confirmed: true, snapshot_sha256: verification.snapshot_sha256 });
-      setVerification(result); setOpened(false);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
-    finally { setBusy(false); }
-  }
-  return <section className="monthly-report-actions" aria-label="Печать и подтверждение отчёта">
-    <label>Месяц печати и проверки<select value={month} disabled={busy || blocked} onChange={e => {
-      const next = Number(e.target.value);
-      if (controlledMonth) onMonthChange?.(`${year ?? new Date().getFullYear()}-${String(next).padStart(2, "0")}`);
-      else setLocalMonth(next);
-    }}>
-      {months.map((name, index) => <option key={name} value={index + 1}>{name} {year ?? new Date().getFullYear()}</option>)}
-    </select></label>
-    <button className="button secondary" disabled={blocked || busy} onClick={() => void pdf()}>Печать / PDF А4</button>
-    <button className="button secondary" disabled={blocked || busy || !verification} onClick={() => { setError(""); setOpened(true); }}>Подтвердить данные</button>
-    <p role="status">{blocked ? "Сначала завершите ввод и сохраните изменения." : verification?.status === "VERIFIED" ? `Подтверждено: ${verification.signer_name}, ${verification.signed_at} · ключ ${verification.key_fingerprint}` : verification?.status === "STALE" ? "Данные изменились — требуется повторная проверка." : verification?.status === "INVALID" ? "Подпись недействительна — проверка целостности не пройдена." : verification?.status === "LEGACY" ? "Прежняя отметка без криптографической подписи. Подтвердите данные заново." : "Данные не подтверждены."} {message}</p>
-    {error && !opened && <p role="alert" style={{ whiteSpace: "pre-wrap", maxHeight: "35vh", overflowY: "auto" }}>{error}</p>}
-    {opened && <ReportSigningDialog gateway={gateway} busy={busy} error={error} month={months[month - 1] ?? String(month)} onClose={() => { setOpened(false); setError(""); }} onSign={verify} />}
-
+  }, [gateway, report_type, organization_id, year, month, revision, title, blocked, selectedWeek, refresh]);
+  if (!gateway.getReportVerification) return null;
+  return <section className="monthly-report-actions" aria-label="Подтверждение отчёта">
+    <p role="status">{blocked ? "Есть изменения. Сохраните их перед печатью." : verification?.status === "VERIFIED"
+      ? `Подтверждено: ${verification.signer_name}, ${verification.signed_at} · ключ ${verification.key_fingerprint}`
+      : verification?.status === "STALE" ? "Данные изменились. Подтверждение будет запрошено при сохранении или печати."
+      : verification?.status === "INVALID" ? "Подпись недействительна — проверка целостности не пройдена."
+      : "При сохранении или печати потребуется код ответственного лица."}</p>
+    {error && <p role="alert">{error}</p>}
   </section>;
 }
