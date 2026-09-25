@@ -3,6 +3,8 @@ import type { ClipboardEventHandler, ReactNode } from "react";
 import type { MatrixCellContract, MatrixRowContract, ReportMatrixContract } from "../../shared/api/application-gateway";
 import type { ReportCellValue } from "../../shared/api/report-cell-contract";
 import { displayValue } from "./cell-value";
+import { HintValue } from "../../shared/ui/FieldHint";
+import { identityHint, reportCellHint, REPORT_FIELD_HINTS } from "../../shared/config/report-field-hints";
 import "./source-matrix.css";
 
 type SourceMatrixTableProps = {
@@ -36,12 +38,12 @@ function monthLabel(value: string): string {
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("ru", { month: "long", year: "numeric" }).format(date);
 }
 
-function ReadonlyValue({ value, cell }: { value?: ReportCellValue | undefined; cell?: MatrixCellContract | undefined }) {
+function ReadonlyValue({ value, cell, hint }: { value?: ReportCellValue | undefined; cell?: MatrixCellContract | undefined; hint: string }) {
   const current = value ?? cell?.value;
-  return <span className="source-readonly-value" title={cell?.issue?.message ?? cell?.formula}>
+  return <HintValue className="source-readonly-value" hint={hint}>
     {cell?.issue?.code === "MISSING_INPUT" ? "Заполните" : current ? displayValue(current) : "—"}
     {cell?.issue && <span aria-label={cell.issue.message}> !</span>}
-  </span>;
+  </HintValue>;
 }
 
 export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndices, renderValueCell, leftWidths = {}, onPaste, onSelectStockWeek, renderResizeHandle, onRemoveSupplier, blocked = false }: SourceMatrixTableProps) {
@@ -98,13 +100,13 @@ export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndi
           const stock = stockIndex >= 0 ? row.cells[stockIndex] : undefined;
           return <tr key={row.id}>
             {fixed.map((column, index) => column.shared && !span ? null : <th key={column.id} rowSpan={column.shared ? span : undefined} scope={column.shared ? "rowgroup" : "row"} className="sticky-left source-identity-cell" style={{ left: offsets[index] }}>
-              {column.id === "photo" ? row.image ? <img className="source-position-image" src={row.image} alt={`Изображение: ${row.left_values.position ?? row.group_label}`} /> : <span aria-label="Изображение не задано">—</span> : row.left_values[column.id] || "—"}
+              <HintValue hint={identityHint(column.id)}>{column.id === "photo" ? row.image ? <img className="source-position-image" src={row.image} alt={`Изображение: ${row.left_values.position ?? row.group_label}`} /> : <span aria-label="Изображение не задано">—</span> : row.left_values[column.id] || "—"}</HintValue>
               {column.id === "party" && onRemoveSupplier && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button supplier-remove" aria-label="Убрать производителя" title="Убрать производителя" disabled={blocked} onClick={() => onRemoveSupplier(row.workspace_id!, row.supplier_id!)}><UiIcon name="trash" /></button>}
             </th>)}
-            {span && <td rowSpan={span} className="source-calculated" data-shared="detail"><ReadonlyValue value={!head && stockWeek ? row.stock_by_week?.[stockWeek] : undefined} cell={stock} /></td>}
-            <td className={head ? "source-calculated" : "source-reference-value"}>{head ? (row as MatrixRowContract & { manufactured_total?: string }).manufactured_total || "—" : row.left_values.contract || "—"}</td>
-            {head ? <td className="source-calculated"><ReadonlyValue cell={factIndex >= 0 ? row.cells[factIndex] : undefined} /></td> : receivedIndex >= 0 ? renderValueCell(rowIndex, receivedIndex) : <td>—</td>}
-            {!head && span && <td rowSpan={span} className={`source-calculated ${row.cells[varianceIndex]?.tone === "deficit" ? "is-deficit" : ""}`} data-shared="detail"><ReadonlyValue cell={varianceIndex >= 0 ? row.cells[varianceIndex] : undefined} /></td>}
+            {span && <td rowSpan={span} className="source-calculated" data-shared="detail"><ReadonlyValue value={!head && stockWeek ? row.stock_by_week?.[stockWeek] : undefined} cell={stock} hint={stock ? reportCellHint({ ...stock, state: { ...stock.state, access: "calculated" } }, matrix, row)! : "Остаток недоступен: проверьте настройки позиции у администратора."} /></td>}
+            <td className={head ? "source-calculated" : "source-reference-value"}><HintValue className="source-readonly-value" hint={head ? REPORT_FIELD_HINTS.headTotal : identityHint("contract")}>{head ? row.manufactured_total || "—" : row.left_values.contract || "—"}</HintValue></td>
+            {head ? <td className="source-calculated"><ReadonlyValue cell={factIndex >= 0 ? row.cells[factIndex] : undefined} hint={[REPORT_FIELD_HINTS.headFact, row.cells[factIndex]?.issue?.message].filter(Boolean).join("\n\n")} /></td> : receivedIndex >= 0 ? renderValueCell(rowIndex, receivedIndex) : <td><HintValue hint="Столбец поступлений не настроен. Обратитесь к администратору.">—</HintValue></td>}
+            {!head && span && <td rowSpan={span} className={`source-calculated ${row.cells[varianceIndex]?.tone === "deficit" ? "is-deficit" : ""}`} data-shared="detail"><ReadonlyValue cell={varianceIndex >= 0 ? row.cells[varianceIndex] : undefined} hint={row.cells[varianceIndex] ? reportCellHint({ ...row.cells[varianceIndex]!, state: { ...row.cells[varianceIndex]!.state, access: "calculated" } }, matrix, row)! : "Расчёт недоступен: проверьте настройки позиции у администратора."} /></td>}
             {dates.map(index => renderValueCell(rowIndex, index))}
           </tr>;
         })}</tbody>
@@ -118,8 +120,8 @@ export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndi
         <tbody>{matrix.rows.map((row, rowIndex) => {
           const span = spans.get(rowIndex);
           return <tr key={row.id}>
-            {span && <><th rowSpan={span} scope="rowgroup">{row.left_values.number || "—"}</th><th rowSpan={span} scope="rowgroup">{row.left_values.position || row.group_label}</th></>}
-            <th scope="row">{row.left_values.party || "—"}</th>{head && <td className="source-reference-value">{row.left_values.contract || "—"}</td>}
+            {span && <><th rowSpan={span} scope="rowgroup"><HintValue hint={identityHint("number")}>{row.left_values.number || "—"}</HintValue></th><th rowSpan={span} scope="rowgroup"><HintValue hint={identityHint("position")}>{row.left_values.position || row.group_label}</HintValue></th></>}
+            <th scope="row"><HintValue hint={identityHint("party")}>{row.left_values.party || "—"}</HintValue></th>{head && <td className="source-reference-value"><HintValue hint={identityHint("contract")}>{row.left_values.contract || "—"}</HintValue></td>}
             {span && auxiliary.map(index => renderValueCell(rowIndex, index))}
           </tr>;
         })}</tbody>

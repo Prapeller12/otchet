@@ -1,4 +1,6 @@
 import type { DailySummary } from "../../shared/api/application-gateway";
+import { HintValue } from "../../shared/ui/FieldHint";
+import { dailySummaryHint, identityHint } from "../../shared/config/report-field-hints";
 import "./daily-summary.css";
 
 const MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
@@ -13,11 +15,11 @@ export function DailyMonthlySummary({ summary }: { summary: DailySummary | undef
       <table>
         <caption>{summary.year} год</caption>
         <thead>
-          <tr><th rowSpan={2} scope="col">Месяц</th>{summary.components.map(component => <th key={component.group_id} colSpan={3} scope="colgroup">{component.party} / {component.position}</th>)}</tr>
+          <tr><th rowSpan={2} scope="col">Месяц</th>{summary.components.map(component => <th key={component.group_id} colSpan={3} scope="colgroup"><HintValue hint={identityHint("position")}>{component.party} / {component.position}</HintValue></th>)}</tr>
           <tr>{summary.components.flatMap(component => METRICS.map(metric => <th key={`${component.group_id}-${metric}`} scope="col">{metric}</th>))}</tr>
         </thead>
-        <tbody>{MONTHS.map((month, index) => <tr key={month}><th scope="row">{month}</th>{summary.components.flatMap(component => component.rows.map(row => <td key={row.row_id}>{row.monthly[index] || ""}</td>))}</tr>)}</tbody>
-        <tfoot><tr><th scope="row">Итого за год</th>{summary.components.flatMap(component => component.rows.map(row => <td key={row.row_id}>{row.annual || ""}</td>))}</tr></tfoot>
+        <tbody>{MONTHS.map((month, index) => <tr key={month}><th scope="row">{month}</th>{summary.components.flatMap(component => component.rows.map(row => <td key={row.row_id}><HintValue hint={dailySummaryHint(row.metric_code)}>{row.monthly[index] || ""}</HintValue></td>))}</tr>)}</tbody>
+        <tfoot><tr><th scope="row">Итого за год</th>{summary.components.flatMap(component => component.rows.map(row => <td key={row.row_id}><HintValue hint={dailySummaryHint(row.metric_code, true)}>{row.annual || ""}</HintValue></td>))}</tr></tfoot>
       </table>
     </div>
   </section>;

@@ -1,5 +1,6 @@
 import { UiIcon } from "../../shared/ui/UiIcon";
 import { useEffect, useMemo, useState } from "react";
+import { HintValue } from "../../shared/ui/FieldHint";
 import type { ApplicationGateway, ReferenceWorkbook, ReferenceSheet, ExportResult } from "../../shared/api/application-gateway";
 import "./reference-report.css";
 
@@ -36,13 +37,15 @@ export function ReferenceGrid({ sheet, drafts = {}, onEdit }: {
       const cell = sheet.cells[address];
       const editable = onEdit !== undefined && r >= 8 && cell?.kind !== "f" && cell?.kind !== "d";
       return <td key={c} rowSpan={span?.[0]} colSpan={span?.[1]} className={`${r < 8 ? "reference-header" : ""} ${cell?.kind === "f" ? "reference-formula" : ""} ${editable ? "reference-editable" : ""}`}
-        title={cell?.kind === "f" ? `Расчёт: ${cell.value}` : editable ? "Двойной щелчок или Enter — ввод" : undefined}
+        title={editable ? "Двойной щелчок или Enter — ввод" : undefined}
         tabIndex={editable ? 0 : undefined} onDoubleClick={() => editable && setEditing(address)}
         onKeyDown={e => { if (editable && e.key === "Enter") setEditing(address); }}>
         {editing === address && editable ? <input autoFocus aria-label={`Значение ${address}`} defaultValue={drafts[address] ?? cell?.value ?? ""}
           onBlur={e => { onEdit(address, e.currentTarget.value); setEditing(null); }}
           onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } if (e.key === "Escape") { setEditing(null); } }} />
-          : drafts[address] ?? cell?.display ?? ""}
+          : editable ? drafts[address] ?? cell?.display ?? "" : <HintValue className="reference-readonly-value" hint={cell?.kind === "f"
+            ? `Расчёт из исходной книги Excel, ячейка ${address}.\n\nФормула: ${cell.value}\n\n${onEdit ? "Заполните исходные ячейки, указанные в формуле, затем нажмите «Сохранить изменения». Формула в этом просмотре не редактируется." : "В этом просмотре данные не меняются. Проверьте исходные ячейки формулы в книге Excel."}`
+            : `Значение из исходной книги Excel, ячейка ${address}. Это поле в данном просмотре не редактируется. Если значение неверно или отсутствует, проверьте соответствующую ячейку исходного файла.`}>{drafts[address] ?? cell?.display ?? ""}</HintValue>}
       </td>;
     })}</tr>)}</tbody>
   </table></div>;

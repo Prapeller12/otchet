@@ -1,4 +1,4 @@
-"""Explicit desktop security boundary. No database is opened before access setup/unlock."""
+"""Desktop boundary: automatic Windows reading, fresh personal codes for writes."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import sqlite3
 import threading
 from contextlib import closing
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from backend.api.report_confirmation import (
     confirm_print_report,
@@ -24,6 +24,7 @@ from backend.infrastructure.database.sqlite_report_signers import (
     load_signer,
 )
 from backend.infrastructure.report_crypto import unlock_key
+from backend.infrastructure.windows_data_protection import DeviceProtector
 
 
 def _success(data: object) -> dict[str, Any]:
@@ -57,6 +58,7 @@ class SecureDesktopBridge:
         inbox_directory: str | Path | None = None,
         backups_directory: str | Path | None = None,
         application_version: str = "development",
+        device_protector: DeviceProtector | Literal["windows"] | None = "windows",
     ) -> None:
         self._database = Path(database_path)
         self._kwargs: dict[str, Any] = {
@@ -67,12 +69,14 @@ class SecureDesktopBridge:
             "application_version": application_version,
         }
         backups = Path(backups_directory or self._database.parent.parent / "backups")
-        self._vault = AccessVault(self._database, backups)
+        self._vault = AccessVault(self._database, backups, device_protector=device_protector)
         self._application: WorkingReferenceApplicationBridge | None = None
         self._current_user: dict[str, Any] | None = None
         self._administrator: dict[str, Any] | None = None
         self._mutex = threading.RLock()
         self._dialogs: dict[str, Any] = {}
+        self._automatic_open_attempted = False
+        self._automatic_open_error: str | None = None
 
     def _legacy_users(self) -> list[dict[str, Any]]:
         if not self._database.exists():
@@ -115,7 +119,11 @@ class SecureDesktopBridge:
     def get_access_status(self, payload: object = None) -> dict[str, Any]:
         with self._mutex:
             try:
-                return _success(self._status())
+                if not self._automatic_open_attempted:
+                    self._automatic_open_attempted = True
+                    if self._application is None:
+                        self._try_automatic_open()
+                return _success(self._status_with_device())
             except (
                 OSError,
                 ValueError,
@@ -125,6 +133,48 @@ class SecureDesktopBridge:
                 ReportCellError,
             ) as error:
                 return _failure(error)
+
+    def _status_with_device(self) -> dict[str, Any]:
+        status = self._status()
+        status["automatic_open_available"] = (
+            self._vault.supports_device_unlock
+            and self._vault.device_path.exists()
+            and self._automatic_open_error is None
+        )
+        if self._automatic_open_error is not None:
+            status["automatic_open_error"] = self._automatic_open_error
+        return status
+
+    def _try_automatic_open(self) -> None:
+        try:
+            if self._vault.unlock_device():
+                self._migrate_after_unlock()
+                self._open(initialize=False)
+                # Windows account access is not a personal or administrator session.
+                self._current_user = None
+                self._administrator = None
+        except (OSError, ValueError, KeyError, sqlite3.Error, MigrationError, ReportCellError):
+            self._application = None
+            self._current_user = None
+            self._administrator = None
+            self._vault.lock()
+            self._automatic_open_error = (
+                "Автоматическое открытие недоступно для этой базы или учётной записи Windows. "
+                "Введите код администратора или проверяющего один раз. "
+                "Если ошибка повторится, проверьте базу и резервную копию."
+            )
+
+    def _remember_device(self) -> None:
+        self._automatic_open_attempted = True
+        try:
+            self._vault.remember_device()
+            self._automatic_open_error = None
+        except (OSError, ValueError):
+            self._automatic_open_error = (
+                "Отчёты открыты, но сохранить автоматическое открытие не удалось. "
+                "При следующем запуске понадобится код администратора или проверяющего. "
+                "Проверьте права записи в папку программы."
+            )
 
     def _open(self, *, initialize: bool) -> None:
         self._application = WorkingReferenceApplicationBridge(
@@ -181,7 +231,8 @@ class SecureDesktopBridge:
                 self._vault.enroll(profile, pin)
                 self._vault.finish_setup()
                 self._current_user = profile
-                return _success(self._status())
+                self._remember_device()
+                return _success(self._status_with_device())
             except (OSError, ValueError, KeyError, StopIteration, sqlite3.Error) as error:
                 self._application = None
                 self._current_user = None
@@ -203,7 +254,8 @@ class SecureDesktopBridge:
                 self._migrate_after_unlock()
                 self._open(initialize=False)
                 self._current_user = profile
-                return _success(self._status())
+                self._remember_device()
+                return _success(self._status_with_device())
             except (
                 OSError,
                 ValueError,
@@ -218,7 +270,7 @@ class SecureDesktopBridge:
                 return _failure(error)
 
     def _migrate_after_unlock(self) -> None:
-        """Upgrade only after a valid vault code, preserving ordinary read-only reopen."""
+        """Upgrade after a verified PIN/Windows key, preserving ordinary read-only reopen."""
         migrations = Path(self._kwargs["migrations_directory"])
         available = tuple(path.name.split("_", 1)[0] for path in sorted(migrations.glob("*.sql")))
         with closing(connect_sqlite(self._database)) as connection:
@@ -266,6 +318,7 @@ class SecureDesktopBridge:
 
     def _lock(self) -> None:
         with self._mutex:
+            self._automatic_open_attempted = True
             self._application = None
             self._current_user = None
             self._administrator = None

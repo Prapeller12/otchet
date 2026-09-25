@@ -68,20 +68,26 @@ def _self_test(paths: PortablePaths) -> None:
         )
 
 
-def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
+def _run_window(
+    paths: PortablePaths, *, ui_self_test: bool = False, ui_reopen_test: bool = False
+) -> None:
     # Windows registry MIME associations must not turn JS modules into text/plain.
     mimetypes.init()
     mimetypes.add_type("application/javascript", ".js")
     mimetypes.add_type("text/css", ".css")
     webview: Any = importlib.import_module("webview")
-    bridge = SecureDesktopBridge(
-        paths.database,
-        migrations_directory=paths.migrations,
-        definitions_directory=paths.resources / "report-definitions",
-        inbox_directory=paths.imports_inbox,
-        backups_directory=paths.backups,
-        application_version=_version(paths),
-    )
+
+    def new_bridge() -> SecureDesktopBridge:
+        return SecureDesktopBridge(
+            paths.database,
+            migrations_directory=paths.migrations,
+            definitions_directory=paths.resources / "report-definitions",
+            inbox_directory=paths.imports_inbox,
+            backups_directory=paths.backups,
+            application_version=_version(paths),
+        )
+
+    bridge = new_bridge()
 
     if ui_self_test:
         setup = bridge.setup_access({"display_name": "Контроль окна", "pin": "window-test-pin"})
@@ -90,6 +96,8 @@ def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
         prepare_reference_window_test(paths.database, paths.temp)
         prepare_subsidiary_window_test(bridge._application)
         bridge._lock()
+        # A distinct instance proves automatic reopen, rather than setup identity reuse.
+        bridge = new_bridge()
 
     webview.settings["ALLOW_DOWNLOADS"] = False
     webview.settings["ALLOW_FILE_URLS"] = False
@@ -159,7 +167,13 @@ def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
     failures: list[str] = []
 
     def check_window() -> None:
-        monitor_window(window, paths, ui_self_test=ui_self_test, failures=failures)
+        monitor_window(
+            window,
+            paths,
+            ui_self_test=ui_self_test,
+            ui_reopen_test=ui_reopen_test,
+            failures=failures,
+        )
 
     webview.start(
         check_window,
@@ -180,7 +194,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--self-test", action="store_true", help="Validate release without opening UI"
     )
-    parser.add_argument("--ui-self-test", action="store_true", help="Open and test the real window")
+    ui_tests = parser.add_mutually_exclusive_group()
+    ui_tests.add_argument(
+        "--ui-self-test", action="store_true", help="Open and test the real window"
+    )
+    ui_tests.add_argument(
+        "--ui-reopen-test",
+        action="store_true",
+        help="Reopen the existing UI self-test database in a separate process",
+    )
     parser.add_argument("--self-test-report", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--root", type=Path, help=argparse.SUPPRESS)
     return parser
@@ -200,8 +222,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         paths.prepare_writable_directories()
         lock = SingleInstanceLock(paths.root, paths.lock_file)
         with lock:
-            _run_window(paths, ui_self_test=arguments.ui_self_test)
-        if arguments.ui_self_test and arguments.self_test_report is not None:
+            _run_window(
+                paths, ui_self_test=arguments.ui_self_test, ui_reopen_test=arguments.ui_reopen_test
+            )
+        if (
+            arguments.ui_self_test or arguments.ui_reopen_test
+        ) and arguments.self_test_report is not None:
             arguments.self_test_report.write_text("ok\n", encoding="utf-8")
         return 0
     except AlreadyRunningError as exc:
@@ -213,7 +239,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             arguments.self_test_report.write_text(
                 f"{type(exc).__name__}: {exc}\n", encoding="utf-8"
             )
-        if not arguments.ui_self_test:
+        if not (arguments.ui_self_test or arguments.ui_reopen_test):
             _show_error(f"Программа не может быть запущена:\n{exc}")
         return 1
 

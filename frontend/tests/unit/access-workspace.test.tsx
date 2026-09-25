@@ -89,10 +89,10 @@ it("does not offer database-unlock enrollment for a project manager", async () =
   const { ResponsibleUsers } = await import("../../src/features/access/ResponsibleUsers");
   const gateway = Object.assign(new DemoGateway(), { listReportSigners: async () => [{ ...admin, can_unlock: true }, { ...manager, can_unlock: false }] });
   render(<ResponsibleUsers gateway={gateway} />);
-  expect(await screen.findByText("После открытия ответственным")).toBeVisible();
+  expect(await screen.findByText("Через настройку проверяющим или администратором")).toBeVisible();
   expect(screen.queryByRole("button", { name: "Разрешить вход" })).toBeNull();
   await userEvent.setup().selectOptions(screen.getByLabelText("Роль"), "project_manager");
-  expect(screen.getByText(/Заполняет отчёт после открытия программы/)).toBeVisible();
+  expect(screen.getByText(/Открывает отчёты автоматически/)).toBeVisible();
 });
 
 
@@ -170,4 +170,35 @@ it("cancels confirmation without calling the operation or retaining the entered 
   expect(screen.getByLabelText("Код подтверждения")).toHaveValue("");
   expect(reject).toHaveBeenCalledWith(expect.objectContaining({ message: "Действие отменено. Введённые изменения остались в форме." }));
   expect(close).toHaveBeenCalledTimes(1);
+});
+
+
+it("opens saved reports without asking for a personal code when Windows restores the database key", async () => {
+  localStorage.setItem("reporting-onboarding-v1", "done");
+  const unlock = vi.fn();
+  const gateway = Object.assign(new DemoGateway(), {
+    getAccessStatus: async (): Promise<AccessStatus> => ({ state: "ready", users: [admin], current_user: null, automatic_open_available: true }),
+    unlockAccess: unlock,
+  });
+  render(<ApplicationGatewayProvider gateway={gateway}><App /></ApplicationGatewayProvider>);
+  await screen.findByText("Ежедневное движение и остатки");
+  expect(screen.queryByLabelText("Код доступа")).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(unlock).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button", { name: "Ответственные лица" })).toBeNull();
+});
+
+it("explains the one-time setup and shows an automatic-open warning without hiding ready reports", async () => {
+  const gateway = Object.assign(new DemoGateway(), {
+    getAccessStatus: async (): Promise<AccessStatus> => ({ state: "locked", users: [admin], automatic_open_error: "Не удалось прочитать настройку Windows." }),
+    unlockAccess: async (): Promise<AccessStatus> => ({ state: "ready", users: [admin], automatic_open_error: "Не удалось сохранить настройку Windows." }),
+  });
+  render(<AccessGate gateway={gateway}><p>Рабочая форма</p></AccessGate>);
+  expect(await screen.findByText("Настроить открытие без кода")).toBeVisible();
+  expect(screen.getByText(/Один раз введите действующий код/)).toBeVisible();
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("Код доступа"), "right-code");
+  await user.click(screen.getByRole("button", { name: "Открыть отчёты" }));
+  expect(await screen.findByText("Рабочая форма")).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent("Не удалось сохранить настройку Windows.");
 });

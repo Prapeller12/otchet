@@ -32,6 +32,9 @@ def make_app(directory: Path) -> SecureDesktopBridge:
         definitions_directory=ROOT / "resources/report-definitions",
         backups_directory=directory / "backups",
         inbox_directory=directory / "inbox",
+        # This suite isolates PIN-based access/recovery. Windows automatic opening
+        # has separate dev30 acceptance tests and must not alter these scenarios.
+        device_protector=None,
     )
 
 

@@ -71,7 +71,7 @@ it("keeps plan rows visible while refusing entry edits and pastes into plans", a
   show(initial, gateway);
   const cell = screen.getAllByRole("button", { name: "подтверждённый ноль, заблокированная ячейка" })[0]!;
   const user = userEvent.setup();
-  expect(cell).toHaveAttribute("title", "План можно изменить в разделе «План и сведения»");
+  expect(cell).toHaveAttribute("data-field-hint", expect.stringContaining("План можно изменить в разделе «План и сведения»"));
   await user.dblClick(cell);
   expect(screen.queryByLabelText(/Редактирование:/)).toBeNull();
   fireEvent.paste(cell, { clipboardData: { getData: () => "222" } });
