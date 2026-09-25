@@ -24,6 +24,8 @@ const METADATA_FIELDS: Record<string, string> = {
   norm: "Входимость", party: "Изготовитель / поставщик", contract: "Объём поставок по договору",
 };
 export function identityHint(column: string): string {
+  // Working-reference contracts use ids such as wrk-daily-indicator.
+  column = column.split("-").at(-1) ?? column;
   if (column === "indicator") return REPORT_FIELD_HINTS.indicator;
   const field = METADATA_FIELDS[column] ?? "Реквизиты позиции";
   return `«${field}» не вводится в ячейку отчёта. Администратор задаёт это поле в «Настроить рабочее поле»: выберите нужную позицию${column === "contract" || column === "party" ? " и производителя" : ""}, заполните сведения и нажмите «Применить настройки».`;
@@ -50,10 +52,11 @@ export function reportCellHint(cell: MatrixCellContract, matrix?: ReportMatrixCo
   const issue = cell.coordinate.report_type === "HEAD_SITE" && cell.issue?.code === "MISSING_INPUT" ? undefined : cell.issue?.message;
   if (instruction) return [instruction, issue, EMPTY_VALUE_HELP].filter(Boolean).join("\n\n");
   if (cell.lock_reason && !cell.formula) return [cell.lock_reason, "Вручную это значение не вводится. Администратору нужно открыть «Настроить рабочее поле», выбрать позицию и проверить показатели, формулы и источники данных.", cell.issue?.message].filter(Boolean).join("\n\n");
+  const indicatorColumn = matrix?.left_columns.at(-1)?.id;
   const sources = (matrix?.rows ?? []).filter(item => (!row || item.group_id === row.group_id) && item.id !== row?.id).filter(item => {
     const code = item.cells[0]?.coordinate.metric_code;
     return code && cell.formula?.match(/[A-Z][A-Z_0-9]*/g)?.includes(code);
-  }).map(item => `«${item.left_values.indicator ?? item.group_label}»`);
+  }).map(item => `«${(indicatorColumn ? item.left_values[indicatorColumn] : item.left_values.indicator) || item.cells[0]?.coordinate.metric_code || "исходный показатель"}»`);
   const configured = /\b(?:OPENING|NORM)\b/.test(cell.formula ?? "");
   const ready = metric.includes("READY_SETS");
   return ["Расчётная ячейка: программа заполняет её автоматически.",

@@ -145,6 +145,25 @@ def _check_icon_accessibility(window: Any) -> None:
         raise RuntimeError("У кнопки с иконкой отсутствует доступное имя или SVG мешает фокусу")
 
 
+def _check_hint_client_bounds(window: Any) -> None:
+    """Exclude native scrollbars from the area in which every popup edge must fit."""
+    bounds = window.evaluate_js("""(() => {
+      const tip = document.querySelector('.field-hint-popup[role=tooltip]');
+      if (!tip) return null;
+      const box = tip.getBoundingClientRect();
+      return {left: box.left, top: box.top, right: box.right, bottom: box.bottom,
+        width: document.documentElement.clientWidth,
+        height: document.documentElement.clientHeight};
+    })()""")
+    if not bounds or not (
+        bounds["left"] >= 8
+        and bounds["top"] >= 8
+        and bounds["right"] <= bounds["width"] - 8
+        and bounds["bottom"] <= bounds["height"] - 8
+    ):
+        raise RuntimeError("Подсказка обрезана полосой прокрутки или краем рабочей области")
+
+
 def _exercise_readonly_hints(window: Any, paths: PortablePaths, tab: int) -> None:
     """Exercise actual React hover/focus help inside the narrow native WebView."""
     if not window.evaluate_js("""(() => {
@@ -186,13 +205,24 @@ def _exercise_readonly_hints(window: Any, paths: PortablePaths, tab: int) -> Non
               return target.getAttribute('aria-describedby') === tip.id &&
                 tip.textContent.trim() === target.dataset.fieldHint.trim() &&
                 tip.parentElement === document.body && box.width > 100 && box.height > 20 &&
-                box.left >= 7 && box.top >= 7 && box.right <= innerWidth - 7 &&
-                box.bottom <= innerHeight - 7 &&
-                anchor.left < innerWidth && anchor.right > 0 &&
-                anchor.top < innerHeight && anchor.bottom > 0;
+                box.left >= 8 && box.top >= 8 &&
+                box.right <= document.documentElement.clientWidth - 8 &&
+                box.bottom <= document.documentElement.clientHeight - 8 &&
+                anchor.left < document.documentElement.clientWidth && anchor.right > 0 &&
+                anchor.top < document.documentElement.clientHeight && anchor.bottom > 0;
             })()""",
             f"Подсказка вкладки {tab + 1} ({mode}) не видна или обрезана краем окна",
         )
+        _check_hint_client_bounds(window)
+        if (
+            tab == 0
+            and mode in {"hover", "focus"}
+            and not window.evaluate_js("""(() => {
+          const text = document.querySelector('.field-hint-popup[role=tooltip]')?.textContent;
+          return text?.includes('Получено') && text.includes('Использовано');
+        })()""")
+        ):
+            raise RuntimeError("Подсказка остатка не называет строки «Получено» и «Использовано»")
         _capture_window(window, paths, f"window-hint-{tab + 1}-{mode}-compact.png")
         window.evaluate_js("""document.dispatchEvent(
             new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))""")
@@ -553,6 +583,8 @@ def monitor_window(
             _check_anonymous_start(window)
             _exercise_onboarding(window)
         if ui_reopen_test:
+            # Keep the entire 1440x900 native window above the CI taskbar.
+            window.move(100, 80)
             _wait_for_script(
                 window,
                 """(() => {

@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { HintValue } from "../../src/shared/ui/FieldHint";
-import { reportCellHint, REPORT_FIELD_HINTS } from "../../src/shared/config/report-field-hints";
+import { identityHint, reportCellHint, REPORT_FIELD_HINTS } from "../../src/shared/config/report-field-hints";
 import { ReportCellView } from "../../src/widgets/report-matrix/ReportCellView";
 import { ReportMatrix } from "../../src/widgets/report-matrix/ReportMatrix";
 import { ProductionHeader } from "../../src/widgets/report-matrix/ProductionHeader";
@@ -10,9 +10,16 @@ import { createDemoMatrix, DemoGateway } from "../../src/shared/api/demo-gateway
 import type { MatrixCellContract, ReportMatrixContract } from "../../src/shared/api/application-gateway";
 import { sourceMatrix } from "../fixtures/source-matrix";
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); });
+afterEach(() => {
+  cleanup(); vi.restoreAllMocks(); vi.useRealTimers();
+  Reflect.deleteProperty(document.documentElement, "clientWidth");
+  Reflect.deleteProperty(document.documentElement, "clientHeight");
+});
 
 it("shows keyboard help outside overflow, clamps it at the bottom/right edge and dismisses on Escape or scrolling", () => {
+  // Native Windows reserves 16 px for document scrollbars; innerWidth/Height are larger.
+  Object.defineProperty(document.documentElement, "clientWidth", { configurable: true, value: window.innerWidth - 16 });
+  Object.defineProperty(document.documentElement, "clientHeight", { configurable: true, value: window.innerHeight - 16 });
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     return this.classList.contains("field-hint-popup")
       ? new DOMRect(0, 0, 430, 200) : new DOMRect(950, 700, 40, 40);
@@ -25,8 +32,9 @@ it("shows keyboard help outside overflow, clamps it at the bottom/right edge and
   expect(container.contains(tip)).toBe(false);
   expect(value).toHaveAttribute("aria-describedby", tip.id);
   expect(value).toHaveAccessibleDescription("Заполните остаток в данных для расчёта");
-  expect(parseFloat(tip.style.left) + 430).toBeLessThanOrEqual(window.innerWidth - 8);
-  expect(parseFloat(tip.style.top) + 200).toBeLessThanOrEqual(window.innerHeight - 8);
+  expect(parseFloat(tip.style.left) + 430).toBeLessThanOrEqual(document.documentElement.clientWidth - 8);
+  expect(parseFloat(tip.style.top) + 200).toBeLessThanOrEqual(document.documentElement.clientHeight - 8);
+  expect(parseFloat(tip.style.maxHeight)).toBe(document.documentElement.clientHeight - 16);
   expect(parseFloat(tip.style.top)).toBeGreaterThanOrEqual(8);
   fireEvent.keyDown(value, { key: "Escape" });
   expect(screen.queryByRole("tooltip")).toBeNull();
@@ -34,6 +42,23 @@ it("shows keyboard help outside overflow, clamps it at the bottom/right edge and
   expect(screen.getByRole("tooltip")).toBeVisible();
   fireEvent.scroll(container.firstChild!);
   expect(screen.queryByRole("tooltip")).toBeNull();
+});
+
+it("limits long tooltip dimensions to the usable viewport before measuring its placement", () => {
+  Object.defineProperty(document.documentElement, "clientWidth", { configurable: true, value: 304 });
+  Object.defineProperty(document.documentElement, "clientHeight", { configurable: true, value: 220 });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains("field-hint-popup")
+      ? new DOMRect(0, 0, Math.min(430, parseFloat(this.style.maxWidth)), Math.min(800, parseFloat(this.style.maxHeight)))
+      : new DOMRect(270, 180, 30, 30);
+  });
+  render(<HintValue hint={"Длинное объяснение исходных данных. ".repeat(30)}>Расчёт</HintValue>);
+  fireEvent.focus(screen.getByText("Расчёт"));
+  const tip = screen.getByRole("tooltip");
+  expect(tip.style.maxWidth).toBe("288px");
+  expect(tip.style.maxHeight).toBe("204px");
+  expect(tip.style.left).toBe("8px");
+  expect(tip.style.top).toBe("8px");
 });
 
 it("keeps only one tooltip when focus stays on A and the pointer moves to B, and lets the pointer reach the help", () => {
@@ -119,6 +144,29 @@ it("resolves the labels of custom daily formula inputs without calculating their
   expect(hint).toContain("Начальный остаток, дату его начала");
   expect(hint).toContain("Формула: =OPENING+CUM(INPUT_A)");
   expect(REPORT_FIELD_HINTS.cumulative).toContain("Для расчётных строк, включая остаток и готовые комплекты, — значение на конец выбранного месяца");
+});
+
+it("names the actual daily input indicators from the backend's prefixed column ids, never the position name", () => {
+  const matrix = createDemoMatrix("DAILY_MOVEMENT");
+  matrix.left_columns = [
+    { id: "wrk-daily-party", label: "Изготовитель/поставщик", width: 220 },
+    { id: "wrk-daily-position", label: "Позиция", width: 220 },
+    { id: "wrk-daily-indicator", label: "Показатель", width: 170 },
+  ];
+  matrix.rows = matrix.rows.slice(0, 3).map((row, index) => ({
+    ...row, group_id: "position-one", group_label: "Позиция 1",
+    left_values: { "wrk-daily-party": "Поставщик", "wrk-daily-position": "Позиция 1", "wrk-daily-indicator": ["Получено", "Использовано", "Остаток"][index]! },
+    cells: row.cells.map(cell => ({ ...cell, coordinate: { ...cell.coordinate, metric_code: ["WRK_DAILY_RECEIVED", "WRK_DAILY_USED", "WRK_DAILY_BALANCE"][index]! } as MatrixCellContract["coordinate"] })),
+  }));
+  const row = matrix.rows[2]!;
+  const calculated: MatrixCellContract = { ...row.cells[0]!, formula: "=BALANCE(WRK_DAILY_RECEIVED,WRK_DAILY_USED)", state: { access: "calculated", persistence: "saved" } };
+  const hint = reportCellHint(calculated, matrix, row)!;
+  expect(hint).toContain("«Получено», «Использовано»");
+  expect(hint).not.toContain("Позиция 1");
+  expect(identityHint("wrk-daily-indicator")).toContain("Изображение, показатели и формулы");
+  const { container } = render(<ReportCellView cell={calculated} hint={hint} position={{ row: 2, column: 0 }} active={false} onActivate={vi.fn()} onEdit={vi.fn()} onKeyDown={vi.fn()} />);
+  fireEvent.mouseEnter(within(container).getByRole("button"));
+  expect(screen.getByRole("tooltip")).toHaveTextContent("«Получено», «Использовано»");
 });
 
 it("gives missing daily calculation, cumulative and monthly summary fields keyboard-accessible help", () => {

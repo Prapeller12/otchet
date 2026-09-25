@@ -109,3 +109,71 @@ def test_reopen_failure_captures_screen_and_closes(
     assert failures
     image.grab.return_value.save.assert_called_once_with(tmp_path / "temp/window-error.png")
     window.destroy.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("right", "bottom", "accepted"),
+    [(1000, 740, True), (1016, 740, False), (1000, 760, False)],
+)
+def test_tooltip_must_fit_client_area_excluding_scrollbars(
+    right: int, bottom: int, accepted: bool
+) -> None:
+    window = Mock()
+    # A 1024x768 inner window has a 1008x748 drawable client area in this case.
+    window.evaluate_js.return_value = {
+        "left": 570,
+        "top": 400,
+        "right": right,
+        "bottom": bottom,
+        "width": 1008,
+        "height": 748,
+    }
+    if accepted:
+        window_health._check_hint_client_bounds(window)
+    else:
+        with pytest.raises(RuntimeError, match="полосой прокрутки"):
+            window_health._check_hint_client_bounds(window)
+
+
+def test_daily_hint_without_input_names_fails_before_capture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window = Mock()
+    window.evaluate_js.side_effect = [True, True, True, False]
+    for name in ("_settle_window_paint", "_wait_for_script", "_check_hint_client_bounds"):
+        monkeypatch.setattr(window_health, name, Mock())
+    capture = Mock()
+    monkeypatch.setattr(window_health, "_capture_window", capture)
+    with pytest.raises(RuntimeError, match="Получено.*Использовано"):
+        window_health._exercise_readonly_hints(window, PortablePaths(tmp_path), 0)
+    capture.assert_not_called()
+
+
+def test_reopen_moves_native_window_inside_desktop_before_capture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    window = Mock()
+    window.events.loaded.wait.return_value = True
+    for name in (
+        "_check_anonymous_start",
+        "_exercise_onboarding",
+        "_wait_for_script",
+        "_check_reference_theme",
+        "_check_action_icons",
+    ):
+        monkeypatch.setattr(window_health, name, Mock())
+
+    def capture(*args: object) -> None:
+        window.move.assert_called_once_with(100, 80)
+
+    monkeypatch.setattr(window_health, "_capture_window", capture)
+    failures: list[str] = []
+    window_health.monitor_window(
+        window,
+        PortablePaths(tmp_path),
+        ui_self_test=False,
+        ui_reopen_test=True,
+        failures=failures,
+    )
+    assert not failures
+    window.destroy.assert_called_once()

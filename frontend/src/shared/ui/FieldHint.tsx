@@ -25,14 +25,19 @@ export function useFieldHint(text: string | undefined) {
   useEffect(() => () => clearTimeout(hideTimer.current), []);
   useLayoutEffect(() => {
     if (!anchor || !popup.current) return;
+    const margin = 8;
+    // clientWidth/Height exclude the document scrollbars. innerWidth/100vw do not.
+    const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+    const viewportHeight = document.documentElement.clientHeight || window.innerHeight;
+    popup.current.style.maxWidth = `${Math.max(1, Math.min(430, viewportWidth - 2 * margin))}px`;
+    popup.current.style.maxHeight = `${Math.max(1, viewportHeight - 2 * margin)}px`;
     const field = anchor.getBoundingClientRect();
     const tip = popup.current.getBoundingClientRect();
-    const margin = 8;
     const below = field.bottom + margin;
-    const top = below + tip.height <= window.innerHeight - margin ? below : field.top - tip.height - margin;
+    const top = below + tip.height <= viewportHeight - margin ? below : field.top - tip.height - margin;
     setPosition({
-      left: Math.max(margin, Math.min(field.left, window.innerWidth - tip.width - margin)),
-      top: Math.max(margin, Math.min(top, window.innerHeight - tip.height - margin)),
+      left: Math.max(margin, Math.min(field.left, viewportWidth - tip.width - margin)),
+      top: Math.max(margin, Math.min(top, viewportHeight - tip.height - margin)),
     });
     // An anchored hint must not drift over another row when its viewport moves.
     function scroll(event: Event) {
