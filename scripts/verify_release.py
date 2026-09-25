@@ -54,7 +54,7 @@ DATABASE_SIDECAR_SUFFIXES = tuple(
     for suffix in DATABASE_FILE_SUFFIXES
     for sidecar in ("-wal", "-shm", "-journal")
 )
-VAULT_FILENAME = re.compile(r"\.keys\.json(?:\.|$)", re.IGNORECASE)
+VAULT_FILENAME = re.compile(r"\.(?:keys|device)\.json(?:\.|$)", re.IGNORECASE)
 PRIVATE_KEY_HEADER = re.compile(rb"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----")
 NETWORK_REFERENCE = re.compile(rb"(?:https?|wss?)://[^\s\"'`<>]+", re.IGNORECASE)
 NETWORK_API = re.compile(

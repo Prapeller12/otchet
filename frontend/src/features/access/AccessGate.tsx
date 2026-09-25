@@ -22,7 +22,7 @@ export function AccessGate({ gateway, children }: { gateway: ApplicationGateway;
     }).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
     return () => { active = false; };
   }, [gateway]);
-  if (status?.state === "ready") return <>{children}</>;
+  if (status?.state === "ready") return <>{status.automatic_open_error && <p className="access-startup-notice" role="status">{status.automatic_open_error} Отчёты открыты. При следующем запуске может снова понадобиться код.</p>}{children}</>;
   const first = status?.state === "setup" || (status?.state === "legacy" && !status.users.length);
   const legacy = status?.state === "legacy";
   const users = legacy ? status.users.filter(user => user.role === "admin") : status?.users ?? [];
@@ -40,14 +40,15 @@ export function AccessGate({ gateway, children }: { gateway: ApplicationGateway;
   }
   return <main className="access-page"><form className="access-card" onSubmit={event => { event.preventDefault(); void submit(); }}>
     <p className="access-eyebrow">Производственная отчётность</p>
-    <h1>{first ? "Первый запуск" : legacy ? "Защитить существующие данные" : "Открыть программу"}</h1>
-    {!status && !error && <p role="status">Проверяем доступ…</p>}
+    <h1>{!status ? "Открываем отчёты" : first ? "Первый запуск" : legacy ? "Защитить существующие данные" : "Настроить открытие без кода"}</h1>
+    {!status && !error && <p role="status">Открываем сохранённые данные…</p>}
     {status && <>
-      <p>{first ? "Создайте единственного администратора. Он настраивает формы и выдаёт ключи ответственным лицам." : legacy ? "Введите код действующего администратора. Программа сохранит отчёты и включит защиту базы." : "Проверяющий или администратор открывает программу своим кодом. После этого сотрудник может заполнять отчёты; для сохранения снова нужен код ответственного."}</p>
+      <p>{first ? "Создайте единственного администратора. Он настраивает формы и выдаёт ключи ответственным лицам." : legacy ? "Введите код действующего администратора. Программа сохранит отчёты и включит защиту базы." : "Один раз введите действующий код проверяющего или администратора. Затем отчёты будут открываться автоматически под этой учётной записью Windows. Код ответственного по-прежнему нужен при сохранении и печати."}</p>
+      {status.automatic_open_error && <p role="status">{status.automatic_open_error}</p>}
       {first ? <label>Имя администратора<input autoFocus required maxLength={120} value={name} disabled={busy} onChange={e => setName(e.target.value)} autoComplete="name" /></label>
         : <label>Пользователь<select value={identity} disabled={busy} onChange={e => { setIdentity(e.target.value); setPin(""); }}>{users.map(user => <option key={user.id} value={user.id}>{user.display_name} · {ROLE_LABELS[user.role]}</option>)}</select></label>}
       <label>{first ? "Код администратора (от 6 символов)" : "Код доступа"}<input type="password" required minLength={6} maxLength={128} autoComplete={first ? "new-password" : "off"} value={pin} disabled={busy} onChange={e => setPin(e.target.value)} /></label>
-      {first && <><label>Повторите код<input type="password" required minLength={6} maxLength={128} autoComplete="new-password" value={repeat} disabled={busy} onChange={e => setRepeat(e.target.value)} /></label><p>Запишите код и храните его в надёжном месте отдельно от программы. Без кода доступ к защищённым данным восстановить нельзя.</p></>}
+      {first && <><label>Повторите код<input type="password" required minLength={6} maxLength={128} autoComplete="new-password" value={repeat} disabled={busy} onChange={e => setRepeat(e.target.value)} /></label><p>Запишите код и храните его в надёжном месте отдельно от программы. Код понадобится для сохранения, печати и открытия данных на другом компьютере.</p></>}
       <button className="button primary" disabled={busy || pin.length < 6 || (first ? !name.trim() || !repeat : !identity)}><UiIcon name="key" />{busy ? "Открываем…" : first ? "Создать администратора и начать" : legacy ? "Включить защиту и открыть" : "Открыть отчёты"}</button>
     </>}
     {error && <p role="alert">{error}</p>}

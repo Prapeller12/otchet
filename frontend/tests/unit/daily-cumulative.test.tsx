@@ -34,7 +34,7 @@ it.each(["entry", "admin"] as const)("shows one backend cumulative total and sel
   expect(within(table).getAllByRole("columnheader", { name: "Накопительный итог" })).toHaveLength(1);
   expect(within(table).queryByRole("columnheader", { name: "С начала года" })).toBeNull();
   expect(within(table).queryByText("Сумма")).toBeNull();
-  expect(within(table).getByRole("columnheader", { name: "Накопительный итог" })).toHaveAttribute("title", expect.stringContaining("по выбранный месяц включительно"));
+  expect(within(table).getByRole("columnheader", { name: "Накопительный итог" }).querySelector("[data-field-hint]")).toHaveAttribute("data-field-hint", expect.stringContaining("по выбранный месяц включительно"));
   expect(totals()).toEqual(["0.1", "", ""]);
   const month = screen.getByRole("combobox", { name: "Месяц отчёта" });
   await user.selectOptions(month, "2026-02");

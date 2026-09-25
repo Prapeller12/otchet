@@ -38,8 +38,8 @@ export function ResponsibleUsers({ gateway }: { gateway: ApplicationGateway }) {
     finally { setBusy(false); }
   }
   return <section className="admin-users" aria-labelledby="responsible-title"><h2 id="responsible-title">Ответственные лица</h2>
-    <p>Администратор один. Проверяющих и руководителей проекта можно добавить несколько.</p>
-    <table><thead><tr><th>Имя</th><th>Роль</th><th>Вход в программу</th></tr></thead><tbody>{users.map(user => <tr key={user.id}><td>{user.display_name}</td><td>{ROLE_LABELS[user.role]}</td><td>{user.role === "project_manager" ? "После открытия ответственным" : user.can_unlock === false ? <button type="button" className="button secondary" disabled={busy} onClick={() => { setEnrollId(user.id); setEnrollPin(""); }}><UiIcon name="key" />Разрешить вход</button> : "Разрешён"}</td></tr>)}</tbody></table>
+    <p>Администратор один. Проверяющих и руководителей проекта можно добавить несколько. Обычный запуск не требует кода. Разрешение ниже нужно для открытия базы после переноса на другой компьютер или восстановления.</p>
+    <table><thead><tr><th>Имя</th><th>Роль</th><th>Открытие после переноса</th></tr></thead><tbody>{users.map(user => <tr key={user.id}><td>{user.display_name}</td><td>{ROLE_LABELS[user.role]}</td><td>{user.role === "project_manager" ? "Через настройку проверяющим или администратором" : user.can_unlock === false ? <button type="button" className="button secondary" disabled={busy} onClick={() => { setEnrollId(user.id); setEnrollPin(""); }}><UiIcon name="key" />Разрешить вход</button> : "Разрешён"}</td></tr>)}</tbody></table>
     {enrollId && <form className="access-card" onSubmit={e => { e.preventDefault(); void enroll(); }}><h3>Разрешить вход: {users.find(user => user.id === enrollId)?.display_name}</h3>
       <p>Для ключа из прежней версии введите его действующий личный код. Затем подтвердите действие кодом администратора.</p>
       <label>Действующий личный код<input type="password" autoComplete="off" maxLength={128} value={enrollPin} disabled={busy} onChange={e => setEnrollPin(e.target.value)} /></label>
@@ -48,7 +48,7 @@ export function ResponsibleUsers({ gateway }: { gateway: ApplicationGateway }) {
     <form className="access-card" onSubmit={e => { e.preventDefault(); void create(); }}><h3>Добавить ответственное лицо</h3>
       <label>Имя ответственного<input required maxLength={120} disabled={busy} value={name} onChange={e => setName(e.target.value)} /></label>
       <label>Роль<select value={role} disabled={busy} onChange={e => setRole(e.target.value as AccessRole)}><option value="reviewer">Проверяющий</option><option value="project_manager">Руководитель проекта</option></select></label>
-      <p>{role === "reviewer" ? "Редактирует планы, сведения и значения отчёта. Сохраняет и подтверждает данные своим кодом." : "Заполняет отчёт после открытия программы ответственным лицом. Редактирует планы и сведения, сохраняет и подтверждает данные своим кодом."}</p>
+      <p>{role === "reviewer" ? "Редактирует планы, сведения и значения отчёта. Сохраняет и подтверждает данные своим кодом." : "Открывает отчёты автоматически на настроенном компьютере. Редактирует планы и сведения, сохраняет и подтверждает данные своим кодом."}</p>
       <label>Личный код (от 6 символов)<input type="password" autoComplete="new-password" minLength={6} maxLength={128} disabled={busy} value={pin} onChange={e => setPin(e.target.value)} /></label>
       <label>Повтор личного кода<input type="password" autoComplete="new-password" minLength={6} maxLength={128} disabled={busy} value={repeat} onChange={e => setRepeat(e.target.value)} /></label>
       <button className="button primary" disabled={busy || !gateway.createReportSigner || !name.trim() || pin.length < 6 || !repeat}><UiIcon name="key" />{busy ? "Создаём…" : "Создать ключ ответственного"}</button>

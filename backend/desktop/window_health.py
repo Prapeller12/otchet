@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import time
 from typing import Any
 
@@ -144,6 +145,102 @@ def _check_icon_accessibility(window: Any) -> None:
         raise RuntimeError("У кнопки с иконкой отсутствует доступное имя или SVG мешает фокусу")
 
 
+def _check_hint_client_bounds(window: Any) -> None:
+    """Exclude native scrollbars from the area in which every popup edge must fit."""
+    bounds = window.evaluate_js("""(() => {
+      const tip = document.querySelector('.field-hint-popup[role=tooltip]');
+      if (!tip) return null;
+      const box = tip.getBoundingClientRect();
+      return {left: box.left, top: box.top, right: box.right, bottom: box.bottom,
+        width: document.documentElement.clientWidth,
+        height: document.documentElement.clientHeight};
+    })()""")
+    if not bounds or not (
+        bounds["left"] >= 8
+        and bounds["top"] >= 8
+        and bounds["right"] <= bounds["width"] - 8
+        and bounds["bottom"] <= bounds["height"] - 8
+    ):
+        raise RuntimeError("Подсказка обрезана полосой прокрутки или краем рабочей области")
+
+
+def _exercise_readonly_hints(window: Any, paths: PortablePaths, tab: int) -> None:
+    """Exercise actual React hover/focus help inside the narrow native WebView."""
+    if not window.evaluate_js("""(() => {
+      const cells = [...document.querySelectorAll(
+        '.report-matrix button[aria-readonly=true]')];
+      return cells.every(cell => !!cell.dataset.fieldHint?.trim()) &&
+        !!document.querySelector('.report-matrix [data-field-hint]');
+    })()"""):
+        raise RuntimeError("В неизменяемых ячейках отчёта отсутствует пояснение")
+    for mode in ("hover", "focus", "edge"):
+        window.evaluate_js(f"""(() => {{
+          document.activeElement?.blur();
+          document.dispatchEvent(new KeyboardEvent('keydown', {{key: 'Escape', bubbles: true}}));
+          const cells = [...document.querySelectorAll('.report-matrix [data-field-hint]')]
+            .filter(node => node.getClientRects().length &&
+              getComputedStyle(node).visibility === 'visible');
+          const edge = {json.dumps(mode)} === 'edge';
+          window.__hintTarget = edge ? cells[cells.length - 1] : cells.find(node =>
+            node.matches('button[aria-readonly=true], .source-readonly-value')) || cells[0];
+          window.__hintTarget?.scrollIntoView({{
+            block: 'center', inline: edge ? 'end' : 'nearest'}});
+          return !!window.__hintTarget;
+        }})()""")
+        _settle_window_paint(window)
+        window.evaluate_js(f"""(() => {{
+          const target = window.__hintTarget;
+          if ({json.dumps(mode)} === 'focus') target.focus({{preventScroll: true}});
+          else target.dispatchEvent(new MouseEvent('mouseover', {{bubbles: true}}));
+          return true;
+        }})()""")
+        _wait_for_script(
+            window,
+            """(() => {
+              const target = window.__hintTarget;
+              const tip = document.querySelector('.field-hint-popup[role=tooltip]');
+              if (!tip || !target) return false;
+              const box = tip.getBoundingClientRect();
+              const anchor = target.getBoundingClientRect();
+              return target.getAttribute('aria-describedby') === tip.id &&
+                tip.textContent.trim() === target.dataset.fieldHint.trim() &&
+                tip.parentElement === document.body && box.width > 100 && box.height > 20 &&
+                box.left >= 8 && box.top >= 8 &&
+                box.right <= document.documentElement.clientWidth - 8 &&
+                box.bottom <= document.documentElement.clientHeight - 8 &&
+                anchor.left < document.documentElement.clientWidth && anchor.right > 0 &&
+                anchor.top < document.documentElement.clientHeight && anchor.bottom > 0;
+            })()""",
+            f"Подсказка вкладки {tab + 1} ({mode}) не видна или обрезана краем окна",
+        )
+        _check_hint_client_bounds(window)
+        if (
+            tab == 0
+            and mode in {"hover", "focus"}
+            and not window.evaluate_js("""(() => {
+          const text = document.querySelector('.field-hint-popup[role=tooltip]')?.textContent;
+          return text?.includes('Получено') && text.includes('Использовано');
+        })()""")
+        ):
+            raise RuntimeError("Подсказка остатка не называет строки «Получено» и «Использовано»")
+        _capture_window(window, paths, f"window-hint-{tab + 1}-{mode}-compact.png")
+        window.evaluate_js("""document.dispatchEvent(
+            new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))""")
+        _wait_for_script(
+            window,
+            "!document.querySelector('.field-hint-popup')",
+            "Escape не закрыл подсказку",
+        )
+    window.evaluate_js("""(() => {
+      document.activeElement?.blur();
+      for (const node of document.querySelectorAll('*')) {
+        if (node.scrollLeft) node.scrollLeft = 0;
+      }
+      window.scrollTo(0, 0);
+    })()""")
+    _settle_window_paint(window)
+
+
 def _capture_report_viewports(window: Any, paths: PortablePaths, tab: int) -> None:
     _check_reference_theme(window)
     _check_action_icons(window)
@@ -165,6 +262,7 @@ def _capture_report_viewports(window: Any, paths: PortablePaths, tab: int) -> No
     })()"""):
         raise RuntimeError("Шапка головной площадки не помещается в одну строку при ширине 1024")
     _capture_window(window, paths, f"window-{tab + 1}-compact.png")
+    _exercise_readonly_hints(window, paths, tab)
     _resize_test_window(window, compact=False)
 
 
@@ -201,20 +299,42 @@ def _fill_form_input(window: Any, scope: str, label: str, value: str) -> None:
     _wait_for_script(window, expression, f"Недоступно поле «{label}» ({scope})")
 
 
-def _unlock_test_window(window: Any, paths: PortablePaths) -> None:
-    """Use the same locked-screen path that a person uses after restarting."""
-    _wait_for_script(window, "!!document.querySelector('.access-page')", "Не открыт вход")
-    _wait_for_script(
-        window,
-        "!!document.querySelector('.access-page input[type=password]')",
-        "Нет поля кода доступа",
-    )
-    _resize_test_window(window, compact=True)
-    _check_reference_theme(window, controls=False)
-    _capture_window(window, paths, "window-access-compact.png")
-    _resize_test_window(window, compact=False)
-    _fill_form_input(window, ".access-page", "Код доступа", "window-test-pin")
-    _click_button(window, "Открыть отчёты")
+def _check_anonymous_start(window: Any) -> None:
+    """Verify the real JS bridge has data access but grants no personal authority."""
+    _wait_for_script(window, _READY, "Отчёт не открылся автоматически без кода")
+    if window.evaluate_js("!!document.querySelector('.access-page, .admin-navigation')"):
+        raise RuntimeError("Повторный запуск требует входа или сохраняет режим администратора")
+    window.evaluate_js("""(() => {
+      window.__anonymousStart = null;
+      (async () => {
+        try {
+          const api = window.pywebview.api;
+          const status = await api.get_access_status();
+          const usersBefore = await api.list_report_signers({});
+          const create = await api.create_report_signer({
+            display_name: 'Несанкционированный профиль', pin: 'never-authorized',
+            role: 'reviewer'});
+          const write = await api.save_report_cells({report_type: 'DAILY_MOVEMENT',
+            organization_id: '1', changes: []});
+          const usersAfter = await api.list_report_signers({});
+          window.__anonymousStart = {
+            ok: status.ok && status.data.state === 'ready' &&
+              status.data.current_user === null &&
+              !create.ok && create.error?.code === 'ACCESS_DENIED' &&
+              !write.ok && write.error?.code === 'ACCESS_DENIED' &&
+              usersBefore.ok && usersAfter.ok &&
+              JSON.stringify(usersBefore.data) === JSON.stringify(usersAfter.data)
+          };
+        } catch (error) { window.__anonymousStart = {ok: false}; }
+      })(); return true;
+    })()""")
+    _wait_for_script(window, "window.__anonymousStart !== null", "Нет ответа защиты при запуске")
+    if not window.evaluate_js("window.__anonymousStart.ok === true"):
+        raise RuntimeError("Автооткрытие присвоило личность или разрешило запись без кода")
+
+
+def _exercise_onboarding(window: Any) -> None:
+    """Keep the original first-run guide regression after the automatic open."""
     _wait_for_script(
         window, "!!document.querySelector('.onboarding-dialog')", "Нет подсказок заполнения"
     )
@@ -448,14 +568,38 @@ def _exercise_matrix_paste(window: Any) -> None:
 
 
 def monitor_window(
-    window: Any, paths: PortablePaths, *, ui_self_test: bool, failures: list[str]
+    window: Any,
+    paths: PortablePaths,
+    *,
+    ui_self_test: bool,
+    failures: list[str],
+    ui_reopen_test: bool = False,
 ) -> None:
     """Fail visibly if the document, CSS, bridge or first report never loads."""
     try:
         if not window.events.loaded.wait(45):
             raise RuntimeError("WebView2 не загрузил страницу за 45 секунд")
-        if ui_self_test:
-            _unlock_test_window(window, paths)
+        if ui_self_test or ui_reopen_test:
+            _check_anonymous_start(window)
+            _exercise_onboarding(window)
+        if ui_reopen_test:
+            # Keep the entire 1440x900 native window above the CI taskbar.
+            window.move(100, 80)
+            _wait_for_script(
+                window,
+                """(() => {
+                  const cells = [...document.querySelectorAll(
+                    '.report-matrix tbody button[aria-readonly=false]')];
+                  return cells[0]?.textContent.trim() === '17' &&
+                    cells[1]?.textContent.trim() === '0';
+                })()""",
+                "После перезапуска не восстановились сохранённые значения 17 и 0",
+            )
+            _check_reference_theme(window)
+            _check_action_icons(window)
+            _capture_window(window, paths, "window-reopened.png")
+            window.destroy()
+            return
         for tab in range(3 if ui_self_test else 1):
             if tab:
                 window.evaluate_js(f"document.querySelectorAll('.report-tab')[{tab}].click()")
@@ -594,7 +738,7 @@ def monitor_window(
             _capture_window(window, paths, "window-4.png")
             window.destroy()
     except Exception as exc:
-        if ui_self_test:
+        if ui_self_test or ui_reopen_test:
             try:
                 importlib.import_module("PIL.ImageGrab").grab().save(
                     paths.temp / "window-error.png"

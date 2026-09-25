@@ -1,11 +1,12 @@
-"""PIN-wrapped SQLCipher keys. The envelope never contains a plaintext database key."""
+"""PIN and optional Windows-wrapped SQLCipher keys; never persist plaintext keys."""
 
 from __future__ import annotations
 
 import json
 import os
+from contextlib import closing
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
@@ -13,10 +14,15 @@ from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 
 from backend.infrastructure.database.encrypted_sqlite import (
     configure_database_key,
+    connect_encrypted,
     encrypt_existing_database,
     forget_database_key,
 )
 from backend.infrastructure.report_crypto import canonical, decode, encode
+from backend.infrastructure.windows_data_protection import (
+    DeviceProtector,
+    default_device_protector,
+)
 
 
 def _derive(pin: str, salt: bytes) -> bytes:
@@ -32,11 +38,75 @@ def _identity(entry: dict[str, Any]) -> bytes:
 
 
 class AccessVault:
-    def __init__(self, database: Path, backups: Path) -> None:
+    def __init__(
+        self,
+        database: Path,
+        backups: Path,
+        *,
+        device_protector: DeviceProtector | Literal["windows"] | None = "windows",
+    ) -> None:
         self.database = database
         self.path = database.with_suffix(database.suffix + ".keys.json")
         self.backups = backups
         self._key: bytes | None = None
+        self.device_path = database.with_suffix(database.suffix + ".device.json")
+        self._device_protector = (
+            default_device_protector() if device_protector == "windows" else device_protector
+        )
+
+    @property
+    def supports_device_unlock(self) -> bool:
+        return self._device_protector is not None
+
+    def remember_device(self) -> bool:
+        """Remember only the DB key, never a PIN, signer, or authorization session."""
+        if self._device_protector is None:
+            return False
+        if self._key is None or self.pending_setup():
+            raise ValueError("Сначала завершите настройку и откройте базу")
+        wrapped = self._device_protector.protect(self._key)
+        self._write_file(
+            self.device_path,
+            {"version": 1, "protection": "windows-dpapi-current-user", "key": encode(wrapped)},
+        )
+        return True
+
+    def unlock_device(self) -> bool:
+        """Open an established encrypted database without authenticating a person."""
+        if self._device_protector is None or not self.device_path.exists():
+            return False
+        if not self.path.exists() or self.pending_setup():
+            return False
+        from backend.infrastructure.database.encrypted_sqlite import is_encrypted_database
+
+        if not self.database.exists() or not is_encrypted_database(self.database):
+            raise ValueError("Файл зашифрованной базы отсутствует или повреждён")
+        # Bound untrusted JSON before loading and reject unrelated formats.
+        if self.device_path.stat().st_size > 131072:
+            raise ValueError("Повреждён файл автоматического открытия")
+        data = json.loads(self.device_path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(data, dict)
+            or data.get("version") != 1
+            or data.get("protection") != "windows-dpapi-current-user"
+            or not isinstance(data.get("key"), str)
+        ):
+            raise ValueError("Повреждён файл автоматического открытия")
+        key = self._device_protector.unprotect(decode(data["key"]))
+        if len(key) != 32:
+            raise ValueError("Некорректный ключ автоматического открытия")
+        try:
+            configure_database_key(self.database, key)
+            with closing(connect_encrypted(self.database)) as connection:
+                if connection.execute("PRAGMA cipher_integrity_check").fetchall():
+                    raise ValueError("Не пройдена проверка шифрования базы")
+                if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                    raise ValueError("Не пройдена проверка целостности базы")
+            self._key = key
+        except Exception:
+            self.lock()
+            raise
+        return True
 
     def _read(self) -> dict[str, Any]:
         data: Any = json.loads(self.path.read_text(encoding="utf-8"))
@@ -61,13 +131,17 @@ class AccessVault:
         self._write({**data, "pending_setup": False})
 
     def _write(self, data: dict[str, Any]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        pending = self.path.with_suffix(self.path.suffix + ".pending")
+        self._write_file(self.path, data)
+
+    @staticmethod
+    def _write_file(path: Path, data: dict[str, Any]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        pending = path.with_suffix(path.suffix + ".pending")
         with pending.open("w", encoding="utf-8") as stream:
             json.dump(data, stream, ensure_ascii=False, indent=2)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(pending, self.path)
+        os.replace(pending, path)
 
     def _wrap(self, profile: dict[str, Any], pin: str) -> dict[str, Any]:
         if self._key is None:

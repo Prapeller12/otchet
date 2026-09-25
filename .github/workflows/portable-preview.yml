@@ -10,6 +10,7 @@ on:
       - codex/roles-and-simple-workspace-dev26
       - codex/report-workflow-dev27
       - codex/reference-frontend-dev29
+      - codex/dev30-startup-cell-guidance
   workflow_dispatch:
 
 permissions:
@@ -101,6 +102,24 @@ jobs:
           }
           if ((Get-Content $report -Raw).Trim() -ne "ok") { throw "UI test failed." }
 
+      - name: Reopen saved database in a new process without a personal code
+        shell: pwsh
+        run: |
+          $app = Join-Path $env:RUNNER_TEMP "Ручной тест отчётности/ReportingSystem"
+          $report = Join-Path $app "temp/reopen-result.txt"
+          $process = Start-Process -FilePath (Join-Path $app "ReportingSystem.exe") `
+            -ArgumentList @("--ui-reopen-test", "--self-test-report", "`"$report`"") -PassThru
+          if (-not $process.WaitForExit(120000)) {
+            Stop-Process -Id $process.Id -Force
+            throw "Automatic reopen timed out."
+          }
+          Copy-Item (Join-Path $app "temp/window-*.png") ./dist/portable -ErrorAction SilentlyContinue
+          if ($process.ExitCode -ne 0 -or -not (Test-Path $report)) {
+            if (Test-Path $report) { Get-Content $report }
+            throw "Automatic reopen failed."
+          }
+          if ((Get-Content $report -Raw).Trim() -ne "ok") { throw "Reopen test failed." }
+
       - name: Upload window evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -140,5 +159,5 @@ jobs:
               --target $env:GITHUB_SHA `
               --prerelease `
               --title "Reporting System $version test build" `
-              --notes "Windows x64 alpha. Reference Kit screen design with local Golos Text and semantic SVG action icons. Existing PDF fonts, reporting workflows and encrypted database preserved. See docs/test-cases/alpha-dev29.md and docs/user-guide.md. Read TESTING.txt, extract and run start.cmd. WebView2 Fixed Runtime included; real-window startup test required. Windows 10 ACL limitations: docs/decisions/ADR-0001-webview2-fixed-runtime-windows10-acl.md."
+              --notes "Windows x64 alpha. Automatic opening under the configured Windows account via DPAPI; legacy encrypted databases need one code after upgrade. Fresh personal codes still required for protected writes and print. Accessible guidance for read-only and calculated cells. Existing PDF fonts preserved. See docs/test-cases/alpha-dev31.md and docs/user-guide.md. Read TESTING.txt, extract and run start.cmd. WebView2 Fixed Runtime included; real-window startup test required. Windows 10 ACL limitations: docs/decisions/ADR-0001-webview2-fixed-runtime-windows10-acl.md."
           }

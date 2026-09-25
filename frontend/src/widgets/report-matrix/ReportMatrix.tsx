@@ -25,6 +25,8 @@ import { CATEGORY_LABELS } from "../../features/workspace-settings/PositionField
 import { CellEditor } from "./CellEditor";
 import { ColumnResizeHandle } from "./ColumnResizeHandle";
 import { UiIcon } from "../../shared/ui/UiIcon";
+import { HintValue } from "../../shared/ui/FieldHint";
+import { cumulativeRowHint, identityHint, reportCellHint, REPORT_FIELD_HINTS } from "../../shared/config/report-field-hints";
 import { inputValue, parseCellDraft, sumCellValues } from "./cell-value";
 import {
   moveAfterEnter,
@@ -613,6 +615,7 @@ export function ReportMatrix({
                         />
                       ) : (
                         <ReportCellView
+                          hint={reportCellHint(cell, matrix, row)}
                           cell={matrix.subsidiary && matrix.time_columns[columnIndex]?.kind === "STOCK" && row.stock_by_week?.[stockWeeks[cell.column_id.slice(0, 7)] ?? ""] ? { ...cell, value: row.stock_by_week[stockWeeks[cell.column_id.slice(0, 7)]!]! } : cell}
                           position={position}
                           active={active.row === rowIndex && active.column === columnIndex}
@@ -778,7 +781,7 @@ export function ReportMatrix({
                   {resizeHandle(column.id, column.label, column.width)}
                 </th>
               ))}
-              {dailySummaryColumns.map(column => <th key={column.id} rowSpan={2} scope="col" title="С начала года по выбранный месяц включительно. Для остатков — значение на конец месяца.">{column.label}</th>)}
+              {dailySummaryColumns.map(column => <th key={column.id} rowSpan={2} scope="col"><HintValue hint={REPORT_FIELD_HINTS.cumulative}>{column.label}</HintValue></th>)}
               {groups.map((group, index) => (
                 <th key={`${group.label}-${index}`} colSpan={group.span} scope="colgroup">
                   {matrix.subsidiary ? <button className="month-heading" type="button" disabled={editing !== null} onClick={() => toggleMonth(group.label)}>▾ {monthName(group.label)}</button> : monthName(group.label)}
@@ -801,7 +804,7 @@ export function ReportMatrix({
                     style={{ left: offsets[0], width: leftColumns[0]?.width }}
                     scope="rowgroup"
                   >
-                    {row.left_values[matrix.left_columns[0].id]}
+                    <HintValue hint={identityHint(matrix.left_columns[0].id)}>{row.left_values[matrix.left_columns[0].id]}</HintValue>
                   </th>
                 )}
                 {leftColumns.slice(1).map((column, leftIndex) => column.shared && !spans.has(rowIndex) ? null : (
@@ -815,28 +818,28 @@ export function ReportMatrix({
                     }}
                     scope="row"
                   >
-                    <span>{row.left_values[column.id]}</span>
+                    <HintValue hint={identityHint(column.id)}>{row.left_values[column.id]}</HintValue>
                     {adminMode && matrix.subsidiary && column.id === "party" && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button supplier-remove" title="Убрать производителя" aria-label="Убрать производителя" disabled={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} onClick={() => void removeSupplier(row.workspace_id!, row.supplier_id!)}><UiIcon name="trash" /></button>}
                     {(matrix.subsidiary ? column.id === "position" : leftIndex === 0) && row.category && row.category !== "UNSPECIFIED" && (
                       <small className="position-category">{CATEGORY_LABELS[row.category] ?? row.category}</small>
                     )}
                     {(matrix.subsidiary ? column.id === "position" : leftIndex === 0) && row.image && (
-                      <img className="matrix-position-image" src={row.image} alt={`Изображение: ${row.group_label}`} />
+                      <HintValue hint={identityHint("photo")}><img className="matrix-position-image" src={row.image} alt={`Изображение: ${row.group_label}`} /></HintValue>
                     )}
                     {leftIndex === matrix.left_columns.length - 2 &&
                       row.indicator_detail != null && !(matrix.daily_summary && row.indicator_detail.kind === "SUM") && (
                         <span className="indicator-detail">
                           <span>{row.indicator_detail.label}</span>
                           {row.indicator_detail.kind === "SUM" && (
-                            <strong>
+                            <HintValue hint="Сумма указанных значений этой строки. Заполните дневные ячейки строки. Пустые ячейки не являются подтверждённым нулём."><strong>
                               {sumCellValues(row.cells.map((cell) => cell.value)) ?? "—"}
-                            </strong>
+                            </strong></HintValue>
                           )}
                         </span>
                       )}
                   </th>
                 ))}
-                {dailySummaryColumns.map(column => <td className="daily-summary-value" key={column.id}>{dailyRows.get(row.id)?.[column.kind]?.[column.index] ?? ""}</td>)}
+                {dailySummaryColumns.map(column => <td className="daily-summary-value" key={column.id}><HintValue hint={cumulativeRowHint(row, matrix)}>{dailyRows.get(row.id)?.[column.kind]?.[column.index] ?? ""}</HintValue></td>)}
                 {row.cells.map((_, columnIndex) => visibleSet.has(columnIndex) ? renderValueCell(rowIndex, columnIndex) : null)}
               </tr>
             ))}

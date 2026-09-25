@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { UiIcon } from "../../shared/ui/UiIcon";
+import { HintValue } from "../../shared/ui/FieldHint";
+import { REPORT_FIELD_HINTS } from "../../shared/config/report-field-hints";
 import type { ProductionHeaderProps, ReportHeaderFields } from "./ProductionHeader";
 
 /** Only the head-site header changes; hidden metadata is preserved on save. */
@@ -22,7 +24,7 @@ export function CompactProductionHeader({ presentation, blocked, onSave, onDirty
   return <section className="compact-production-header" aria-label="Шапка изделия">
     <form onSubmit={event => { event.preventDefault(); void save(); }}>
       <fieldset disabled={blocked || busy} className="compact-production-row">
-        <span className="compact-annual-plan">Годовой план: <output aria-label="Годовой план" title="Сумма сохранённых месячных планов">{presentation.annual?.plan || "—"}</output></span>
+        <span className="compact-annual-plan">Годовой план: <HintValue hint={REPORT_FIELD_HINTS.annualPlan}><output aria-label="Годовой план">{presentation.annual?.plan || "—"}</output></HintValue></span>
         <label className="compact-product-name">Название изделия<input maxLength={200} value={draft.product_name} onChange={e => setDraft(current => ({ ...current, product_name: e.target.value }))} /></label>
         <label className="compact-product-code">Шифр изделия<input maxLength={200} value={draft.product_designation} onChange={e => setDraft(current => ({ ...current, product_designation: e.target.value }))} /></label>
         <button type="submit" className="mini-button compact-header-action" disabled={!dirty} aria-label="Сохранить шапку" title="Сохранить шапку"><UiIcon name="save" /></button>

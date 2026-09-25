@@ -2,6 +2,8 @@ import { UiIcon } from "../../shared/ui/UiIcon";
 import { useEffect, useState } from "react";
 import type { ApplicationGateway, ReportMatrixContract } from "../../shared/api/application-gateway";
 import type { ProductionHeaderPresentation } from "./ProductionHeader";
+import { HintValue, useFieldHint } from "../../shared/ui/FieldHint";
+import { REPORT_FIELD_HINTS } from "../../shared/config/report-field-hints";
 
 export function SubsidiaryControls({ matrix, gateway, blocked, onChange, month, onMonth, week, onWeek, onBusy, onDirtyChange, workspaceMode = "admin", onSaveReady, onVerified }: {
   workspaceMode?: "entry" | "report-settings" | "admin"; onVerified?(): void; onSaveReady?(save: (() => Promise<void>) | null): void;
@@ -31,6 +33,8 @@ export function SubsidiaryControls({ matrix, gateway, blocked, onChange, month, 
   const dirtyCodes = codeEntry && JSON.stringify(codeActuals) !== codeBaseline;
   const dirtyActual = !codeEntry && !actualFromCodes && actual !== savedActual;
   const dirty = dirtyPlan || dirtyActual || dirtyCodes;
+  const planHelp = useFieldHint(planFromCodes ? REPORT_FIELD_HINTS.codePlan : entryMode ? REPORT_FIELD_HINTS.plan : undefined);
+  const actualHelp = useFieldHint(codeEntry || actualFromCodes ? REPORT_FIELD_HINTS.codeActual : undefined);
   useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
   useEffect(() => () => { onDirtyChange?.(false); }, [onDirtyChange]);
   async function save() {
@@ -56,9 +60,9 @@ export function SubsidiaryControls({ matrix, gateway, blocked, onChange, month, 
   useEffect(() => { onSaveReady?.(save); return () => onSaveReady?.(null); });
   return <section className={`subsidiary-controls${entryMode ? " entry-controls" : ""}`} aria-label="План составной части и неделя остатка">
     <label>Месяц<select value={month} disabled={blocked || busy || dirty} onChange={e => onMonth(e.target.value)}>{months.map(m => <option key={m} value={m}>{new Intl.DateTimeFormat("ru", { month: "long", year: "numeric" }).format(new Date(m + "-01T12:00:00"))}</option>)}</select></label>
-    <label>{matrix.head_site ? "План готовых изделий, шт." : "План выпуска, шт."}<input inputMode="decimal" value={plan} disabled={blocked || busy} readOnly={entryMode || planFromCodes} onChange={e => setPlan(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void save(); } }} />{!entryMode && planFromCodes && <small>Из кодов выпуска — измените план в таблице кодов выше.</small>}</label>
-    <label>{matrix.head_site ? "Выпущено готовых изделий, шт." : "Выпущено, шт."}<input inputMode="decimal" value={actual} disabled={blocked || busy} readOnly={codeEntry || actualFromCodes} onChange={e => setActual(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void save(); } }} />{(codeEntry || actualFromCodes) && <small>{entryMode ? "Заполните «Выпуск по кодам» ниже. Общий выпуск рассчитает программа." : "Из кодов выпуска — измените факт в таблице кодов выше."}</small>}</label>
-    <label>Выполнение<output>{matrix.presentation?.completion?.[month] ? matrix.presentation.completion[month] + " %" : "—"}</output></label>
+    <label>{matrix.head_site ? "План готовых изделий, шт." : "План выпуска, шт."}<input {...planHelp.hintProps} inputMode="decimal" value={plan} disabled={blocked || busy} readOnly={entryMode || planFromCodes} onChange={e => setPlan(e.target.value)} onKeyDown={e => { planHelp.hintProps.onKeyDown(e); if (e.key === "Enter") { e.preventDefault(); void save(); } }} />{!entryMode && planFromCodes && <small>Из кодов выпуска — измените план в таблице кодов выше.</small>}</label>{planHelp.hint}
+    <label>{matrix.head_site ? "Выпущено готовых изделий, шт." : "Выпущено, шт."}<input {...actualHelp.hintProps} inputMode="decimal" value={actual} disabled={blocked || busy} readOnly={codeEntry || actualFromCodes} onChange={e => setActual(e.target.value)} onKeyDown={e => { actualHelp.hintProps.onKeyDown(e); if (e.key === "Enter") { e.preventDefault(); void save(); } }} />{(codeEntry || actualFromCodes) && <small>{entryMode ? "Заполните «Выпуск по кодам» ниже. Общий выпуск рассчитает программа." : "Из кодов выпуска — измените факт в таблице кодов выше."}</small>}</label>{actualHelp.hint}
+    <label>Выполнение<HintValue hint={REPORT_FIELD_HINTS.completion}><output>{matrix.presentation?.completion?.[month] ? matrix.presentation.completion[month] + " %" : "—"}</output></HintValue></label>
     {!onSaveReady && !entryMode && <button type="button" className="button primary" disabled={!dirty || blocked || busy} onClick={() => void save()}><UiIcon name="save" />Сохранить план и выпуск</button>}
     {(!entryMode || dirty) && <button type="button" className="button secondary" disabled={!dirty || busy} onClick={() => { setPlan(savedPlan); setActual(savedActual); setCodeActuals(JSON.parse(codeBaseline)); setConfirmedCodeTotals(false); setError(""); }}><UiIcon name="undo" />{entryMode ? "Отменить изменение выпуска" : "Отменить изменения плана"}</button>}
     {(!entryMode || dirty) && <span className="plan-save-status" role="status">{busy ? "Сохранение…" : dirty ? entryMode ? "Выпуск изменён. Нажмите «Сохранить» вверху." : "План и выпуск изменены — сохраните или отмените изменения." : "План и выпуск сохранены"}</span>}

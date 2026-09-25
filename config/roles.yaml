@@ -1,35 +1,47 @@
-schema_version: 2
-status: ACCEPTED_OWNER_DEV26
-# Three access roles, not a sequential three-signature approval workflow.
-# Enforced by backend/application/access_policy.py and SecureDesktopBridge.
+schema_version: 3
+status: ACCEPTED_OWNER_DEV30
+# Documentation inventory. Runtime enforcement: access_policy.py / SecureDesktopBridge.
+# Three roles, not a sequential three-signature approval workflow.
+automatic_open:
+  mechanism: WINDOWS_DPAPI_CURRENT_USER
+  grants_personal_identity: false
+  grants_administrator_session: false
+  legacy_or_other_windows_profile_requires_one_time_code: true
 roles:
   - name: руководитель проекта
     code: project_manager
-    requires_reviewer_or_admin_to_open_database: true
+    can_enroll_database_recovery_key: false
     permissions:
-      - view_reports
+      - view_reports_on_configured_windows_profile
       - edit_unsaved_facts
+      - authorize_fact_save_with_fresh_code
+      - change_plans_and_presentation_with_fresh_code
+      - verify_and_print_report_with_fresh_code
       - export_reports
   - name: проверяющий
     code: reviewer
+    can_enroll_database_recovery_key: true
     permissions:
-      - open_reports
-      - view_reports
+      - configure_automatic_open_with_enrolled_personal_code
+      - view_reports_on_configured_windows_profile
       - edit_unsaved_facts
       - authorize_fact_save_with_fresh_code
-      - verify_report_with_fresh_code
+      - change_plans_and_presentation_with_fresh_code
+      - verify_and_print_report_with_fresh_code
       - export_reports
   - name: администратор
     code: admin
     maximum_count: 1
+    can_enroll_database_recovery_key: true
     permissions:
-      - open_reports
-      - view_reports
+      - configure_automatic_open_with_enrolled_personal_code
+      - view_reports_on_configured_windows_profile
       - edit_unsaved_facts
       - authorize_fact_save_with_fresh_code
-      - verify_report_with_fresh_code
+      - change_plans_and_presentation_with_fresh_code
+      - verify_and_print_report_with_fresh_code
       - export_reports
       - configure_workspace_with_fresh_code
-      - change_plans_with_fresh_code
-      - manage_responsible_users_with_fresh_code
+      - enter_administrator_session_with_fresh_code
+      - create_responsible_users_in_administrator_session
       - import_excel_with_fresh_code

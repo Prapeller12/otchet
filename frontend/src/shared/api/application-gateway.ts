@@ -323,7 +323,7 @@ export type CreateReportSignerRequest = { display_name: string; pin: string; rol
 
 export type AccessRole = "admin" | "reviewer" | "project_manager";
 export type AccessUser = { can_unlock?: boolean; id: string; display_name: string; role: AccessRole };
-export type AccessStatus = { state: "setup" | "legacy" | "locked" | "ready"; users: AccessUser[]; current_user?: AccessUser };
+export type AccessStatus = { state: "setup" | "legacy" | "locked" | "ready"; users: AccessUser[]; current_user?: AccessUser | null; automatic_open_available?: boolean; automatic_open_error?: string };
 export type WriteAuthorization = { signer_id: string; pin: string };
 export type AuthorizationPrompt = { title: string; adminOnly: boolean; confirmLabel?: string };
 export type AuthorizationHandler = (prompt: AuthorizationPrompt, execute: (authorization: WriteAuthorization) => Promise<unknown>) => Promise<unknown>;

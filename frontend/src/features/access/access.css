@@ -19,3 +19,6 @@
 .admin-users .access-card { box-shadow: none; width: 100%; }
 
 .excel-dialog-backdrop.authorization-backdrop { z-index: 300; }
+
+@media screen { .access-startup-notice { margin: 0; padding: 12px 16px; background: var(--pk-surface, white); color: var(--pk-text, #192c35); border-bottom: 1px solid var(--pk-border, #ccd3d8); } }
+@media print { .access-startup-notice { display: none; } }

@@ -1,6 +1,8 @@
 import { UiIcon } from "../../shared/ui/UiIcon";
 import { CompactProductionHeader } from "./CompactProductionHeader";
 import { useEffect, useRef, useState } from "react";
+import { HintValue } from "../../shared/ui/FieldHint";
+import { REPORT_FIELD_HINTS } from "../../shared/config/report-field-hints";
 
 export type ReportHeaderFields = {
   product_designation: string; product_name: string; factory_name: string; product_image: string;
@@ -29,9 +31,9 @@ export type ProductionHeaderProps = {
 
 export function ProductionHeader(props: ProductionHeaderProps) {
   if (props.workspaceMode === "entry") return <section className="readonly-production-header" aria-label="Шапка изделия">
-    <span>Годовой план: <output aria-label="Годовой план">{props.presentation.annual?.plan || "—"}</output></span>
-    <span>Название изделия: <strong>{props.presentation.header?.product_name || "Не задано"}</strong></span>
-    <span>Шифр: <strong>{props.presentation.header?.product_designation || "Не задан"}</strong></span>
+    <span>Годовой план: <HintValue hint={REPORT_FIELD_HINTS.annualPlan}><output aria-label="Годовой план">{props.presentation.annual?.plan || "—"}</output></HintValue></span>
+    <span>Название изделия: <HintValue hint={REPORT_FIELD_HINTS.productName}><strong>{props.presentation.header?.product_name || "Не задано"}</strong></HintValue></span>
+    <span>Шифр: <HintValue hint={REPORT_FIELD_HINTS.productCode}><strong>{props.presentation.header?.product_designation || "Не задан"}</strong></HintValue></span>
   </section>;
   if (props.workspaceMode === "admin" || props.workspaceMode === "report-settings") return <DetailedProductionHeader {...props} />;
   return props.headSite ? <CompactProductionHeader {...props} /> : <DetailedProductionHeader {...props} />;
@@ -95,9 +97,9 @@ function DetailedProductionHeader({ presentation, year, headSite, blocked, onSav
           <button type="button" className="mini-button" onClick={() => editHeader({ product_image: "" })}><UiIcon name="trash" />Убрать изображение изделия</button></div>}
       </div>
       {presentation.annual && <div className="production-annual" aria-label="Годовые итоги">
-        <span>Годовой план: <strong>{presentation.annual.plan || "—"}</strong> шт.</span>
-        <span>Выпущено за год: <strong>{presentation.annual.actual || "—"}</strong> шт.</span>
-        <span>Выполнение годового плана: <strong>{presentation.annual.completion ? presentation.annual.completion + " %" : "—"}</strong></span>
+        <span>Годовой план: <HintValue hint={REPORT_FIELD_HINTS.annualPlan}><strong>{presentation.annual.plan || "—"}</strong> шт.</HintValue></span>
+        <span>Выпущено за год: <HintValue hint={REPORT_FIELD_HINTS.annualActual}><strong>{presentation.annual.actual || "—"}</strong> шт.</HintValue></span>
+        <span>Выполнение годового плана: <HintValue hint={REPORT_FIELD_HINTS.annualCompletion}><strong>{presentation.annual.completion ? presentation.annual.completion + " %" : "—"}</strong></HintValue></span>
         <small>По сохранённым данным: план за {presentation.annual.plan_months} мес., факт за {presentation.annual.actual_months} мес. Пустые месяцы не считаются нулями.</small>
       </div>}
       {headSite && <>
@@ -108,7 +110,7 @@ function DetailedProductionHeader({ presentation, year, headSite, blocked, onSav
             {months.map(month => <th scope="colgroup" colSpan={2} key={month}>{new Intl.DateTimeFormat("ru", { month: "long" }).format(new Date(month + "-01T12:00:00"))}</th>)}<th rowSpan={2}>Действия</th></tr>
             <tr>{months.flatMap(month => [<th scope="col" key={month + "p"}>План</th>, <th scope="col" key={month + "f"}>Факт</th>])}</tr></thead>
             <tbody>{draft.codes.map(code => <tr key={code.id}><th scope="row"><input aria-label="Код / модификация" maxLength={200} placeholder="Введите код изделия" value={code.label} onChange={e => setDraft(previous => ({ ...previous, codes: previous.codes.map(row => row.id === code.id ? { ...row, label: e.target.value } : row) }))} /></th>
-              <td><output aria-label={`${code.label || "Новый код"}: выпущено за год`} title="По сохранённым данным; обновляется после сохранения">{presentation.production_code_annual?.[code.id] || "—"}</output></td>
+              <td><HintValue hint={REPORT_FIELD_HINTS.codeAnnual}><output aria-label={`${code.label || "Новый код"}: выпущено за год`}>{presentation.production_code_annual?.[code.id] || "—"}</output></HintValue></td>
               {months.flatMap(month => ( ["plans", "actuals"] as const).map(field => <td key={month + field}><input inputMode="decimal" aria-label={`${code.label || "Новый код"}: ${field === "plans" ? "план" : "факт"} ${month}`} value={code[field][month] ?? ""} onChange={e => editCode(code.id, field, month, e.target.value)} /></td>))}
               <td><button type="button" className="mini-button" disabled={Object.values(code.plans).some(Boolean) || Object.values(code.actuals).some(Boolean)} title="Код с данными нельзя удалить; сначала явно очистите его значения" onClick={() => setDraft(previous => ({ ...previous, codes: previous.codes.filter(row => row.id !== code.id) }))}><UiIcon name="trash" />Убрать код</button></td>
             </tr>)}</tbody></table>
