@@ -1,3 +1,4 @@
+import { RecoveryBackups } from "../features/access/RecoveryBackups";
 import { FieldHintsEnabledContext } from "../shared/ui/FieldHint";
 import { ReferenceReport } from "../features/reference-reports/ReferenceReport";
 import type { ReferenceSummary } from "../shared/api/application-gateway";
@@ -35,6 +36,16 @@ function Workspace() {
   const [hintsLoaded, setHintsLoaded] = useState(false);
   const [hintsSaving, setHintsSaving] = useState(false);
   const [hintsError, setHintsError] = useState("");
+  const [backupWarning, setBackupWarning] = useState("");
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [accessNotice, setAccessNotice] = useState("");
+  useEffect(() => {
+    const warning = (event: Event) => setBackupWarning(String((event as CustomEvent<string>).detail));
+    const success = () => setBackupWarning("");
+    window.addEventListener("backup-warning", warning);
+    window.addEventListener("backup-success", success);
+    return () => { window.removeEventListener("backup-warning", warning); window.removeEventListener("backup-success", success); };
+  }, []);
   useEffect(() => {
     let active = true;
     void (gateway.getUiPreferences?.() ?? Promise.resolve({ field_hints_enabled: true }))
@@ -95,7 +106,7 @@ function Workspace() {
     } finally { setLeavingAdministration(false); }
   }
   async function openAdministration() {
-    setModeError("");
+    setModeError(""); setAccessNotice("");
     if (gateway.mode === "demo") { setWorkspaceMode("admin"); return; }
     try {
       await requestAuthorization({ title: "Открыть раздел администратора", adminOnly: true }, async authorization => {
@@ -192,6 +203,7 @@ function Workspace() {
       </header>
       {workspaceMode === "admin" && <div className="admin-navigation" aria-label="Разделы администратора">
         <p>Настройте формы и выдайте личные ключи.</p>
+        {gateway.listRecoveryBackups && <button className="button secondary" disabled={navigationBlocked} onClick={() => setRecoveryOpen(true)}>Резервные копии</button>}
         <button className="button secondary" disabled={navigationBlocked} aria-pressed={adminSection === "reports"} onClick={() => setAdminSection("reports")}><UiIcon name="edit" />План и сведения</button>
         <button className="button secondary" disabled={navigationBlocked || !!referenceId} onClick={() => setSettingsOpen(true)}><UiIcon name="settings" />Настроить рабочее поле</button>
         <button className="button secondary" disabled={navigationBlocked} aria-pressed={adminSection === "users"} onClick={() => setAdminSection("users")}><UiIcon name="users" />Ответственные лица</button>
@@ -233,10 +245,12 @@ function Workspace() {
         </select>
       </label>}
       {matrixBlocked && <p className="workspace-edit-notice" role="status">Завершите ввод и сохраните изменения перед переходом в другую форму, организацию или настройки.</p>}
+      {accessNotice && <p className="workspace-edit-notice" role="status">{accessNotice}</p>}
+      {backupWarning && <p className="workspace-edit-notice" role="alert">{backupWarning}</p>}
       {hintsError && <p className="workspace-edit-notice" role="alert">{hintsError}</p>}
       {modeError && <p className="workspace-edit-notice" role="alert">{modeError}</p>}
       <main>
-        {workspaceMode === "admin" && adminSection === "users" ? <ResponsibleUsers gateway={gateway} /> : loadError !== null ? (
+        {workspaceMode === "admin" && adminSection === "users" ? <ResponsibleUsers gateway={gateway} onAdministrationChanged={message => { setWorkspaceMode("entry"); setAdminSection("reports"); setAccessNotice(message); }} /> : loadError !== null ? (
           <section className="load-state load-state-error" role="alert">{loadError}</section>
         ) : referenceId ? (
           <ReferenceReport gateway={gateway} organizationId={organizationId} identity={referenceId} onBack={() => setReferenceId("")} onDirty={setReferenceDirty} />
@@ -266,6 +280,7 @@ function Workspace() {
         </span>
       </footer>
 
+      {recoveryOpen && <RecoveryBackups gateway={gateway} onClose={() => setRecoveryOpen(false)} />}
       {onboardingOpen && <Onboarding onClose={closeOnboarding} />}
       {pendingAuthorization && <AuthorizationDialog gateway={gateway} pending={pendingAuthorization} onClose={closeAuthorization} />}
       {workspaceMode === "admin" && settingsOpen && organizationId && (

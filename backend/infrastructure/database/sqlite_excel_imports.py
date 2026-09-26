@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Callable
+from pathlib import Path
 from typing import cast
 
 from backend.infrastructure.database.migrator import connect_sqlite
+from backend.infrastructure.database.sqlite_report_cells import SqliteReportCellUnitOfWork
 from backend.repositories.excel_imports import (
     ImportBatch,
     ImportBatchDraft,
@@ -15,6 +18,7 @@ from backend.repositories.excel_imports import (
     ImportIssueDraft,
     ImportRowDraft,
 )
+from backend.repositories.report_facts import ReportCellUnitOfWork
 
 
 class SqliteExcelImportRepository:
@@ -51,8 +55,8 @@ class SqliteExcelImportRepository:
                 INSERT INTO import_batches (
                     id, report_type, organization_id, source_file_name, source_sha256,
                     stored_relative_path, status, new_count, changed_count, same_count,
-                    error_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    error_count, metadata_json, skipped_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     draft.id,
@@ -66,14 +70,16 @@ class SqliteExcelImportRepository:
                     counts["CHANGED"],
                     counts["SAME"],
                     len(draft.issues),
+                    json.dumps(dict(draft.metadata), ensure_ascii=False, sort_keys=True),
+                    draft.skipped_count,
                 ),
             )
             connection.executemany(
                 """
                 INSERT INTO import_rows (
                     batch_id, source_cell, coordinate_json, classification,
-                    value_kind, quantity, expected_revision
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    value_kind, quantity, expected_revision, provenance_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
                     (
@@ -84,6 +90,7 @@ class SqliteExcelImportRepository:
                         row.value_kind,
                         row.quantity,
                         row.expected_revision,
+                        json.dumps(dict(row.provenance), ensure_ascii=False, sort_keys=True),
                     )
                     for row in draft.rows
                 ],
@@ -133,10 +140,28 @@ class SqliteExcelImportRepository:
             connection.close()
 
     def mark_committed(self, batch_id: str) -> ImportBatch:
-        connection = connect_sqlite(self._database_path)
-        try:
-            connection.execute("BEGIN IMMEDIATE")
-            cursor = connection.execute(
+        return self.commit_with_changes(batch_id, lambda _transaction: None)
+
+    def commit_with_changes(
+        self, batch_id: str, persist: Callable[[ReportCellUnitOfWork], None]
+    ) -> ImportBatch:
+        """Commit facts, structural changes, import status and audit together.
+
+        The callback must use the supplied unit of work, not open a second writer.
+        Any exception, including an error updating the batch status, rolls back all
+        writes. A retried committed batch never invokes the callback again.
+        """
+        with SqliteReportCellUnitOfWork(Path(self._database_path), 5000) as transaction:
+            connection = transaction.connection
+            current = _read_batch(connection, batch_id)
+            if current is None:
+                raise ValueError("Пакет импорта не найден")
+            if current.status == "COMMITTED":
+                return current
+            if current.status != "STAGED" or current.error_count:
+                raise ValueError("Пакет импорта нельзя провести")
+            persist(transaction)
+            connection.execute(
                 """
                 UPDATE import_batches
                 SET status = 'COMMITTED',
@@ -145,32 +170,19 @@ class SqliteExcelImportRepository:
                 """,
                 (batch_id,),
             )
-            if cursor.rowcount == 0:
-                current = _read_batch(connection, batch_id)
-                if current is None:
-                    raise ValueError("Пакет импорта не найден")
-                if current.status != "COMMITTED":
-                    raise ValueError("Пакет импорта нельзя провести")
-                connection.rollback()
-                return current
             _audit(connection, batch_id, "COMMIT_EXCEL_IMPORT", {"status": "COMMITTED"})
-            connection.commit()
             batch = _read_batch(connection, batch_id)
             if batch is None:
                 raise sqlite3.DatabaseError("committed import batch could not be read")
             return batch
-        except BaseException:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
 
 
 def _read_batch(connection: sqlite3.Connection, batch_id: str) -> ImportBatch | None:
     row = connection.execute(
         """
         SELECT id, report_type, organization_id, source_file_name, source_sha256,
-               stored_relative_path, status, new_count, changed_count, same_count, error_count
+               stored_relative_path, status, new_count, changed_count, same_count, error_count,
+               metadata_json, skipped_count
         FROM import_batches WHERE id = ?
         """,
         (batch_id,),
@@ -180,7 +192,7 @@ def _read_batch(connection: sqlite3.Connection, batch_id: str) -> ImportBatch | 
     row_records = connection.execute(
         """
         SELECT source_cell, coordinate_json, classification, value_kind, quantity,
-               expected_revision
+               expected_revision, provenance_json
         FROM import_rows WHERE batch_id = ? ORDER BY id
         """,
         (batch_id,),
@@ -204,6 +216,8 @@ def _read_batch(connection: sqlite3.Connection, batch_id: str) -> ImportBatch | 
         changed_count=int(row[8]),
         same_count=int(row[9]),
         error_count=int(row[10]),
+        metadata=json.loads(row[11]),
+        skipped_count=int(row[12]),
         rows=tuple(
             ImportRowDraft(
                 source_cell=str(item[0]),
@@ -212,6 +226,7 @@ def _read_batch(connection: sqlite3.Connection, batch_id: str) -> ImportBatch | 
                 value_kind=str(item[3]),
                 quantity=None if item[4] is None else str(item[4]),
                 expected_revision=None if item[5] is None else int(item[5]),
+                provenance=json.loads(item[6]),
             )
             for item in row_records
         ),

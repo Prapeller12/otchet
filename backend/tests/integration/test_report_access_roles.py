@@ -103,6 +103,9 @@ def test_legacy_crypto_identity_survives_role_migration(tmp_path: Path) -> None:
         assert apply_migrations(connection, ROOT / "backend/migrations") == (
             "0013",
             "0014",
+            "0015",
+            "0016",
+            "0017",
         )
         preserved = load_signer(connection, "legacy-reviewer")
         assert preserved == old_profile

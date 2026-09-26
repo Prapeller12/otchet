@@ -26,7 +26,6 @@ from backend.application.excel_reports import (
     ExcelWorkbookValidationError,
 )
 from backend.application.monthly_report import monthly_snapshot
-from backend.application.reference_transfer import validate_transfer
 from backend.application.report_cells import (
     ReportCellChange,
     ReportCellCoordinate,
@@ -102,6 +101,7 @@ class WorkingReferenceApplicationBridge:
         initialize_workspace: bool = True,
     ) -> None:
         self._database_path = Path(database_path)
+        self._migrations_directory = Path(migrations_directory)
         self._definitions_directory = Path(definitions_directory)
         self._transport = DesktopBridge(
             self._database_path,
@@ -457,22 +457,48 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"report_type", "organization_id", "year"})
+            _reject_unknown(
+                request,
+                {"report_type", "organization_id", "year", "mode", "batch_id", "sheet_decisions"},
+            )
             report_type = _required_string(request, "report_type")
             organization_id = self._organization_id(request.get("organization_id"))
-            if self._open_excel_file is None:
-                raise ExcelReportError(_FILE_DIALOG_REASON)
-            source = self._open_excel_file()
+            original_file_name = None
+            source: Path | None
+            if request.get("batch_id"):
+                batch = self._excel._imports.get_batch(_required_string(request, "batch_id"))
+                if (
+                    batch is None
+                    or batch.organization_id != organization_id
+                    or batch.report_type != report_type
+                    or batch.stored_relative_path.startswith("reference:")
+                ):
+                    raise ExcelWorkbookValidationError("Пакет не принадлежит выбранному отчёту")
+                source = self._excel._inbox_directory / batch.stored_relative_path
+                if source.resolve().parent != self._excel._inbox_directory.resolve():
+                    raise ExcelWorkbookValidationError("Некорректный путь сохранённого пакета")
+                original_file_name = batch.source_file_name
+            else:
+                if self._open_excel_file is None:
+                    raise ExcelReportError(_FILE_DIALOG_REASON)
+                source = self._open_excel_file()
             if source is None:
                 return {"ok": True, "data": {"cancelled": True}, "request_id": request_id}
             try:
-                preview = self._excel.stage_import(
+                from backend.api.excel_integration import prepare_canonical
+
+                result = prepare_canonical(
+                    self,
                     source,
-                    report_type=report_type,
-                    organization_id=organization_id,
-                    matrix=self._build_matrix(report_type, organization_id, _year(request)),
+                    report_type,
+                    organization_id,
+                    _year(request),
+                    str(request.get("mode", "update")).upper(),
+                    request.get("sheet_decisions"),
+                    original_file_name,
                 )
-                result = preview.to_dict()
+                if original_file_name is not None:
+                    result["file_name"] = original_file_name
             except ExcelWorkbookValidationError as exc:
                 if str(exc) != "Книга не создана этой программой: системная карта отсутствует":
                     raise
@@ -481,6 +507,7 @@ class WorkingReferenceApplicationBridge:
                     # Archiving a source workbook is not an import into working facts.
                     result["already_imported"] = False
                     result["status"] = "STAGED"
+                    result["mode"] = request.get("mode", "update")
                 except (ValueError, zipfile.BadZipFile) as invalid:
                     raise ExcelWorkbookValidationError(str(invalid)) from invalid
             return {"ok": True, "data": result, "request_id": request_id}
@@ -498,12 +525,9 @@ class WorkingReferenceApplicationBridge:
                 raise ExcelWorkbookValidationError(
                     "Сначала сопоставьте исходные ячейки с рабочими полями и выполните проверку"
                 )
-            result = self._excel.commit_import(
-                _required_string(request, "batch_id"),
-                allowed_coordinates=lambda report, org: self._editable_coordinate_keys(
-                    report, self._organization_id(str(org)), _year(request)
-                ),
-            )
+            from backend.api.excel_integration import commit_package
+
+            result = commit_package(self, identity, _year(request))
             return {"ok": True, "data": result, "request_id": request_id}
         except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
             code = (
@@ -528,9 +552,9 @@ class WorkingReferenceApplicationBridge:
             destination = self._save_excel_file(suggested)
             if destination is None:
                 return {"ok": True, "data": {"cancelled": True}, "request_id": request_id}
-            matrix = cast(
-                dict[str, Any], self._build_matrix(report_type, organization_id, _year(request))
-            )
+            from backend.api.excel_integration import exchange_matrix
+
+            matrix = exchange_matrix(self, report_type, organization_id, _year(request))
             months = request.get("visible_months")
             known = {c["group_label"] for c in matrix["time_columns"]}
             if months is not None:
@@ -575,6 +599,11 @@ class WorkingReferenceApplicationBridge:
                     "report_type",
                     "year",
                     "mappings",
+                    "mode",
+                    "period_rules",
+                    "sheet_decisions",
+                    "reset_profile",
+                    "structure_overrides",
                 },
             )
             organization = self._organization_id(request.get("organization_id"))
@@ -583,35 +612,9 @@ class WorkingReferenceApplicationBridge:
             if action == "list":
                 result = self._references.list_reports(organization)
             elif action == "transfer":
-                document = self._references.get(
-                    _required_string(request, "id"), organization, staged=True, original=True
-                )
-                report_type = _required_string(request, "report_type")
-                matrix = self._build_matrix(report_type, organization, _year(request))
-                checked = validate_transfer(
-                    document, cast(dict[str, Any], matrix), request.get("mappings")
-                )
-                if checked["issues"]:
-                    result = {"issues": checked["issues"], "error_count": len(checked["issues"])}
-                else:
-                    result = self._excel.stage_transfer(
-                        source_document=document,
-                        report_type=report_type,
-                        organization_id=organization,
-                        changes=checked["changes"],
-                    )
-                    if not result.get("already_imported"):
-                        with closing(connect_sqlite(self._database_path)) as connection:
-                            connection.execute(
-                                "INSERT INTO reference_transfer_decisions"
-                                "(batch_id,workbook_id,decisions) VALUES(?,?,?)",
-                                (
-                                    result["batch_id"],
-                                    document["id"],
-                                    json.dumps(request["mappings"], ensure_ascii=False),
-                                ),
-                            )
-                            connection.commit()
+                from backend.api.excel_integration import prepare_transfer
+
+                result = prepare_transfer(self, {**request, "year": _year(request)}, organization)
             elif action == "get":
                 result = self._references.get(_required_string(request, "id"), organization)
             elif action == "save":

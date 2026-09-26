@@ -22,3 +22,17 @@
 .transfer-invalid { background: #fff0df; }
 
 .excel-dialog.excel-transfer-dialog { width: min(1500px, 96vw); }
+
+/* The preview has one scrolling body; its title and final decision stay visible. */
+.excel-dialog.excel-transfer-dialog { max-height: 92vh; overflow-y: auto; padding-top: 0; padding-bottom: 0; }
+.excel-transfer-dialog .excel-preview-header { position: sticky; top: 0; z-index: 5; background: white; padding: 16px 0 10px; border-bottom: 1px solid #d7d5cd; }
+.excel-transfer-dialog .excel-dialog-actions { position: sticky; bottom: 0; z-index: 5; background: white; padding: 12px 0; border-top: 1px solid #d7d5cd; }
+.transfer-table { table-layout: fixed; }
+.transfer-table th { position: sticky; top: 0; z-index: 2; background: #e7ece8; }
+.transfer-table td, .transfer-table th { overflow-wrap: anywhere; white-space: normal; }
+.transfer-mapping label > select { min-height: 40px; max-width: 100%; }
+.transfer-mapping details { margin: 12px 0; }
+.transfer-mapping details > ul { max-height: 30vh; overflow: auto; }
+.transfer-period-blocks { display: grid; gap: 12px; margin: 12px 0; }
+.transfer-period-block { border: 1px solid #d7d5cd; border-radius: 6px; padding: 12px; display: flex; flex-wrap: wrap; gap: 12px; }
+.transfer-period-block label { display: grid; gap: 4px; }

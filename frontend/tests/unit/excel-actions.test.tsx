@@ -15,9 +15,11 @@ import { ReportMatrix } from "../../src/widgets/report-matrix/ReportMatrix";
 
 class ExcelTestGateway extends DemoGateway {
   imported = false;
+  importRequest: ImportRequest | undefined;
   exported = false;
 
   override async validateImport(_request: ImportRequest): Promise<ImportPreview> {
+    this.importRequest = _request;
     return {
       cancelled: false,
       batch_id: "12345678901234567890123456789012",
@@ -73,6 +75,7 @@ describe("Excel actions", () => {
     await user.click(screen.getByRole("button", { name: "Импорт Excel" }));
     const dialog = await screen.findByRole("dialog", { name: "Проверка импорта Excel" });
     expect(dialog).toBeVisible();
+    expect(gateway.importRequest?.mode).toBe("update");
     expect(screen.getByText("daily.xlsx")).toBeVisible();
     expect(within(dialog).getByText("2")).toBeVisible();
 

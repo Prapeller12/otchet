@@ -214,12 +214,23 @@ class SqliteReportCellUnitOfWork:
         self._busy_timeout_ms = busy_timeout_ms
         self._connection: sqlite3.Connection | None = None
 
+    @property
+    def connection(self) -> sqlite3.Connection:
+        """The active transaction, for coordinated infrastructure operations."""
+        if self._connection is None:
+            raise RuntimeError("unit of work is not active")
+        return self._connection
+
     def __enter__(self) -> Self:
         if self._connection is not None:
             raise RuntimeError("unit of work is already active")
         connection = connect_sqlite(self._database_path)
-        connection.execute(f"PRAGMA busy_timeout = {self._busy_timeout_ms}")
-        connection.execute("BEGIN IMMEDIATE")
+        try:
+            connection.execute(f"PRAGMA busy_timeout = {self._busy_timeout_ms}")
+            connection.execute("BEGIN IMMEDIATE")
+        except BaseException:
+            connection.close()
+            raise
         self._connection = connection
         self.facts = SqliteReportFactRepository(connection)
         self.idempotency = SqliteIdempotencyRepository(connection)

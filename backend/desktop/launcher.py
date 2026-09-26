@@ -160,6 +160,17 @@ def _run_window(
             return None
         return Path(selected) if isinstance(selected, (str, Path)) else Path(selected[0])
 
+    def select_recovery_parent() -> Path | None:
+        selected = window.create_file_dialog(
+            webview.FileDialog.FOLDER,
+            directory=str(paths.root),
+            allow_multiple=False,
+        )
+        if not selected:
+            return None
+        return Path(selected) if isinstance(selected, (str, Path)) else Path(selected[0])
+
+    bridge._configure_recovery_dialog(select_recovery_parent)
     bridge._configure_pdf_dialog(save_pdf_file)
     bridge._configure_excel_dialogs(
         open_file=open_excel_file,

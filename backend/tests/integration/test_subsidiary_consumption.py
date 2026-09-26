@@ -340,7 +340,8 @@ def test_export_opens_visible_month_and_keeps_values_and_import_map(tmp_path: Pa
     assert sheet.cell(7, first + 2).value == 940
     assert sheet.cell(7, first + 3).value == -2400
     assert f"{letter}7:{letter}8" in sheet.merged_cells
-    assert workbook["Месячные планы"]["B2"].value == 1000
+    assert workbook["Месячные планы"]["A10"].value == "2026-09"
+    assert workbook["Месячные планы"]["B10"].value == 1000
     assert workbook["_Системная карта"].max_row > 100
 
 

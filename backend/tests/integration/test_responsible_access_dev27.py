@@ -11,6 +11,8 @@ from typing import Any
 import pytest
 
 from backend.api.secure_desktop_bridge import SecureDesktopBridge
+from backend.desktop.database_bootstrap import verify_backup
+from backend.infrastructure.access_vault import AccessVault
 from backend.infrastructure.database.migrator import connect_sqlite
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -85,10 +87,21 @@ def test_encrypted_dev26_upgrade_preserves_audit_and_backs_up_vault(tmp_path: Pa
     with closing(connect_sqlite(database)) as connection:
         previous = connection.execute("SELECT * FROM report_access_events ORDER BY id").fetchall()
         assert previous
+    # Setup and account writes now create recovery sets too. A rejected unlock
+    # must neither add a snapshot nor change an existing set.
+    prior_files = {
+        path: path.read_bytes() for path in (tmp_path / "backups").rglob("*") if path.is_file()
+    }
+    prior_backups = set((tmp_path / "backups").rglob("*.sqlite3"))
+    assert prior_backups
+    for backup in prior_backups:
+        verify_backup(backup)
     app._lock()
     upgraded = bridge(tmp_path)
     assert not upgraded.unlock_access({**admin, "pin": "wrong"})["ok"]
-    assert not list((tmp_path / "backups").glob("*.manifest.json"))
+    assert {
+        path: path.read_bytes() for path in (tmp_path / "backups").rglob("*") if path.is_file()
+    } == prior_files
     data(upgraded.unlock_access(admin))
     with closing(connect_sqlite(database)) as connection:
         assert (
@@ -96,16 +109,36 @@ def test_encrypted_dev26_upgrade_preserves_audit_and_backs_up_vault(tmp_path: Pa
             == previous
         )
         assert connection.execute("SELECT max(version) FROM schema_migrations").fetchone() == (
-            "0014",
+            "0017",
         )
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute("DELETE FROM report_access_events")
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute("UPDATE report_access_events SET command='tamper'")
-    backups = list((tmp_path / "backups").glob("*.sqlite3"))
-    assert len(backups) == 1
-    assert backups[0].with_suffix(".sqlite3.keys.json").is_file()
-    assert not backups[0].read_bytes().startswith(b"SQLite format 3")
+    backups = set((tmp_path / "backups").rglob("*.sqlite3"))
+    migration_backups = backups - prior_backups
+    assert len(migration_backups) == 1
+    migration_backup = migration_backups.pop()
+    verify_backup(migration_backup)
+    assert migration_backup.with_suffix(".sqlite3.keys.json").is_file()
+    assert not migration_backup.read_bytes().startswith(b"SQLite format 3")
+    assert all(path.read_bytes() == contents for path, contents in prior_files.items())
+    # The added set must actually be a readable PRE-migration snapshot with the
+    # old schema and complete audit, not just a correctly named encrypted file.
+    recovery_vault = AccessVault(migration_backup, migration_backup.parent, device_protector=None)
+    recovery_vault.unlock(admin["signer_id"], admin["pin"])
+    try:
+        with closing(connect_sqlite(migration_backup)) as connection:
+            assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+            assert connection.execute("SELECT max(version) FROM schema_migrations").fetchone() == (
+                "0013",
+            )
+            assert (
+                connection.execute("SELECT * FROM report_access_events ORDER BY id").fetchall()
+                == previous
+            )
+    finally:
+        recovery_vault.lock()
     data(upgraded.authenticate_access(admin))
     manager = data(
         upgraded.create_report_signer(
@@ -120,6 +153,9 @@ def test_encrypted_dev26_upgrade_preserves_audit_and_backs_up_vault(tmp_path: Pa
         ).fetchone() == ("project_manager",)
     upgraded._lock()
     before = database.read_bytes()
+    before_reopen = set((tmp_path / "backups").rglob("*.sqlite3"))
     data(upgraded.unlock_access(admin))
     assert database.read_bytes() == before
-    assert len(list((tmp_path / "backups").glob("*.sqlite3"))) == 1
+    assert set((tmp_path / "backups").rglob("*.sqlite3")) == before_reopen
+    for backup in before_reopen:
+        verify_backup(backup)
