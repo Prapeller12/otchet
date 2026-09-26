@@ -3,6 +3,8 @@ import { DailyMonthlySummary } from "./DailyMonthlySummary";
 import { SourceMatrixTable } from "./SourceMatrixTable";
 import "./production-header.css";
 import { SubsidiaryControls } from "./SubsidiaryControls";
+import { ImportChangePreview } from "../../features/reference-reports/ImportChangePreview";
+import { CanonicalSheetReview } from "../../features/reference-reports/CanonicalSheetReview";
 import { ReferenceTransfer } from "../../features/reference-reports/ReferenceTransfer";
 import { MonthlyReportActions } from "./MonthlyReportActions";
 import {
@@ -17,6 +19,7 @@ import {
 import type {
   ApplicationGateway,
   ImportPreview,
+  ImportMode,
   MatrixCellContract,
   ReportMatrixContract,
 } from "../../shared/api/application-gateway";
@@ -158,6 +161,7 @@ export function ReportMatrix({
   const [excelBusy, setExcelBusy] = useState<"import" | "commit" | "export" | null>(null);
   const [excelError, setExcelError] = useState<string | null>(null);
   const [excelMessage, setExcelMessage] = useState<string | null>(null);
+  const [importMode, setImportMode] = useState<ImportMode>("update");
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [widths, setWidths] = useState<Record<string, number>>(matrix.presentation?.widths ?? {});
   const [renaming, setRenaming] = useState(false);
@@ -177,7 +181,7 @@ export function ReportMatrix({
   });
   const [subsidiaryMonth, setSubsidiaryMonth] = useState([...expandedMonths][0] ?? "");
   const [stockWeeks, setStockWeeks] = useState<Record<string, string>>({});
-  const temporalIndices = matrix.time_columns.flatMap((column, index) => (matrix.subsidiary ? expandedMonths.has(column.group_label) : column.group_label === subsidiaryMonth) && (!matrix.subsidiary || (matrix.head_site ? ["PLAN", "FACT"] : ["USED"]).includes(column.kind ?? "")) ? [index] : []);
+  const temporalIndices = matrix.time_columns.flatMap((column, index) => (matrix.subsidiary ? expandedMonths.has(column.group_label) : column.group_label === subsidiaryMonth) && (!matrix.subsidiary || (matrix.head_site ? ["PLAN", "FACT"] : ["SUPPLIED", "USED"]).includes(column.kind ?? "")) ? [index] : []);
   const summaryIndices = matrix.time_columns.flatMap((column, index) => matrix.subsidiary && column.group_label === subsidiaryMonth && (matrix.head_site ? ["OPENING", "USED", "VARIANCE"] : ["OPENING", "RECEIVED"]).includes(column.kind ?? "") ? [index] : []);
   const visibleIndices = matrix.subsidiary ? [
     ...summaryIndices.filter(index => matrix.time_columns[index]?.kind === "RECEIVED"),
@@ -186,7 +190,7 @@ export function ReportMatrix({
   ] : temporalIndices;
   const visibleSet = new Set(visibleIndices);
   const leftColumns = matrix.left_columns.map((column) => ({ ...column, width: widths[column.id] ?? column.width }));
-  const timeColumns = matrix.time_columns.map((column) => ({ ...column, width: Math.max(matrix.subsidiary && column.kind !== "USED" ? 110 : 64, widths[column.id] ?? (matrix.subsidiary && column.kind !== "USED" ? 110 : 64)) }));
+  const timeColumns = matrix.time_columns.map((column) => ({ ...column, width: Math.max(matrix.subsidiary && !["SUPPLIED", "USED"].includes(column.kind ?? "") ? 110 : 64, widths[column.id] ?? (matrix.subsidiary && !["SUPPLIED", "USED"].includes(column.kind ?? "") ? 110 : 64)) }));
   const visibleMatrix = { ...matrix, left_columns: leftColumns, time_columns: visibleIndices.map(index => timeColumns[index]!), rows: matrix.rows.map((row) => ({ ...row, cells: visibleIndices.map(index => row.cells[index]!) })) };
   const query = { report_type: matrix.report_type, organization_id: matrix.organization_id, ...(matrix.year ? { year: matrix.year } : {}) };
 
@@ -282,7 +286,7 @@ export function ReportMatrix({
     if (gateway.mode !== "pywebview") return;
     setPreviewBusy(true);
     try {
-      const result = await gateway.getReportMatrix({ ...query, preview_changes: next.rows.flatMap((row) => row.cells.filter((cell) => cell.state.access === "editable" && cell.state.persistence === "dirty").map((cell) => ({ coordinate: cell.coordinate, value: cell.value }))) });
+      const result = await gateway.getReportMatrix({ ...query, preview_changes: next.rows.flatMap((row) => row.cells.filter((cell) => cell.state.access === "editable" && (cell.state.persistence === "dirty" || (dirtyKeys.has(cellKey(cell)) && cell.state.persistence === "error"))).map((cell) => ({ coordinate: cell.coordinate, value: cell.value }))) });
       if (sequence !== previewSequence.current) return;
       const calculated = new Map(result.rows.flatMap((row) => row.cells.filter((cell) => cell.state.access === "calculated").map((cell) => [cellKey(cell), cell] as const)));
       const current = latestMatrix.current;
@@ -511,11 +515,11 @@ export function ReportMatrix({
     setExcelMessage(null);
     try {
       const preview = await gateway.validateImport({
-        ...query,
+        ...query, mode: importMode,
         report_type: matrix.report_type,
         organization_id: matrix.organization_id,
       });
-      if (!preview.cancelled) setImportPreview(preview);
+      if (!preview.cancelled) setImportPreview({ ...preview, mode: importMode });
     } catch (reason: unknown) {
       setExcelError(reason instanceof Error ? reason.message : "Excel-файл не проверен");
     } finally {
@@ -681,6 +685,9 @@ export function ReportMatrix({
       </div>
       <div id="report-more-actions" className="report-more-actions" hidden={!moreOpen}>
         <div className="toolbar-actions">
+          <label>Режим импорта Excel <select aria-label="Режим импорта Excel" value={importMode} disabled={navigationBlocked} onChange={event => setImportMode(event.target.value as ImportMode)}>
+            <option value="create">Создать отчёт</option><option value="append">Дополнить отчёт</option><option value="update">Обновить выбранные значения</option>
+          </select></label>
           <button
             type="button"
             className="button secondary"
@@ -722,7 +729,7 @@ export function ReportMatrix({
       {matrix.subsidiary && <details className="report-month-options" open={adminMode || undefined}><summary>Показать несколько месяцев</summary>
       <nav className="month-controls" aria-label="Месяцы отчёта">
         <button type="button" disabled={editing !== null} onClick={() => {
-          const next = { ...widths, ...Object.fromEntries(matrix.time_columns.map(column => [column.id, matrix.subsidiary && column.kind !== "USED" ? 110 : 64])) };
+          const next = { ...widths, ...Object.fromEntries(matrix.time_columns.map(column => [column.id, matrix.subsidiary && !["SUPPLIED", "USED"].includes(column.kind ?? "") ? 110 : 64])) };
           setWidths(next); persistWidths(next);
         }}>Компактные столбцы: 5 цифр</button>
         {matrix.year && <strong>{matrix.year}</strong>}
@@ -868,22 +875,27 @@ export function ReportMatrix({
       {importPreview !== null && (
         <div className="excel-dialog-backdrop" role="presentation">
           <section
-            className={importPreview.reference_workbook ? "excel-dialog excel-transfer-dialog" : "excel-dialog"}
+            className={importPreview.reference_workbook || importPreview.metadata || importPreview.value_changes ? "excel-dialog excel-transfer-dialog" : "excel-dialog"}
             role="dialog"
             aria-modal="true"
             aria-labelledby="excel-preview-title"
           >
-            <h3 id="excel-preview-title">Проверка импорта Excel</h3>
+            <header className="excel-preview-header"><h3 id="excel-preview-title">Проверка импорта Excel</h3><p>Файл → Распознавание → Проверка → Импорт</p></header>
             <p className="excel-file-name">{importPreview.file_name}</p>
             {importPreview.reference_workbook && <ReferenceTransfer
-              book={importPreview.reference_workbook} matrix={matrix} gateway={gateway}
+              book={importPreview.reference_workbook} matrix={matrix} gateway={gateway} preview={importPreview}
               onReady={setImportPreview} />}
+            {!importPreview.reference_workbook && (importPreview.metadata?.sheets || importPreview.metadata?.review_sheets) && <CanonicalSheetReview preview={importPreview} gateway={gateway} query={query} onChange={setImportPreview} />}
+            <ImportChangePreview preview={importPreview} showValues={!importPreview.reference_workbook} />
             <div className="excel-preview-counts">
-              <span><strong>{importPreview.new_count ?? 0}</strong> новых</span>
-              <span><strong>{importPreview.changed_count ?? 0}</strong> изменённых</span>
-              <span><strong>{importPreview.same_count ?? 0}</strong> без изменений</span>
+              <span><strong>{importPreview.validation_pending ? "—" : importPreview.position_count ?? 0}</strong> позиций</span>
+              <span><strong>{importPreview.validation_pending ? "—" : importPreview.dictionary_count ?? 0}</strong> новых справочников</span>
+              <span><strong>{importPreview.validation_pending ? "—" : importPreview.new_count ?? 0}</strong> новых значений</span>
+              <span><strong>{importPreview.validation_pending ? "—" : importPreview.changed_count ?? 0}</strong> изменённых</span>
+              <span><strong>{importPreview.validation_pending ? "—" : importPreview.same_count ?? 0}</strong> без изменений</span>
+              <span><strong>{importPreview.validation_pending ? "—" : importPreview.skipped_count ?? 0}</strong> пропусков</span>
               <span className={(importPreview.error_count ?? 0) > 0 ? "has-errors" : ""}>
-                <strong>{importPreview.error_count ?? 0}</strong> ошибок
+                <strong>{importPreview.validation_pending ? "—" : importPreview.error_count ?? 0}</strong> ошибок
               </span>
             </div>
             {importPreview.already_imported && (
@@ -913,7 +925,7 @@ export function ReportMatrix({
                 className="button primary"
                 type="button"
                 disabled={
-                  !!importPreview.reference_workbook ||
+                  (!!importPreview.reference_workbook && !importPreview.transfer_validated) || !!importPreview.validation_pending || !importPreview.batch_id || importPreview.status === "INVALID" ||
                   excelBusy === "commit" ||
                   (importPreview.error_count ?? 0) > 0 ||
                   importPreview.already_imported

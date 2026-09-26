@@ -1,3 +1,4 @@
+import { RecoveryBackups } from "./RecoveryBackups";
 import { UiIcon } from "../../shared/ui/UiIcon";
 import { useEffect, useState, type ReactNode } from "react";
 import type { AccessStatus, ApplicationGateway } from "../../shared/api/application-gateway";
@@ -13,6 +14,7 @@ export function AccessGate({ gateway, children }: { gateway: ApplicationGateway;
   const [repeat, setRepeat] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
   useEffect(() => {
     let active = true;
     if (!gateway.getAccessStatus) { setStatus({ state: "ready", users: [] }); return; }
@@ -52,5 +54,5 @@ export function AccessGate({ gateway, children }: { gateway: ApplicationGateway;
       <button className="button primary" disabled={busy || pin.length < 6 || (first ? !name.trim() || !repeat : !identity)}><UiIcon name="key" />{busy ? "Открываем…" : first ? "Создать администратора и начать" : legacy ? "Включить защиту и открыть" : "Открыть отчёты"}</button>
     </>}
     {error && <p role="alert">{error}</p>}
-  </form></main>;
+  </form>{gateway.listRecoveryBackups && <button type="button" className="button secondary" disabled={busy} onClick={() => setRecoveryOpen(true)}>Восстановить из резервной копии</button>}{recoveryOpen && <RecoveryBackups gateway={gateway} onClose={() => setRecoveryOpen(false)} />}</main>;
 }

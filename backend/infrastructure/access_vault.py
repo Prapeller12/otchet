@@ -50,6 +50,7 @@ class AccessVault:
         self.backups = backups
         self._key: bytes | None = None
         self.device_path = database.with_suffix(database.suffix + ".device.json")
+        self.lifecycle_path = database.with_suffix(database.suffix + ".lifecycle.json")
         self._device_protector = (
             default_device_protector() if device_protector == "windows" else device_protector
         )
@@ -103,18 +104,124 @@ class AccessVault:
                 if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
                     raise ValueError("Не пройдена проверка целостности базы")
             self._key = key
+            self.recover_lifecycle()
         except Exception:
             self.lock()
             raise
         return True
 
-    def _read(self) -> dict[str, Any]:
-        data: Any = json.loads(self.path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or data.get("version") != 1:
+    @staticmethod
+    def _validate(data: Any) -> dict[str, Any]:
+        if (
+            not isinstance(data, dict)
+            or type(data.get("version")) is not int
+            or data["version"] != 1
+        ):
             raise ValueError("Неизвестный формат файла доступа к базе")
-        if not isinstance(data.get("users"), list):
+        if not isinstance(data.get("users"), list) or not 1 <= len(data["users"]) <= 10000:
             raise ValueError("Повреждён файл доступа к базе")
+        for flag in ("pending_setup", "source_exists"):
+            if flag in data and not isinstance(data[flag], bool):
+                raise ValueError("Повреждены параметры файла доступа")
+        identities: set[str] = set()
+        administrators = 0
+        for entry in data["users"]:
+            if not isinstance(entry, dict) or set(entry) != {
+                "id",
+                "display_name",
+                "role",
+                "salt",
+                "nonce",
+                "key",
+            }:
+                raise ValueError("Повреждён профиль в файле доступа")
+            for field, maximum in (("id", 128), ("display_name", 120)):
+                value = entry[field]
+                if (
+                    not isinstance(value, str)
+                    or not 1 <= len(value.strip()) <= maximum
+                    or not value.isprintable()
+                ):
+                    raise ValueError("Повреждено имя или идентификатор профиля доступа")
+            if (
+                entry["id"] in identities
+                or not isinstance(entry["role"], str)
+                or entry["role"] not in {"admin", "reviewer"}
+            ):
+                raise ValueError("Повреждены роли или идентификаторы доступа")
+            identities.add(entry["id"])
+            administrators += entry["role"] == "admin"
+            for field, length in (("salt", 16), ("nonce", 12), ("key", 48)):
+                value = entry[field]
+                if not isinstance(value, str) or len(value) > 128:
+                    raise ValueError("Повреждён зашифрованный ключ доступа")
+                try:
+                    valid = len(decode(value)) == length
+                except (ValueError, TypeError):
+                    valid = False
+                if not valid:
+                    raise ValueError("Повреждён зашифрованный ключ доступа")
+        if administrators != 1:
+            raise ValueError("В файле доступа должен быть один администратор")
         return data
+
+    @staticmethod
+    def _read_json(path: Path) -> Any:
+        if path.stat().st_size > 8 * 1024 * 1024:
+            raise ValueError("Файл доступа превышает допустимый размер")
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def _read(self) -> dict[str, Any]:
+        return self._validate(self._read_json(self.path))
+
+    def _lifecycle(self) -> dict[str, Any]:
+        data = self._read_json(self.lifecycle_path)
+        if not isinstance(data, dict) or set(data) != {
+            "version",
+            "operation_id",
+            "before",
+            "after",
+        }:
+            raise ValueError("Повреждён журнал изменения доступа; восстановите резервную копию")
+        operation = data["operation_id"]
+        if (
+            type(data["version"]) is not int
+            or data["version"] != 1
+            or not isinstance(operation, str)
+            or len(operation) != 32
+            or any(c not in "0123456789abcdef" for c in operation)
+        ):
+            raise ValueError("Повреждён журнал изменения доступа")
+        self._validate(data["before"])
+        self._validate(data["after"])
+        return data
+
+    def prepare_lifecycle(self, operation_id: str, after: dict[str, Any]) -> None:
+        self.recover_lifecycle()
+        self._write_file(
+            self.lifecycle_path,
+            {
+                "version": 1,
+                "operation_id": operation_id,
+                "before": self._read(),
+                "after": self._validate(after),
+            },
+        )
+
+    def recover_lifecycle(self) -> None:
+        """Select the envelope matching the committed SQLite transaction after a crash."""
+        if not self.lifecycle_path.exists():
+            return
+        if self._key is None:
+            raise ValueError("Для восстановления изменения доступа сначала откройте базу")
+        journal = self._lifecycle()
+        with closing(connect_encrypted(self.database)) as connection:
+            committed = connection.execute(
+                "SELECT 1 FROM report_access_lifecycle_commits WHERE operation_id=?",
+                (journal["operation_id"],),
+            ).fetchone()
+        self._write(journal["after"] if committed else journal["before"])
+        self.lifecycle_path.unlink()
 
     def users(self) -> list[dict[str, Any]]:
         if not self.path.exists():
@@ -171,6 +278,29 @@ class AccessVault:
         encrypt_existing_database(self.database, self._key, self.backups)
 
     def unlock(self, signer_id: str, pin: str) -> dict[str, Any]:
+        if self.lifecycle_path.exists():
+            journal = self._lifecycle()
+            # Either password wrapper may be the committed one. Resolve using the
+            # authenticated database marker before accepting a user's credentials.
+            for document in (journal["after"], journal["before"]):
+                for entry in document["users"]:
+                    if entry["id"] != signer_id:
+                        continue
+                    try:
+                        key = ChaCha20Poly1305(_derive(pin, decode(entry["salt"]))).decrypt(
+                            decode(entry["nonce"]), decode(entry["key"]), _identity(entry)
+                        )
+                    except (InvalidTag, ValueError):
+                        continue
+                    self._key = key
+                    configure_database_key(self.database, key)
+                    try:
+                        self.recover_lifecycle()
+                        return self.unlock(signer_id, pin)
+                    except Exception:
+                        self.lock()
+                        raise
+            raise ValueError("Неверный код или повреждён файл доступа")
         data = self._read()
         entries = [p for p in data["users"] if p["id"] == signer_id]
         if len(entries) != 1:

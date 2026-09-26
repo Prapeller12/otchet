@@ -19,7 +19,7 @@ export function AuthorizationDialog({ gateway, pending, onClose }: { gateway: Ap
     let active = true;
     void gateway.listReportSigners!().then(result => {
       if (!active) return;
-      const allowed = result.filter(user => pending.adminOnly ? user.role === "admin" : ["admin", "reviewer", "project_manager"].includes(user.role));
+      const allowed = result.filter(user => !user.revoked && (pending.adminOnly ? user.role === "admin" : ["admin", "reviewer", "project_manager"].includes(user.role)));
       setUsers(allowed); setIdentity(allowed[0]?.id ?? "");
       if (!allowed.length) setError("Нет ответственного лица с правом сохранения. Обратитесь к администратору.");
     }).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });

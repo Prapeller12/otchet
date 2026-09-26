@@ -42,7 +42,9 @@ class FormulaReader:
     def formula(self, formula: str) -> Any:
         if len(formula) > 10000:
             raise ValueError("Слишком длинная формула")
-        expression = formula.removeprefix("=")
+        expression = formula.removeprefix("=").strip()
+        if "!" in expression or "[" in expression or "]" in expression:
+            raise ValueError("Внешние и межлистовые ссылки требуют проверки")
         # Tokenize references only outside quoted Excel strings.
         parts = re.split(r'("(?:[^"]|"")*")', expression)
 
@@ -55,7 +57,10 @@ class FormulaReader:
                 reference,
                 parts[index],
             )
-        return self.node(ast.parse("".join(parts), mode="eval").body)
+        tree = ast.parse("".join(parts), mode="eval")
+        if sum(1 for _ in ast.walk(tree)) > 6000:
+            raise ValueError("Слишком сложная формула")
+        return self.node(tree.body)
 
     def node(self, node: ast.AST) -> Any:
         if isinstance(node, ast.Constant) and isinstance(node.value, (str, int, float)):
@@ -118,10 +123,20 @@ def calculate(document: dict[str, Any]) -> dict[str, Any]:
             try:
                 value = reader.cell(address)
                 cell["display"] = "" if value is None else str(value)
+                if cell.get("kind") == "f":
+                    cached = cell.get("cached_value")
+                    cell["formula_status"] = (
+                        "CALCULATED_NO_CACHE"
+                        if cached is None
+                        else "CACHE_VERIFIED"
+                        if str(cached) == str(value)
+                        else "CACHE_DIFFERS"
+                    )
                 cell.pop("error", None)
             except (ValueError, SyntaxError, ArithmeticError, TypeError, RecursionError) as exc:
                 cell["display"] = "#ОШИБКА"
                 cell["error"] = str(exc)
+                cell["formula_status"] = "UNSUPPORTED"
                 errors.append(f"{sheet['name']}!{address}: {exc}")
     document["errors"] = errors
     return document
@@ -132,71 +147,66 @@ def read_reference(content: bytes) -> dict[str, Any]:
         if sum(x.file_size for x in archive.infolist()) > 100 * 1024 * 1024:
             raise ValueError("Распакованная книга превышает 100 МБ")
     workbook = load_workbook(io.BytesIO(content), data_only=False, keep_links=False)
+    cached_workbook = load_workbook(io.BytesIO(content), data_only=True, keep_links=False)
     try:
         sheets = []
-        kinds = set()
-        warnings = []
         for sheet in workbook:
-            if sheet.sheet_state != "visible":
-                raise ValueError("Книга содержит скрытые листы; выберите исходный отчёт по образцу")
-            if sheet.max_row * sheet.max_column > 50000:
-                raise ValueError("Лист превышает 50 000 ячеек")
-            headers = [str(sheet.cell(7, n).value or "").lower() for n in range(1, 12)]
-            if "входимость" not in headers[4] or not any("факт" in h for h in headers):
-                raise ValueError(f"Лист «{sheet.title}» не соответствует приложенным образцам")
-            kind = "HEAD_SITE" if headers[9].strip() == "план" else "SUBSIDIARY"
-            kinds.add(kind)
+            if sheet.max_row * sheet.max_column > 500_000:
+                raise ValueError("Лист превышает 500 000 ячеек")
             cells = {}
-            max_row = max(c.row for row in sheet for c in row if c.value is not None)
-            max_col = 33 if kind == "HEAD_SITE" else 58
-            if any(c.value is not None and c.column > max_col for row in sheet for c in row):
-                raise ValueError("За границами образца есть дополнительные данные; импорт отменён")
-            for row in sheet.iter_rows(max_row=max_row, max_col=max_col):
+            for row in sheet:
                 for c in row:
                     if c.value is None:
                         continue
-                    v = c.value
-                    cell_kind = (
+                    value = c.value
+                    kind = (
                         "f"
                         if c.data_type == "f"
-                        else "n"
-                        if isinstance(v, (int, float)) and not isinstance(v, bool)
-                        else "s"
+                        else (
+                            "n"
+                            if isinstance(value, (int, float)) and not isinstance(value, bool)
+                            else "s"
+                        )
                     )
-                    if isinstance(v, (date, datetime)):
-                        v, cell_kind = v.strftime("%Y-%m-%d"), "d"
-                    cells[c.coordinate] = {"value": str(v), "kind": cell_kind}
-            if kind == "HEAD_SITE":
-                title_years = set(re.findall(r"20\d{2}", str(sheet["A1"].value)))
-                column_years = set(
-                    re.findall(
-                        r"20\d{2}", " ".join(str(sheet.cell(1, n).value) for n in range(10, 34, 2))
-                    )
-                )
-                if title_years != column_years:
-                    warnings.append(
-                        "Год в заголовке и месячных колонках различается. Даты сохранены "
-                        "как в исходном файле."
-                    )
+                    if isinstance(value, (date, datetime)):
+                        value, kind = value.strftime("%Y-%m-%d"), "d"
+                    cells[c.coordinate] = {
+                        "value": str(value),
+                        "kind": kind,
+                        "number_format": c.number_format,
+                        "cached_value": (
+                            str(cached_workbook[sheet.title][c.coordinate].value)
+                            if kind == "f"
+                            and cached_workbook[sheet.title][c.coordinate].value is not None
+                            else None
+                        ),
+                    }
             sheets.append(
                 {
                     "name": sheet.title,
-                    "rows": max_row,
-                    "columns": max_col,
+                    "rows": sheet.max_row,
+                    "columns": sheet.max_column,
                     "cells": cells,
-                    "merges": [
-                        str(m)
-                        for m in sheet.merged_cells.ranges
-                        if m.max_row <= max_row and m.max_col <= max_col
-                    ],
-                    "kind": kind,
+                    "merges": [str(m) for m in sheet.merged_cells.ranges],
+                    "state": sheet.sheet_state,
+                    "hidden_rows": [i for i, d in sheet.row_dimensions.items() if d.hidden],
+                    "hidden_columns": [i for i, d in sheet.column_dimensions.items() if d.hidden],
                 }
             )
-        if len(kinds) != 1:
-            raise ValueError("В одной книге должны быть отчёты одного типа")
-        return calculate({"sheets": sheets, "report_type": next(iter(kinds)), "warnings": warnings})
+        document = calculate({"sheets": sheets, "warnings": []})
+        # One server recognizer is authoritative for role classification and UI sources.
+        from backend.application.import_recognition import recognize_document
+
+        document["recognition"] = recognize_document(document)
+        kinds = {s.get("kind") for s in sheets if s.get("kind")}
+        document["report_types"] = sorted(kinds)
+        document["report_type"] = next((s["kind"] for s in sheets if s.get("kind")), "")
+        if not kinds:
+            raise ValueError("Не найдены заголовки отчётной таблицы: обозначение и входимость")
+        return document
     finally:
         workbook.close()
+        cached_workbook.close()
 
 
 def export_reference(content: bytes, document: dict[str, Any]) -> bytes:
