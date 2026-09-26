@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from typing import Literal, Protocol
+
+from backend.repositories.report_facts import ReportCellUnitOfWork
 
 ImportClassification = Literal["NEW", "CHANGED", "SAME"]
 ImportBatchStatus = Literal["STAGED", "INVALID", "COMMITTED"]
@@ -17,6 +20,7 @@ class ImportRowDraft:
     value_kind: str
     quantity: str | None
     expected_revision: int | None
+    provenance: Mapping[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +41,8 @@ class ImportBatchDraft:
     status: ImportBatchStatus
     rows: tuple[ImportRowDraft, ...]
     issues: tuple[ImportIssueDraft, ...]
+    metadata: Mapping[str, object] = field(default_factory=dict)
+    skipped_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +60,8 @@ class ImportBatch:
     error_count: int
     rows: tuple[ImportRowDraft, ...]
     issues: tuple[ImportIssueDraft, ...]
+    metadata: Mapping[str, object] = field(default_factory=dict)
+    skipped_count: int = 0
 
 
 class ExcelImportRepository(Protocol):
@@ -66,6 +74,10 @@ class ExcelImportRepository(Protocol):
     def get_batch(self, batch_id: str) -> ImportBatch | None: ...
 
     def mark_committed(self, batch_id: str) -> ImportBatch: ...
+
+    def commit_with_changes(
+        self, batch_id: str, persist: Callable[[ReportCellUnitOfWork], None]
+    ) -> ImportBatch: ...
 
 
 __all__ = [

@@ -37,13 +37,14 @@ class DesktopBridge:
         *,
         migrations_directory: str | Path | None = None,
         busy_timeout_ms: int = 5000,
+        migrate: bool = True,
     ) -> None:
         self._database_path = Path(database_path)
         self._migrations_directory = (
             Path(migrations_directory) if migrations_directory is not None else None
         )
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
-        newly_applied = _migrate(self._database_path, self._migrations_directory)
+        newly_applied = _migrate(self._database_path, self._migrations_directory) if migrate else ()
         self._newly_applied = newly_applied
         self._service = ReportCellService(
             SqliteReportCellUnitOfWorkFactory(

@@ -21,12 +21,13 @@ describe("workspace settings", () => {
     expect(screen.queryByLabelText("Обозначения состояний ячеек")).not.toBeInTheDocument();
     expect(screen.getByText("Демо без записи на диск")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: "Администратор" }));
     await user.click(screen.getByRole("button", { name: "Настроить рабочее поле" }));
     expect(
       await screen.findByRole("dialog", { name: "Организации и строки отчёта" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "+ Добавить строку" }));
+    await user.click(screen.getByRole("button", { name: "Добавить строку" }));
     expect(screen.getAllByLabelText("Позиция")).toHaveLength(2);
     expect(screen.getAllByLabelText("Позиция")[1]).toHaveValue("");
     await user.type(screen.getAllByLabelText("Позиция")[1]!, "Новая деталь");
@@ -49,6 +50,7 @@ describe("workspace settings", () => {
       </ApplicationGatewayProvider>,
     );
     await screen.findByText("Ежедневное движение и остатки");
+    await user.click(screen.getByRole("button", { name: "Администратор" }));
     await user.click(screen.getByRole("button", { name: "Настроить рабочее поле" }));
     const input = await screen.findByPlaceholderText("Введите наименование");
     await user.type(input, "Дочернее общество 2");

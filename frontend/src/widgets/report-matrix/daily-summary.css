@@ -1,0 +1,9 @@
+.daily-monthly-summary { margin-top: 1.5rem; }
+.daily-monthly-summary h3 { margin-bottom: .5rem; }
+.daily-monthly-summary p { max-width: 80ch; }
+.daily-summary-scroll { overflow-x: auto; }
+.daily-monthly-summary table { border-collapse: collapse; width: 100%; }
+.daily-monthly-summary th, .daily-monthly-summary td { border: 1px solid #9aabbb; padding: .5rem .65rem; min-width: 7rem; }
+.daily-monthly-summary th { background: #e8eef5; }
+.daily-monthly-summary td { text-align: right; font-variant-numeric: tabular-nums; }
+.daily-monthly-summary tfoot { font-weight: 700; }

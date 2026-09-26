@@ -8,6 +8,11 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from backend.application.report_calendar import reporting_weeks
+from backend.domain.calculations import (
+    calculate_required_quantity,
+    subtract_quantities,
+    sum_quantities,
+)
 
 
 def quantity(value: object) -> str:
@@ -31,7 +36,12 @@ def quantity(value: object) -> str:
 
 
 def validate_detail(raw: object) -> dict[str, Any]:
-    if not isinstance(raw, dict) or raw.keys() - {"number", "designation", "suppliers"}:
+    if not isinstance(raw, dict) or raw.keys() - {
+        "number",
+        "designation",
+        "suppliers",
+        "weekly_supply",
+    }:
         raise ValueError("Неверная структура детали")
     result: dict[str, Any] = {}
     for key in ("number", "designation"):
@@ -75,6 +85,10 @@ def validate_detail(raw: object) -> dict[str, Any]:
             }
         )
     result["suppliers"] = normalized
+    if "weekly_supply" in raw:
+        if not isinstance(raw["weekly_supply"], bool):
+            raise ValueError("Неверный режим недельных поставок")
+        result["weekly_supply"] = raw["weekly_supply"]
     return result
 
 
@@ -106,6 +120,7 @@ def build_rows(
     plans: dict[str, str],
 ) -> dict[str, Any]:
     columns = []
+    weekly_columns = any(c.get("subsidiary", {}).get("weekly_supply", False) for _, c in groups)
     for month in range(1, 13):
         period = f"{year:04d}-{month:02d}"
         for key, label in [
@@ -124,10 +139,24 @@ def build_rows(
                 }
             )
         for week in reporting_weeks(year, month):
+            if weekly_columns:
+                columns.append(
+                    {
+                        "id": week.start.isoformat() + "-SUPPLIED",
+                        "label": "Поставлено " + week.label,
+                        "group_label": period,
+                        "width": 100,
+                        "kind": "SUPPLIED",
+                        "period_start": week.start.isoformat(),
+                        "period_end": week.end.isoformat(),
+                    }
+                )
             columns.append(
                 {
                     "id": week.start.isoformat(),
-                    "label": week.label,
+                    "label": ("Расход " if weekly_columns else "") + week.label,
+                    "period_start": week.start.isoformat(),
+                    "period_end": week.end.isoformat(),
                     "group_label": period,
                     "width": 64,
                     "kind": "USED",
@@ -136,6 +165,7 @@ def build_rows(
     rows = []
     for group, config in groups:
         detail = config.get("subsidiary", default_detail(group.party_name))
+        weekly_supply = detail.get("weekly_supply", False)
         suppliers = sorted(detail["suppliers"], key=lambda item: item["archived"])
         if not suppliers:
             continue
@@ -171,7 +201,13 @@ def build_rows(
             weeks = reporting_weeks(year, month)
             opening = read(group, "SUB_OPENING", day, period + "-OPENING", True)
             receipts = [
-                read(group, "SUB_RECEIVED_" + s["id"], day, period + "-RECEIVED", not s["archived"])
+                read(
+                    group,
+                    "SUB_RECEIVED_" + s["id"],
+                    day,
+                    period + "-RECEIVED",
+                    not s["archived"] and not weekly_supply,
+                )
                 for s in suppliers
             ]
             used = [
@@ -187,6 +223,34 @@ def build_rows(
                 ]
                 for s in suppliers
             ]
+            supplied = (
+                [
+                    [
+                        read(
+                            group,
+                            "SUB_SUPPLIED_" + s["id"],
+                            w.start.isoformat(),
+                            w.start.isoformat() + "-SUPPLIED",
+                            weekly_supply and not s["archived"],
+                        )
+                        for w in weeks
+                    ]
+                    for s in suppliers
+                ]
+                if weekly_columns
+                else []
+            )
+            if weekly_supply:
+                for i, receipt in enumerate(receipts):
+                    values = [number(c) for c in supplied[i]]
+                    receipt["value"] = result_value(
+                        sum_quantities(v for v in values if v is not None)
+                        if all(v is not None for v in values)
+                        else None
+                    )
+                    receipt["formula"] = (
+                        "Сумма подтверждённых недельных поставок; пустота не равна нулю"
+                    )
             opening_value = number(opening)
             incoming = [
                 number(c)
@@ -197,7 +261,7 @@ def build_rows(
             available = (
                 None
                 if opening_value is None or any(v is None for v in incoming)
-                else opening_value + sum((v for v in incoming if v is not None), Decimal(0))
+                else sum_quantities((v for v in incoming if v is not None), opening_value)
             )
             missing = []
             if opening_value is None:
@@ -210,17 +274,42 @@ def build_rows(
             variance = (
                 None
                 if available is None or not plan or not norm
-                else available - Decimal(plan) * Decimal(norm)
+                else subtract_quantities(
+                    available, calculate_required_quantity(Decimal(plan), Decimal(norm), Decimal(0))
+                )
             )
             accumulated = Decimal(0)
             balances = {}
             for index, week in enumerate(weeks):
                 # As in the approved worksheet: total of recorded consumption.
-                accumulated += sum(
-                    (number(items[index]) or Decimal(0) for items in used), Decimal(0)
+                accumulated = sum_quantities(
+                    (number(items[index]) or Decimal(0) for items in used), accumulated
                 )
+                week_available = available
+                if weekly_supply:
+                    upto = [
+                        number(c)
+                        for i, items in enumerate(supplied)
+                        for c in items[: index + 1]
+                        if not suppliers[i]["archived"] or number(c) is not None
+                    ]
+                    consumed = [
+                        number(c)
+                        for i, items in enumerate(used)
+                        for c in items[: index + 1]
+                        if not suppliers[i]["archived"] or number(c) is not None
+                    ]
+                    week_available = (
+                        sum_quantities((v for v in upto if v is not None), opening_value)
+                        if opening_value is not None
+                        and all(v is not None for v in upto)
+                        and all(v is not None for v in consumed)
+                        else None
+                    )
                 balances[week.start.isoformat()] = result_value(
-                    None if available is None else available - accumulated
+                    None
+                    if week_available is None
+                    else subtract_quantities(week_available, accumulated)
                 )
             for index, row in enumerate(supplier_rows):
                 common = index == next((i for i, s in enumerate(suppliers) if not s["archived"]), 0)
@@ -273,7 +362,16 @@ def build_rows(
                                 + "; ".join(fields)
                                 + ". Если поступлений не было, введите 0.",
                             }
-                row["cells"].extend([opening_cell, receipts[index], stock, delta, *used[index]])
+                week_cells = (
+                    [
+                        cell
+                        for pair in zip(supplied[index], used[index], strict=True)
+                        for cell in pair
+                    ]
+                    if weekly_columns
+                    else used[index]
+                )
+                row["cells"].extend([opening_cell, receipts[index], stock, delta, *week_cells])
                 if common:
                     row["stock_by_week"].update(balances)
         # Archived suppliers without facts in this year need no visible row.
@@ -284,6 +382,7 @@ def build_rows(
                 if c["coordinate"]["metric_code"] == "SUB_OPENING"
                 or "SUB_RECEIVED_" in c["coordinate"]["metric_code"]
                 or "SUB_USED_" in c["coordinate"]["metric_code"]
+                or "SUB_SUPPLIED_" in c["coordinate"]["metric_code"]
             ):
                 rows.append(row)
     return {

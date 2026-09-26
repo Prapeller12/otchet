@@ -6,6 +6,7 @@ import type { ApplicationGateway, ReportMatrixContract, SaveReportPresentationRe
 import type { ReportCellCoordinate } from "../../src/shared/api/report-cell-contract";
 import { createDemoMatrix, DemoGateway } from "../../src/shared/api/demo-gateway";
 import { ReportMatrix } from "../../src/widgets/report-matrix/ReportMatrix";
+import { sourceMatrix } from "../fixtures/source-matrix";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -26,37 +27,39 @@ function show(gateway: ApplicationGateway, initial = calendar()) {
   let latest = initial;
   function Workspace() {
     const [matrix, setMatrix] = useState(initial);
-    return <ReportMatrix gateway={gateway} matrix={matrix} onChange={(next) => { latest = next; setMatrix(next); }} onStatusChange={vi.fn()} />;
+    return <ReportMatrix workspaceMode="admin" gateway={gateway} matrix={matrix} onChange={(next) => { latest = next; setMatrix(next); }} onStatusChange={vi.fn()} />;
   }
   render(<Workspace />);
   return () => latest;
 }
 
-it("expands months independently, skips hidden dates and keeps unsaved values", async () => {
+it("shows only the selected daily month and keeps drafts while switching months", async () => {
   const latest = show(new DemoGateway());
   const user = userEvent.setup();
-  const january = screen.getByRole("button", { name: "▾ январь", expanded: true });
-  expect(january).toBeVisible();
+  const month = screen.getByRole("combobox", { name: "Месяц отчёта" });
+  expect(month).toHaveValue("2026-01");
+  expect(screen.queryByText("Показать несколько месяцев")).toBeNull();
   expect(screen.getAllByRole("cell")).toHaveLength(3);
   await user.dblClick(screen.getAllByRole("button", { name: /доступна для ввода/ })[0]!);
   await user.type(screen.getByRole("textbox"), "20{Enter}");
-  await user.click(screen.getByRole("button", { name: "▸ февраль" }));
-  expect(screen.getAllByRole("cell")).toHaveLength(6);
-  await user.click(january);
+  await user.selectOptions(month, "2026-02");
   expect(screen.getAllByRole("cell")).toHaveLength(3);
+  expect(screen.queryByRole("button", { name: "значение 20, доступна для ввода" })).toBeNull();
   expect(latest().rows[0]!.cells[0]!.value).toEqual({ kind: "QUANTITY", quantity: "20" });
-  await user.click(screen.getByRole("button", { name: "▸ январь" }));
+  await user.selectOptions(month, "2026-01");
   expect(screen.getByRole("button", { name: "значение 20, доступна для ввода" })).toBeVisible();
   expect(screen.getByRole("button", { name: "Сохранить (1)" })).toBeEnabled();
-  await user.click(screen.getByRole("button", { name: "Свернуть все" }));
-  expect(screen.queryAllByRole("cell")).toHaveLength(0);
-  await user.click(screen.getByRole("button", { name: "Раскрыть все" }));
-  expect(screen.getAllByRole("cell")).toHaveLength(6);
+  expect(screen.getAllByRole("cell")).toHaveLength(3);
+  expect(screen.queryByRole("button", { name: "Раскрыть все" })).toBeNull();
 });
 
 it("renames the heading, saves resize gestures and removes the technical banner", async () => {
-  const save = vi.fn(async (request: SaveReportPresentationRequest) => request);
-  const gateway = Object.assign(new DemoGateway(), { saveReportPresentation: save });
+  let stored = calendar();
+  const save = vi.fn(async (request: SaveReportPresentationRequest) => {
+    if (request.title) stored = { ...stored, title: request.title, matrix_revision: "renamed-revision" };
+    return request;
+  });
+  const gateway = Object.assign(new DemoGateway(), { saveReportPresentation: save, getReportMatrix: vi.fn(async () => stored) });
   show(gateway);
   const user = userEvent.setup();
   expect(screen.queryByRole("note")).toBeNull();
@@ -115,28 +118,20 @@ it("requests backend draft calculation before save and retains both dirty inputs
   expect(save).not.toHaveBeenCalled();
 });
 
-it("merges subsidiary totals and navigates between visible detail cells", async () => {
-  const initial = calendar();
-  initial.subsidiary = true;
-  initial.presentation = { plans: {} };
-  initial.time_columns[0]!.kind = "STOCK";
-  initial.time_columns[1]!.kind = "USED";
-  initial.time_columns[1]!.group_label = "2026-01";
-  initial.rows = initial.rows.map((row, index) => ({
-    ...row, group_id: index < 2 ? "detail-a" : "detail-b",
-    cells: row.cells.map((cell, column) => ({
-      ...cell,
-      state: { access: column === 0 ? "calculated" : "editable", persistence: "saved" },
-      value: { kind: "QUANTITY", quantity: String(index === 0 ? 120 : index === 1 ? 999 : 77) },
-    })),
-  }));
+it("merges source totals and navigates between shared editable opening balances", async () => {
+  const initial = sourceMatrix();
   show(new DemoGateway(), initial);
   const shared = document.querySelectorAll('td[data-shared="detail"]');
-  expect(shared).toHaveLength(2);
+  // Main table: stock + variance per detail; separate input table: opening per detail.
+  expect(shared).toHaveLength(6);
   expect(shared[0]).toHaveAttribute("rowspan", "2");
-  expect(screen.queryByRole("button", { name: "значение 999, расчётная ячейка" })).toBeNull();
-  const first = screen.getByRole("button", { name: "значение 120, расчётная ячейка" });
-  const next = screen.getByRole("button", { name: "значение 77, расчётная ячейка" });
+  const main = screen.getByRole("table", { name: initial.title });
+  expect(main.querySelectorAll('td[data-shared="detail"]')).toHaveLength(4);
+  expect(within(main).queryByRole("button", { name: /расчётная ячейка/ })).toBeNull();
+  const auxiliary = screen.getByRole("table", { name: "Данные для расчёта" });
+  expect(within(auxiliary).queryByRole("button", { name: "значение 999, доступна для ввода" })).toBeNull();
+  const first = within(auxiliary).getByRole("button", { name: "значение 120, доступна для ввода" });
+  const next = within(auxiliary).getByRole("button", { name: "значение 77, доступна для ввода" });
   fireEvent.keyDown(first, { key: "ArrowDown" });
   expect(next).toHaveFocus();
   fireEvent.keyDown(next, { key: "ArrowUp" });

@@ -64,7 +64,10 @@ def test_snapshot_values_and_verification_lifecycle(
     status = data(app.get_report_verification(query))
     request = {
         **query,
-        "signer_name": "Иванов Иван",
+        "signer_id": data(
+            app.create_report_signer({"display_name": "Иванов Иван", "pin": "test-pin"})
+        )["id"],
+        "pin": "test-pin",
         "confirmed": True,
         "snapshot_sha256": status["snapshot_sha256"],
     }
@@ -125,6 +128,12 @@ def test_verification_migration_from_dev7(tmp_path: Path) -> None:
             "0009",
             "0010",
             "0011",
+            "0012",
+            "0013",
+            "0014",
+            "0015",
+            "0016",
+            "0017",
         )
         assert apply_migrations(connection, ROOT / "backend/migrations") == ()
     finally:

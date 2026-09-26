@@ -66,7 +66,10 @@ $backendManifest = @{
 Set-Content (Join-Path $stage "app\backend\backend-manifest.json") $backendManifest -Encoding utf8
 Copy-Item $frontendRoot (Join-Path $stage "app\frontend") -Recurse
 Copy-Item (Join-Path $repositoryRoot "backend\migrations") (Join-Path $stage "app\migrations") -Recurse
-Copy-Item (Join-Path $repositoryRoot "config") (Join-Path $stage "config") -Recurse
+New-Item (Join-Path $stage "config") -ItemType Directory -Force | Out-Null
+Get-ChildItem (Join-Path $repositoryRoot "config") -Force |
+    Where-Object { $_.Name -notin @("app.local.toml", "ui-preferences.json") -and $_.Name -notlike ".ui-preferences-*.tmp" } |
+    Copy-Item -Destination (Join-Path $stage "config") -Recurse
 if ($EvergreenTestBuild) {
     Set-Content (Join-Path $stage "config\app.local.toml") "[webview2]`nruntime_mode = `"evergreen`"" -Encoding utf8
 }
@@ -84,7 +87,7 @@ foreach ($relative in @("data", "attachments", "imports\inbox", "exports", "back
 
 & $PythonExe (Join-Path $PSScriptRoot "release_manifest.py") create $stage --version $version
 if ($LASTEXITCODE -ne 0) { throw "Could not create release manifest." }
-& $PythonExe (Join-Path $PSScriptRoot "verify_release.py") $stage
+& $PythonExe (Join-Path $PSScriptRoot "verify_release.py") $stage --pristine
 if ($LASTEXITCODE -ne 0) { throw "Staged portable release failed verification." }
 
 $suffix = if ($EvergreenTestBuild) { "-test" } else { "" }

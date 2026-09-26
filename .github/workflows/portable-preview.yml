@@ -4,6 +4,15 @@ on:
   push:
     branches:
       - codex/portable-mvp
+      - codex/cryptographic-report-verification
+      - codex/reference-audit-dev23
+      - codex/compact-head-header-dev25
+      - codex/roles-and-simple-workspace-dev26
+      - codex/report-workflow-dev27
+      - codex/reference-frontend-dev29
+      - codex/dev30-startup-cell-guidance
+      - codex/dev32-hints-toggle
+      - codex/dev33-recovery-excel-integration
   workflow_dispatch:
 
 permissions:
@@ -18,6 +27,10 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+
+      - name: Prepare 1920x1080 desktop for native window evidence
+        shell: pwsh
+        run: ./scripts/set_ci_display.ps1 -Width 1920 -Height 1080
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
@@ -91,6 +104,24 @@ jobs:
           }
           if ((Get-Content $report -Raw).Trim() -ne "ok") { throw "UI test failed." }
 
+      - name: Reopen saved database in a new process without a personal code
+        shell: pwsh
+        run: |
+          $app = Join-Path $env:RUNNER_TEMP "Ручной тест отчётности/ReportingSystem"
+          $report = Join-Path $app "temp/reopen-result.txt"
+          $process = Start-Process -FilePath (Join-Path $app "ReportingSystem.exe") `
+            -ArgumentList @("--ui-reopen-test", "--self-test-report", "`"$report`"") -PassThru
+          if (-not $process.WaitForExit(120000)) {
+            Stop-Process -Id $process.Id -Force
+            throw "Automatic reopen timed out."
+          }
+          Copy-Item (Join-Path $app "temp/window-*.png") ./dist/portable -ErrorAction SilentlyContinue
+          if ($process.ExitCode -ne 0 -or -not (Test-Path $report)) {
+            if (Test-Path $report) { Get-Content $report }
+            throw "Automatic reopen failed."
+          }
+          if ((Get-Content $report -Raw).Trim() -ne "ok") { throw "Reopen test failed." }
+
       - name: Upload window evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -130,5 +161,5 @@ jobs:
               --target $env:GITHUB_SHA `
               --prerelease `
               --title "Reporting System $version test build" `
-              --notes "Windows x64 alpha. Import supplied monthly and weekly Excel forms with preview, stored workbooks, input editing and formula recalculation. See docs/test-cases/alpha-dev11.md. Read TESTING.txt, extract and run start.cmd. WebView2 Fixed Runtime included; real-window startup test required. Windows 10 ACL limitations: docs/decisions/ADR-0001-webview2-fixed-runtime-windows10-acl.md."
+              --notes-file docs/release/notes-dev33.md
           }

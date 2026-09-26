@@ -1,0 +1,30 @@
+{
+  "baseline_commit": "35e4e6968917b3df5d5de59705caa116620be3bf",
+  "policy": "Exact SHA-256 equality required; do not change PDF typefaces, sizes, weights or generator code for this screen-only task.",
+  "files": [
+    {
+      "path": "backend/infrastructure/monthly_pdf.py",
+      "sha256": "df3a642a19d93cda73da90b8552be6d992074642eb3f4fdb9c44b3d821272581"
+    },
+    {
+      "path": "backend/infrastructure/subsidiary_pdf.py",
+      "sha256": "f9fec339121d733ca127f160f7fe6725204705bbe1da4d144ca06cf56dfe55a2"
+    },
+    {
+      "path": "resources/fonts/ReportingSans.ttf",
+      "sha256": "573043b6f5dd87699677005ee35e616fde561f04667ad728a4faa21f9f6c62cb"
+    },
+    {
+      "path": "resources/fonts/ReportingSansBold.ttf",
+      "sha256": "f7d3af66c8bf3640ba2128fb08cde10f956135c28cb3489daafbaa1156af71fe"
+    },
+    {
+      "path": "resources/fonts/ReportingSerif.ttf",
+      "sha256": "0cf2aa48aa9803720c5381249acfd327046a8fa940ba5cd40d9692e616e35d40"
+    },
+    {
+      "path": "backend/application/report_signature_caption.py",
+      "sha256": "af4aa50ccc370df7f14a696e499045f25d93d4fdc9fbed82ace1b115480a9707"
+    }
+  ]
+}

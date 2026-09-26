@@ -1,6 +1,8 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
 
 import type { MatrixCellContract } from "../../shared/api/application-gateway";
+import { useFieldHint } from "../../shared/ui/FieldHint";
+import { reportCellHint } from "../../shared/config/report-field-hints";
 import { displayValue, isConfirmedZero } from "./cell-value";
 import type { MatrixPosition } from "./matrix-navigation";
 
@@ -8,6 +10,7 @@ type ReportCellViewProps = {
   cell: MatrixCellContract;
   position: MatrixPosition;
   active: boolean;
+  hint?: string | undefined;
   onActivate(position: MatrixPosition): void;
   onEdit(position: MatrixPosition): void;
   onKeyDown(event: KeyboardEvent<HTMLButtonElement>, position: MatrixPosition): void;
@@ -28,14 +31,28 @@ export function ReportCellView({
   cell,
   position,
   active,
+  hint,
   onActivate,
   onEdit,
   onKeyDown,
 }: ReportCellViewProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const help = useFieldHint(hint ?? reportCellHint(cell));
 
   useEffect(() => {
-    if (active) buttonRef.current?.focus({ preventScroll: true });
+    if (!active || !buttonRef.current) return;
+    const button = buttonRef.current;
+    button.focus({ preventScroll: true });
+    const viewport = button.closest<HTMLElement>(".matrix-scroll");
+    if (!viewport) return;
+    const bounds = viewport.getBoundingClientRect();
+    const cell = button.getBoundingClientRect();
+    const frozenRight = Math.max(bounds.left, ...Array.from(viewport.querySelectorAll("thead .sticky-left")).map(header => header.getBoundingClientRect().right));
+    const headerBottom = viewport.querySelector("thead")?.getBoundingClientRect().bottom ?? bounds.top;
+    if (cell.right > bounds.right) viewport.scrollLeft += cell.right - bounds.right;
+    else if (cell.left < frozenRight) viewport.scrollLeft -= frozenRight - cell.left;
+    if (cell.bottom > bounds.bottom) viewport.scrollTop += cell.bottom - bounds.bottom;
+    else if (cell.top < headerBottom) viewport.scrollTop -= headerBottom - cell.top;
   }, [active]);
 
   const classNames = [
@@ -50,7 +67,7 @@ export function ReportCellView({
   const issueText = cell.issue === undefined ? "" : `, ошибка: ${cell.issue.message}`;
 
   return (
-    <button
+    <><button
       ref={buttonRef}
       type="button"
       className={classNames}
@@ -58,12 +75,12 @@ export function ReportCellView({
       aria-readonly={cell.state.access !== "editable"}
       aria-invalid={cell.state.persistence === "error"}
       aria-label={`${valueText(cell)}, ${accessText(cell)}${issueText}`}
-      title={cell.issue?.message ?? cell.formula ?? cell.lock_reason}
+      {...help.hintProps}
       onClick={() => onActivate(position)}
       onDoubleClick={() => {
         if (cell.state.access === "editable") onEdit(position);
       }}
-      onKeyDown={(event) => onKeyDown(event, position)}
+      onKeyDown={(event) => { help.hintProps.onKeyDown(event); onKeyDown(event, position); }}
     >
       <span className="cell-value">{cell.issue?.code === "MISSING_INPUT" ? "Заполните" : displayValue(cell.value)}</span>
       <span className="cell-markers" aria-hidden="true">
@@ -80,6 +97,6 @@ export function ReportCellView({
           <span className="cell-marker marker-saving">…</span>
         )}
       </span>
-    </button>
+    </button>{help.hint}</>
   );
 }

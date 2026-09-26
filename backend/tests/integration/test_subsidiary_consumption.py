@@ -157,7 +157,10 @@ def test_multiple_suppliers_consumption_and_monthly_variance(tmp_path: Path) -> 
                 **QUERY,
                 "month": 9,
                 "week_start": "2026-09-07",
-                "signer_name": "Проверка",
+                "signer_id": data(
+                    app.create_report_signer({"display_name": "Проверка", "pin": "test-pin"})
+                )["id"],
+                "pin": "test-pin",
                 "confirmed": True,
                 "snapshot_sha256": status["snapshot_sha256"],
             }
@@ -172,7 +175,7 @@ def test_multiple_suppliers_consumption_and_monthly_variance(tmp_path: Path) -> 
     font = ROOT / "resources/fonts/DejaVuSerif.ttf"
     if not font.exists():
         font = next((ROOT / "resources").rglob("*.ttf"))
-    pdf = render_monthly_pdf(snapshot, {"status": "UNVERIFIED"}, font)
+    pdf = render_monthly_pdf(snapshot, {"status": "UNVERIFIED", "snapshot_sha256": "0" * 64}, font)
     assert pdf.startswith(b"%PDF-")
     (tmp_path / "subsidiary.pdf").write_bytes(pdf)
 
@@ -337,7 +340,8 @@ def test_export_opens_visible_month_and_keeps_values_and_import_map(tmp_path: Pa
     assert sheet.cell(7, first + 2).value == 940
     assert sheet.cell(7, first + 3).value == -2400
     assert f"{letter}7:{letter}8" in sheet.merged_cells
-    assert workbook["Месячные планы"]["B2"].value == 1000
+    assert workbook["Месячные планы"]["A10"].value == "2026-09"
+    assert workbook["Месячные планы"]["B10"].value == 1000
     assert workbook["_Системная карта"].max_row > 100
 
 
@@ -350,7 +354,10 @@ def test_actual_production_progress_persists_and_invalidates_verification(tmp_pa
             {
                 **QUERY,
                 "month": 9,
-                "signer_name": "Тест",
+                "signer_id": data(
+                    app.create_report_signer({"display_name": "Тест", "pin": "test-pin"})
+                )["id"],
+                "pin": "test-pin",
                 "confirmed": True,
                 "snapshot_sha256": status["snapshot_sha256"],
             }

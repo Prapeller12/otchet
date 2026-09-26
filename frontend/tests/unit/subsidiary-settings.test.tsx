@@ -14,7 +14,7 @@ it("adds and archives a manufacturer without duplicating or deleting the detail"
     return <SubsidiaryDetailEditor row={row} onBusy={vi.fn()} onChange={setRow} onRemove={remove} onMove={vi.fn()} disabled={false} />;
   }
   render(<Harness />);
-  await user.click(screen.getByRole("button", { name: "+ Добавить производителя" }));
+  await user.click(screen.getByRole("button", { name: "Добавить производителя" }));
   expect(screen.getAllByLabelText("Производитель")).toHaveLength(2);
   const added = screen.getAllByLabelText("Производитель")[1]!;
   expect(added).toHaveValue("");
@@ -22,7 +22,7 @@ it("adds and archives a manufacturer without duplicating or deleting the detail"
   await user.type(added, "АО Завод");
   expect(added).toHaveValue("АО Завод");
   expect(screen.getAllByLabelText("Наименование")).toHaveLength(1);
-  await user.click(screen.getByRole("button", { name: "+ Добавить производителя" }));
+  await user.click(screen.getByRole("button", { name: "Добавить производителя" }));
   await user.click(screen.getAllByRole("button", { name: "Убрать производителя" })[2]!);
   expect(screen.getAllByLabelText("Производитель")).toHaveLength(2);
   await user.click(screen.getAllByRole("button", { name: "Убрать производителя" })[0]!);
@@ -32,7 +32,7 @@ it("adds and archives a manufacturer without duplicating or deleting the detail"
   expect(screen.getAllByRole("button", { name: "Убрать производителя" })).toHaveLength(2);
 });
 
-it("automatically saves the monthly plan on blur without technical labels", async () => {
+it("requires explicit plan save and offers the selected stock week", async () => {
   const user = userEvent.setup(); const change = vi.fn(); const week = vi.fn(); const busy = vi.fn();
   const matrix: ReportMatrixContract = { title: "Дочерние общества", subtitle: "", source_notice: "", form_status: "WORKING_REFERENCE", left_columns: [], rows: [], capabilities: { save: {enabled: true}, import: {enabled: true}, export: {enabled: true} }, navigation: {enter_direction: "down"}, report_type: "SUBSIDIARY", organization_id: "1", year: 2026, matrix_revision: "r1", presentation: { plans: { "2026-08": "500" } }, time_columns: [{ id: "2026-09-01", group_label: "2026-09", kind: "USED", width: 64, label: "01–06" }, { id: "2026-09-28", group_label: "2026-09", kind: "USED", width: 64, label: "28–30" }] };
   const save = vi.fn().mockResolvedValue({});
@@ -40,8 +40,40 @@ it("automatically saves the monthly plan on blur without technical labels", asyn
   render(<SubsidiaryControls matrix={matrix} gateway={gateway} blocked={false} month="2026-09" onMonth={vi.fn()} week="" onWeek={week} onChange={change} onBusy={busy} />);
   await user.type(screen.getByLabelText("План выпуска, шт."), "1000");
   await user.tab();
+  expect(save).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("Месяц")).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "Сохранить план и выпуск" }));
   await waitFor(() => expect(change).toHaveBeenCalledWith(matrix));
-  expect(save).toHaveBeenCalledWith(expect.objectContaining({ expected_revision: "r1", plans: { "2026-08": "500", "2026-09": "1000" } }));
+  expect(save).toHaveBeenCalledWith(expect.objectContaining({ expected_revision: "r1", plans: { "2026-09": "1000" } }));
   expect(screen.queryByText(/C6/)).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("Остаток на конец недели")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Отменить изменения плана" }));
+  await user.selectOptions(screen.getByLabelText("Остаток на конец недели"), "2026-09-01");
+  expect(week).toHaveBeenCalledWith("2026-09-01");
+});
+
+it("preserves failed plan drafts, reports dirty state and cancels without writing", async () => {
+  const user = userEvent.setup();
+  const dirty = vi.fn();
+  const save = vi.fn().mockRejectedValue(new Error("Сбой сохранения"));
+  const matrix = { report_type: "SUBSIDIARY", organization_id: "1", matrix_revision: "r1", year: 2026, presentation: { plans: { "2026-09": "5" }, actuals: { "2026-09": "0" } }, time_columns: [] } as unknown as ReportMatrixContract;
+  const gateway = { saveReportPresentation: save } as unknown as ApplicationGateway;
+  render(<SubsidiaryControls matrix={matrix} gateway={gateway} blocked={false} month="2026-09" onMonth={vi.fn()} week="" onWeek={vi.fn()} onChange={vi.fn()} onBusy={vi.fn()} onDirtyChange={dirty} />);
+  await user.clear(screen.getByLabelText("План выпуска, шт."));
+  await user.type(screen.getByLabelText("План выпуска, шт."), "20");
+  expect(dirty).toHaveBeenLastCalledWith(true);
+  await user.click(screen.getByRole("button", { name: "Сохранить план и выпуск" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Сбой сохранения");
+  expect(screen.getByLabelText("План выпуска, шт.")).toHaveValue("20");
+  await user.click(screen.getByRole("button", { name: "Отменить изменения плана" }));
+  expect(screen.getByLabelText("План выпуска, шт.")).toHaveValue("5");
+  expect(dirty).toHaveBeenLastCalledWith(false);
+  expect(save).toHaveBeenCalledTimes(1);
+});
+
+it("makes only months covered by production codes readonly", () => {
+  const matrix = { head_site: true, report_type: "HEAD_SITE", presentation: { plans: { "2026-09": "12" }, production_codes: [{ id: "A", label: "Код", plans: { "2026-09": "12" }, actuals: {} }] }, time_columns: [] } as unknown as ReportMatrixContract;
+  render(<SubsidiaryControls matrix={matrix} gateway={{} as ApplicationGateway} blocked={false} month="2026-09" onMonth={vi.fn()} week="" onWeek={vi.fn()} onChange={vi.fn()} onBusy={vi.fn()} />);
+  expect(screen.getByLabelText(/План готовых изделий, шт./)).toHaveAttribute("readonly");
+  expect(screen.getByLabelText(/Выпущено готовых изделий, шт./)).not.toHaveAttribute("readonly");
+  expect(screen.getByText(/Из кодов выпуска/)).toBeVisible();
 });

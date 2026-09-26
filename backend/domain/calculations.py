@@ -107,6 +107,23 @@ class StockOperation:
         return effect.copy_negate() if self.is_reversal else effect
 
 
+def sum_quantities(values: Iterable[Decimal], start: Decimal = Decimal("0")) -> Decimal:
+    """Sum accepted exact quantities without ambient Decimal-context rounding."""
+    _require_decimal("start", start)
+    result = start
+    for value in values:
+        _require_decimal("quantity", value)
+        result = _add_exact(result, value)
+    return result
+
+
+def subtract_quantities(left: Decimal, right: Decimal) -> Decimal:
+    """Subtract accepted exact quantities without ambient-context rounding."""
+    _require_decimal("left", left)
+    _require_decimal("right", right)
+    return _subtract_exact(left, right)
+
+
 def calculate_stock(
     opening_balance: Decimal,
     operations: Iterable[StockOperation],

@@ -1,3 +1,5 @@
+/* Preserved dev.28 presentation, print only. Screen theme lives in reference-theme.css. */
+@media print {
 /* Presentation only: compact workspace shell, registry table and light dialogs. */
 body { min-width: 720px; font-family: var(--pk-font); font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 button, input, select, summary { transition: background 120ms, border-color 120ms; }
@@ -134,7 +136,8 @@ main { min-width: 0; padding: 12px 12px 16px; }
 .monthly-report-actions select { min-height: 40px; padding: 6px; margin-left: 8px; }
 .monthly-report-actions p { margin: 0; }
 .verification-form label { display: block; margin: 12px 0; }
-.verification-form input[type="text"] { width: 100%; min-height: 44px; padding: 8px; }
+.verification-form select { margin-left: 0; }
+.verification-form input[type="text"], .verification-form input[type="password"], .verification-form select { width: 100%; min-height: 44px; padding: 8px; }
 
 /* Subsidiary worksheet: fixed typography and one vertical settings flow. */
 .subsidiary-detail-editor.layout-row-editor { display: block; }
@@ -185,3 +188,5 @@ main { padding: 14px 16px 28px; }
 .layout-row-editor { border: 1px solid var(--pk-border); border-radius: 8px; }
 .organization-settings input, .organization-settings select, .layout-settings input, .layout-settings select { border-radius: 5px; color: var(--pk-text); background: white; }
 .position-category { background: #eef2f4; color: #46515b; }
+
+}

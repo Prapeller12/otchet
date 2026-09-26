@@ -17,13 +17,12 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from backend.api.working_reference_bridge import WorkingReferenceApplicationBridge
+from backend.api.secure_desktop_bridge import SecureDesktopBridge
 from backend.desktop.application_self_test import (
     prepare_reference_window_test,
     prepare_subsidiary_window_test,
     run_application_self_test,
 )
-from backend.desktop.database_bootstrap import backup_and_migrate
 from backend.desktop.instance_lock import AlreadyRunningError, SingleInstanceLock
 from backend.desktop.paths import PortableLayoutError, PortablePaths
 from backend.desktop.window_health import monitor_window
@@ -69,24 +68,37 @@ def _self_test(paths: PortablePaths) -> None:
         )
 
 
-def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
+def _run_window(
+    paths: PortablePaths, *, ui_self_test: bool = False, ui_reopen_test: bool = False
+) -> None:
     # Windows registry MIME associations must not turn JS modules into text/plain.
     mimetypes.init()
     mimetypes.add_type("application/javascript", ".js")
     mimetypes.add_type("text/css", ".css")
     webview: Any = importlib.import_module("webview")
-    bridge = WorkingReferenceApplicationBridge(
-        paths.database,
-        migrations_directory=paths.migrations,
-        definitions_directory=paths.resources / "report-definitions",
-        inbox_directory=paths.imports_inbox,
-        backups_directory=paths.backups,
-        application_version=_version(paths),
-    )
+
+    def new_bridge() -> SecureDesktopBridge:
+        return SecureDesktopBridge(
+            paths.database,
+            migrations_directory=paths.migrations,
+            definitions_directory=paths.resources / "report-definitions",
+            inbox_directory=paths.imports_inbox,
+            backups_directory=paths.backups,
+            application_version=_version(paths),
+            preferences_path=paths.config / "ui-preferences.json",
+        )
+
+    bridge = new_bridge()
 
     if ui_self_test:
+        setup = bridge.setup_access({"display_name": "Контроль окна", "pin": "window-test-pin"})
+        if not setup["ok"] or bridge._application is None:
+            raise RuntimeError("Не удалось подготовить защищённую проверку окна")
         prepare_reference_window_test(paths.database, paths.temp)
-        prepare_subsidiary_window_test(bridge)
+        prepare_subsidiary_window_test(bridge._application)
+        bridge._lock()
+        # A distinct instance proves automatic reopen, rather than setup identity reuse.
+        bridge = new_bridge()
 
     webview.settings["ALLOW_DOWNLOADS"] = False
     webview.settings["ALLOW_FILE_URLS"] = False
@@ -136,6 +148,8 @@ def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
         return Path(selected[0]) if selected else None
 
     def save_pdf_file(suggested_name: str) -> Path | None:
+        if ui_self_test:
+            return paths.temp / suggested_name
         selected = window.create_file_dialog(
             webview.FileDialog.SAVE,
             directory=str(paths.exports),
@@ -146,15 +160,32 @@ def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
             return None
         return Path(selected) if isinstance(selected, (str, Path)) else Path(selected[0])
 
-    bridge.configure_pdf_dialog(save_pdf_file)
-    bridge.configure_excel_dialogs(
+    def select_recovery_parent() -> Path | None:
+        selected = window.create_file_dialog(
+            webview.FileDialog.FOLDER,
+            directory=str(paths.root),
+            allow_multiple=False,
+        )
+        if not selected:
+            return None
+        return Path(selected) if isinstance(selected, (str, Path)) else Path(selected[0])
+
+    bridge._configure_recovery_dialog(select_recovery_parent)
+    bridge._configure_pdf_dialog(save_pdf_file)
+    bridge._configure_excel_dialogs(
         open_file=open_excel_file,
         save_file=save_excel_file,
     )
     failures: list[str] = []
 
     def check_window() -> None:
-        monitor_window(window, paths, ui_self_test=ui_self_test, failures=failures)
+        monitor_window(
+            window,
+            paths,
+            ui_self_test=ui_self_test,
+            ui_reopen_test=ui_reopen_test,
+            failures=failures,
+        )
 
     webview.start(
         check_window,
@@ -165,6 +196,7 @@ def _run_window(paths: PortablePaths, *, ui_self_test: bool = False) -> None:
         storage_path=str(paths.webview2_profile),
     )
     shutil.rmtree(paths.webview2_profile, ignore_errors=True)
+    bridge._lock()
     if failures:
         raise RuntimeError(failures[0])
 
@@ -174,7 +206,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--self-test", action="store_true", help="Validate release without opening UI"
     )
-    parser.add_argument("--ui-self-test", action="store_true", help="Open and test the real window")
+    ui_tests = parser.add_mutually_exclusive_group()
+    ui_tests.add_argument(
+        "--ui-self-test", action="store_true", help="Open and test the real window"
+    )
+    ui_tests.add_argument(
+        "--ui-reopen-test",
+        action="store_true",
+        help="Reopen the existing UI self-test database in a separate process",
+    )
     parser.add_argument("--self-test-report", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--root", type=Path, help=argparse.SUPPRESS)
     return parser
@@ -194,9 +234,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         paths.prepare_writable_directories()
         lock = SingleInstanceLock(paths.root, paths.lock_file)
         with lock:
-            backup_and_migrate(paths.database, paths.migrations, paths.backups, _version(paths))
-            _run_window(paths, ui_self_test=arguments.ui_self_test)
-        if arguments.ui_self_test and arguments.self_test_report is not None:
+            _run_window(
+                paths, ui_self_test=arguments.ui_self_test, ui_reopen_test=arguments.ui_reopen_test
+            )
+        if (
+            arguments.ui_self_test or arguments.ui_reopen_test
+        ) and arguments.self_test_report is not None:
             arguments.self_test_report.write_text("ok\n", encoding="utf-8")
         return 0
     except AlreadyRunningError as exc:
@@ -208,7 +251,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             arguments.self_test_report.write_text(
                 f"{type(exc).__name__}: {exc}\n", encoding="utf-8"
             )
-        if not arguments.ui_self_test:
+        if not (arguments.ui_self_test or arguments.ui_reopen_test):
             _show_error(f"Программа не может быть запущена:\n{exc}")
         return 1
 

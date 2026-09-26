@@ -10,12 +10,14 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import date
 
 from backend.repositories.report_facts import (
     FactCoordinateRecord,
+    ReportCellUnitOfWork,
     ReportCellUnitOfWorkFactory,
     ReportFactRecord,
 )
@@ -239,6 +241,9 @@ class ReportCellService:
         *,
         idempotency_key: str,
         actor_ref: str,
+        validate_current_state: Callable[[], None] | None = None,
+        request_context: Mapping[str, object] | None = None,
+        unit_of_work: ReportCellUnitOfWork | None = None,
     ) -> tuple[SavedReportCell, ...]:
         if not changes:
             raise ReportCellValidationError("changes must not be empty")
@@ -249,9 +254,24 @@ class ReportCellService:
             raise ReportCellValidationError("batch contains duplicate coordinates")
 
         request_json = _canonical_json([_change_to_dict(change) for change in changes])
+        if request_context is not None:
+            # Transport retries describe the same user command even though the
+            # database revisions read while rebuilding it have since advanced.
+            request_json = _canonical_json(
+                {
+                    "context": dict(request_context),
+                    "changes": [
+                        {"coordinate": c.coordinate.to_dict(), "value": c.value.to_dict()}
+                        for c in changes
+                    ],
+                }
+            )
         request_sha256 = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
 
-        with self._unit_of_work_factory() as unit_of_work:
+        transaction = (
+            self._unit_of_work_factory() if unit_of_work is None else nullcontext(unit_of_work)
+        )
+        with transaction as unit_of_work:
             previous_command = unit_of_work.idempotency.get(_SAVE_COMMAND, idempotency_key)
             if previous_command is not None:
                 if previous_command.request_sha256 != request_sha256:
@@ -260,6 +280,10 @@ class ReportCellService:
                     )
                 return _saved_cells_from_json(previous_command.response_json)
 
+            # The write transaction is already held: no writer can change the
+            # matrix after this check and before the new facts are committed.
+            if validate_current_state is not None:
+                validate_current_state()
             saved: list[SavedReportCell] = []
             for change in changes:
                 current = unit_of_work.facts.get_current(change.coordinate.to_record())

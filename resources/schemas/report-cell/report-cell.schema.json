@@ -167,6 +167,10 @@
       "additionalProperties": false,
       "required": ["access", "persistence"],
       "properties": {
+        "admin_only": {
+          "type": "boolean",
+          "description": "Administrator-only edit hint; the backend checks the role for every write."
+        },
         "access": {
           "enum": ["editable", "calculated", "locked"]
         },

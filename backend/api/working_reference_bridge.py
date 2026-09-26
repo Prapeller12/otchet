@@ -18,13 +18,14 @@ from typing import Any, cast
 from uuid import uuid4
 
 from backend.api.bridge import DesktopBridge
+from backend.application.access_policy import is_plan_coordinate
+from backend.application.daily_summary import summarize_daily_rows
 from backend.application.excel_reports import (
     ExcelReportError,
     ExcelReportService,
     ExcelWorkbookValidationError,
 )
 from backend.application.monthly_report import monthly_snapshot
-from backend.application.reference_transfer import validate_transfer
 from backend.application.report_cells import (
     ReportCellChange,
     ReportCellCoordinate,
@@ -32,6 +33,11 @@ from backend.application.report_cells import (
     ReportCellService,
     ReportCellValidationError,
     ReportCellValue,
+    RevisionConflictError,
+)
+from backend.application.report_header import (
+    apply_header_patch,
+    effective_production_presentation,
 )
 from backend.application.subsidiary_report import build_rows, default_detail, quantity
 from backend.application.workspace_fields import (
@@ -48,6 +54,7 @@ from backend.infrastructure.database.sqlite_reference_reports import ReferenceRe
 from backend.infrastructure.database.sqlite_report_cells import (
     SqliteReportCellUnitOfWorkFactory,
 )
+from backend.infrastructure.database.sqlite_report_signers import SqliteReportSignersRepository
 from backend.infrastructure.database.sqlite_report_verification import (
     SqliteReportVerificationRepository,
     database_stamp,
@@ -91,16 +98,29 @@ class WorkingReferenceApplicationBridge:
         inbox_directory: str | Path | None = None,
         backups_directory: str | Path | None = None,
         application_version: str = "development",
+        initialize_workspace: bool = True,
     ) -> None:
         self._database_path = Path(database_path)
+        self._migrations_directory = Path(migrations_directory)
         self._definitions_directory = Path(definitions_directory)
         self._transport = DesktopBridge(
             self._database_path,
             migrations_directory=migrations_directory,
+            migrate=initialize_workspace,
         )
         self._service = ReportCellService(SqliteReportCellUnitOfWorkFactory(self._database_path))
         self._workspace = SqliteReportWorkspaceRepository(str(self._database_path))
-        self._default_organization = self._workspace.ensure_default_organization()
+        if initialize_workspace:
+            self._default_organization = self._workspace.ensure_default_organization()
+            # Only authorized setup/migration initializes structural defaults.
+            for organization in self._workspace.list_organizations():
+                self._initialize_workspace(organization.id)
+        else:
+            organizations = self._workspace.list_organizations()
+            heads = [organization for organization in organizations if organization.kind == "HEAD"]
+            if not heads:
+                raise ValueError("Настройку базы должен завершить администратор")
+            self._default_organization = heads[0]
         root = self._database_path.parent.parent
         self._backups_directory = Path(backups_directory or root / "backups")
         self._application_version = application_version
@@ -115,9 +135,16 @@ class WorkingReferenceApplicationBridge:
         )
         self._references = ReferenceReports(self._database_path)
         self._verification = SqliteReportVerificationRepository(str(self._database_path))
+        self._signers = SqliteReportSignersRepository(str(self._database_path))
         self._save_pdf_file: Callable[[str], Path | None] | None = None
         self._open_excel_file: Callable[[], Path | None] | None = None
         self._save_excel_file: Callable[[str], Path | None] | None = None
+
+    def _initialize_workspace(self, organization_id: int) -> None:
+        for report_type in _DEFINITION_FILES:
+            self._workspace.ensure_groups(
+                organization_id, report_type, self._group_templates(report_type)
+            )
 
     def configure_excel_dialogs(
         self,
@@ -185,6 +212,30 @@ class WorkingReferenceApplicationBridge:
         except (OSError, ValueError, KeyError, sqlite3.Error, ReportCellError) as error:
             return _failure("VERIFICATION_ERROR", str(error), request_id)
 
+    def list_report_signers(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            _reject_unknown(_mapping(payload, "payload"), set())
+            return {"ok": True, "data": self._signers.list(), "request_id": request_id}
+        except (OSError, ValueError, sqlite3.Error) as error:
+            return _failure("SIGNER_ERROR", str(error), request_id)
+
+    def create_report_signer(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"display_name", "pin", "admin_id", "admin_pin", "role"})
+            result = self._signers.create(
+                _required_string(request, "display_name"),
+                _required_string(request, "pin"),
+                _required_string(request, "admin_id") if "admin_id" in request else "",
+                _required_string(request, "admin_pin") if "admin_pin" in request else "",
+                role=_required_string(request, "role") if "role" in request else "reviewer",
+            )
+            return {"ok": True, "data": result, "request_id": request_id}
+        except (OSError, ValueError, sqlite3.Error) as error:
+            return _failure("SIGNER_ERROR", str(error), request_id)
+
     def verify_report(self, payload: object) -> dict[str, object]:
         request_id = uuid4().hex
         try:
@@ -197,7 +248,8 @@ class WorkingReferenceApplicationBridge:
                     "year",
                     "month",
                     "week_start",
-                    "signer_name",
+                    "signer_id",
+                    "pin",
                     "snapshot_sha256",
                     "confirmed",
                     "expected_revision",
@@ -208,7 +260,8 @@ class WorkingReferenceApplicationBridge:
             snapshot = self._monthly_snapshot(request)
             result = self._verification.verify(
                 snapshot,
-                _required_string(request, "signer_name"),
+                _required_string(request, "signer_id"),
+                _required_string(request, "pin"),
                 _required_string(request, "snapshot_sha256"),
             )
             return {"ok": True, "data": result, "request_id": request_id}
@@ -314,12 +367,13 @@ class WorkingReferenceApplicationBridge:
             report_type = _required_string(request, "report_type")
             organization_id = self._organization_id(request.get("organization_id"))
             expected_matrix_revision = _required_string(request, "base_revision")
-            if expected_matrix_revision != self._matrix_revision(report_type, organization_id):
-                return _failure(
-                    "REVISION_CONFLICT",
-                    "Матрица была изменена другим сохранением; перезагрузите форму.",
-                    request_id,
-                )
+
+            def validate_current_state() -> None:
+                if expected_matrix_revision != self._matrix_revision(report_type, organization_id):
+                    raise RevisionConflictError(
+                        "Матрица была изменена другим сохранением; перезагрузите форму."
+                    )
+
             raw_changes = request.get("changes")
             if not isinstance(raw_changes, Sequence) or isinstance(
                 raw_changes, (str, bytes, bytearray)
@@ -360,6 +414,13 @@ class WorkingReferenceApplicationBridge:
                 changes,
                 idempotency_key=_required_string(request, "idempotency_key"),
                 actor_ref="local-working-reference",
+                validate_current_state=validate_current_state,
+                request_context={
+                    "report_type": report_type,
+                    "organization_id": str(organization_id),
+                    "year": _year(request),
+                    "base_revision": expected_matrix_revision,
+                },
             )
             cells = [
                 {
@@ -396,22 +457,48 @@ class WorkingReferenceApplicationBridge:
         request_id = uuid4().hex
         try:
             request = _mapping(payload, "payload")
-            _reject_unknown(request, {"report_type", "organization_id", "year"})
+            _reject_unknown(
+                request,
+                {"report_type", "organization_id", "year", "mode", "batch_id", "sheet_decisions"},
+            )
             report_type = _required_string(request, "report_type")
             organization_id = self._organization_id(request.get("organization_id"))
-            if self._open_excel_file is None:
-                raise ExcelReportError(_FILE_DIALOG_REASON)
-            source = self._open_excel_file()
+            original_file_name = None
+            source: Path | None
+            if request.get("batch_id"):
+                batch = self._excel._imports.get_batch(_required_string(request, "batch_id"))
+                if (
+                    batch is None
+                    or batch.organization_id != organization_id
+                    or batch.report_type != report_type
+                    or batch.stored_relative_path.startswith("reference:")
+                ):
+                    raise ExcelWorkbookValidationError("Пакет не принадлежит выбранному отчёту")
+                source = self._excel._inbox_directory / batch.stored_relative_path
+                if source.resolve().parent != self._excel._inbox_directory.resolve():
+                    raise ExcelWorkbookValidationError("Некорректный путь сохранённого пакета")
+                original_file_name = batch.source_file_name
+            else:
+                if self._open_excel_file is None:
+                    raise ExcelReportError(_FILE_DIALOG_REASON)
+                source = self._open_excel_file()
             if source is None:
                 return {"ok": True, "data": {"cancelled": True}, "request_id": request_id}
             try:
-                preview = self._excel.stage_import(
+                from backend.api.excel_integration import prepare_canonical
+
+                result = prepare_canonical(
+                    self,
                     source,
-                    report_type=report_type,
-                    organization_id=organization_id,
-                    matrix=self._build_matrix(report_type, organization_id, _year(request)),
+                    report_type,
+                    organization_id,
+                    _year(request),
+                    str(request.get("mode", "update")).upper(),
+                    request.get("sheet_decisions"),
+                    original_file_name,
                 )
-                result = preview.to_dict()
+                if original_file_name is not None:
+                    result["file_name"] = original_file_name
             except ExcelWorkbookValidationError as exc:
                 if str(exc) != "Книга не создана этой программой: системная карта отсутствует":
                     raise
@@ -420,6 +507,7 @@ class WorkingReferenceApplicationBridge:
                     # Archiving a source workbook is not an import into working facts.
                     result["already_imported"] = False
                     result["status"] = "STAGED"
+                    result["mode"] = request.get("mode", "update")
                 except (ValueError, zipfile.BadZipFile) as invalid:
                     raise ExcelWorkbookValidationError(str(invalid)) from invalid
             return {"ok": True, "data": result, "request_id": request_id}
@@ -437,12 +525,9 @@ class WorkingReferenceApplicationBridge:
                 raise ExcelWorkbookValidationError(
                     "Сначала сопоставьте исходные ячейки с рабочими полями и выполните проверку"
                 )
-            result = self._excel.commit_import(
-                _required_string(request, "batch_id"),
-                allowed_coordinates=lambda report, org: self._editable_coordinate_keys(
-                    report, self._organization_id(str(org)), _year(request)
-                ),
-            )
+            from backend.api.excel_integration import commit_package
+
+            result = commit_package(self, identity, _year(request))
             return {"ok": True, "data": result, "request_id": request_id}
         except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
             code = (
@@ -467,9 +552,9 @@ class WorkingReferenceApplicationBridge:
             destination = self._save_excel_file(suggested)
             if destination is None:
                 return {"ok": True, "data": {"cancelled": True}, "request_id": request_id}
-            matrix = cast(
-                dict[str, Any], self._build_matrix(report_type, organization_id, _year(request))
-            )
+            from backend.api.excel_integration import exchange_matrix
+
+            matrix = exchange_matrix(self, report_type, organization_id, _year(request))
             months = request.get("visible_months")
             known = {c["group_label"] for c in matrix["time_columns"]}
             if months is not None:
@@ -514,6 +599,11 @@ class WorkingReferenceApplicationBridge:
                     "report_type",
                     "year",
                     "mappings",
+                    "mode",
+                    "period_rules",
+                    "sheet_decisions",
+                    "reset_profile",
+                    "structure_overrides",
                 },
             )
             organization = self._organization_id(request.get("organization_id"))
@@ -522,35 +612,9 @@ class WorkingReferenceApplicationBridge:
             if action == "list":
                 result = self._references.list_reports(organization)
             elif action == "transfer":
-                document = self._references.get(
-                    _required_string(request, "id"), organization, staged=True, original=True
-                )
-                report_type = _required_string(request, "report_type")
-                matrix = self._build_matrix(report_type, organization, _year(request))
-                checked = validate_transfer(
-                    document, cast(dict[str, Any], matrix), request.get("mappings")
-                )
-                if checked["issues"]:
-                    result = {"issues": checked["issues"], "error_count": len(checked["issues"])}
-                else:
-                    result = self._excel.stage_transfer(
-                        source_document=document,
-                        report_type=report_type,
-                        organization_id=organization,
-                        changes=checked["changes"],
-                    )
-                    if not result.get("already_imported"):
-                        with closing(connect_sqlite(self._database_path)) as connection:
-                            connection.execute(
-                                "INSERT INTO reference_transfer_decisions"
-                                "(batch_id,workbook_id,decisions) VALUES(?,?,?)",
-                                (
-                                    result["batch_id"],
-                                    document["id"],
-                                    json.dumps(request["mappings"], ensure_ascii=False),
-                                ),
-                            )
-                            connection.commit()
+                from backend.api.excel_integration import prepare_transfer
+
+                result = prepare_transfer(self, {**request, "year": _year(request)}, organization)
             elif action == "get":
                 result = self._references.get(_required_string(request, "id"), organization)
             elif action == "save":
@@ -602,6 +666,7 @@ class WorkingReferenceApplicationBridge:
             request = _mapping(payload, "payload")
             _reject_unknown(request, {"name"})
             organization = self._workspace.create_organization(_required_string(request, "name"))
+            self._initialize_workspace(organization.id)
             return {
                 "ok": True,
                 "data": {
@@ -661,7 +726,7 @@ class WorkingReferenceApplicationBridge:
             report_type = _required_string(request, "report_type")
             organization_id = self._organization_id(request.get("organization_id"))
             templates = self._group_templates(report_type)
-            groups = self._workspace.ensure_groups(organization_id, report_type, templates)
+            groups = self._workspace.list_groups(organization_id, report_type)
             return {
                 "ok": True,
                 "data": self._layout_contract(report_type, organization_id, templates, groups),
@@ -741,25 +806,38 @@ class WorkingReferenceApplicationBridge:
                     "plans",
                     "actuals",
                     "expected_revision",
+                    "header",
+                    "production_codes",
+                    "production_code_actuals",
+                    "confirm_production_totals",
                 },
             )
             report_type = _required_string(request, "report_type")
             self._definition(report_type)
             organization_id = self._organization_id(request.get("organization_id"))
-            patch: dict[str, object] = {}
-            if "plans" in request or "actuals" in request:
-                if report_type not in {"SUBSIDIARY", "HEAD_SITE"}:
-                    raise ValueError("План и выпуск доступны в месячных отчётах")
+            current_presentation = self._workspace.get_presentation(organization_id, report_type)
+            patch: dict[str, object] = apply_header_patch(
+                current_presentation, request, report_type
+            )
+
+            def validate_current_state() -> None:
                 if request.get("expected_revision") != self._matrix_revision(
                     report_type, organization_id
                 ):
                     raise ValueError(
                         "Форма изменилась. Перезагрузите данные перед сохранением плана"
                     )
+
+            if "plans" in request or "actuals" in request:
+                if report_type not in {"SUBSIDIARY", "HEAD_SITE"}:
+                    raise ValueError("План и выпуск доступны в месячных отчётах")
                 for field in ("plans", "actuals"):
                     if field not in request:
                         continue
-                    values = _mapping(request[field], field)
+                    values = {
+                        **cast(dict[str, object], current_presentation.get(field, {})),
+                        **_mapping(request[field], field),
+                    }
                     if len(values) > 1200 or any(
                         re.fullmatch(r"[0-9]{4}-(0[1-9]|1[0-2])", key) is None for key in values
                     ):
@@ -783,8 +861,22 @@ class WorkingReferenceApplicationBridge:
                 ):
                     raise ValueError("Ширина столбца: от 48 до 600 пикселей")
                 patch["widths"] = dict(widths)
-            result = self._workspace.save_presentation(organization_id, report_type, patch)
-            return {"ok": True, "data": result, "request_id": request_id}
+            result = self._workspace.save_presentation(
+                organization_id,
+                report_type,
+                patch,
+                validate_current_state=(
+                    validate_current_state
+                    if request.keys()
+                    & {"plans", "actuals", "header", "production_codes", "production_code_actuals"}
+                    else None
+                ),
+            )
+            return {
+                "ok": True,
+                "data": effective_production_presentation(result),
+                "request_id": request_id,
+            }
         except (ValueError, sqlite3.Error, ReportCellError) as error:
             return _failure("PRESENTATION_ERROR", str(error), request_id)
 
@@ -797,7 +889,10 @@ class WorkingReferenceApplicationBridge:
     ) -> dict[str, object]:
         definition = self._definition(report_type)
         periods = self._periods(report_type, year)
-        presentation = self._workspace.get_presentation(organization_id, report_type)
+        presentation = effective_production_presentation(
+            self._workspace.get_presentation(organization_id, report_type),
+            year or date.today().year,
+        )
         if report_type in {"SUBSIDIARY", "HEAD_SITE"}:
             from backend.application.production_progress import completion
 
@@ -853,11 +948,7 @@ class WorkingReferenceApplicationBridge:
                 for group in _sequence(layout.get("row_groups"), "row_groups")
             )
         }
-        configured_groups = self._workspace.ensure_groups(
-            organization_id,
-            report_type,
-            self._group_templates(report_type),
-        )
+        configured_groups = self._workspace.list_groups(organization_id, report_type)
 
         if report_type in {"SUBSIDIARY", "HEAD_SITE"}:
 
@@ -889,6 +980,7 @@ class WorkingReferenceApplicationBridge:
                     "state": {
                         "access": "editable" if editable else "calculated",
                         "persistence": "saved",
+                        "admin_only": is_plan_coordinate(coordinate.to_dict()),
                     },
                 }
 
@@ -909,6 +1001,18 @@ class WorkingReferenceApplicationBridge:
                 structure = build_head_rows(
                     groups, year or date.today().year, read, presentation, subsidiaries
                 )
+                from backend.application.monthly_report import aggregate
+
+                fact_columns = {
+                    column["id"]
+                    for column in structure["time_columns"]
+                    if column.get("kind") == "FACT"
+                }
+                for row in structure["rows"]:
+                    row["manufactured_total"] = aggregate(
+                        [cell for cell in row["cells"] if cell["column_id"] in fact_columns],
+                        False,
+                    )
             else:
                 structure = build_rows(
                     groups,
@@ -1001,7 +1105,11 @@ class WorkingReferenceApplicationBridge:
                         "column_id": column_id,
                         "coordinate": coordinate.to_dict(),
                         "value": value,
-                        "state": {"access": access, "persistence": "saved"},
+                        "state": {
+                            "access": access,
+                            "persistence": "saved",
+                            "admin_only": is_plan_coordinate(coordinate.to_dict()),
+                        },
                     }
                     if not editable:
                         cell["lock_reason"] = "Расчёт заблокирован до утверждения бизнес-привязки."
@@ -1070,6 +1178,11 @@ class WorkingReferenceApplicationBridge:
                 for column_id, period_start in periods
             ],
             "rows": rows,
+            "daily_summary": summarize_daily_rows(
+                cast(list[dict[str, Any]], rows),
+                year or date.today().year,
+                cast(list[dict[str, Any]], left_columns),
+            ),
             "capabilities": {
                 "save": {"enabled": True},
                 "import": (
@@ -1182,19 +1295,22 @@ class WorkingReferenceApplicationBridge:
                 "WHERE entity_type = 'report_workspace' AND entity_id = ?",
                 (f"{organization_id}:{report_type}",),
             ).fetchone()[0]
-            if report_type in {"SUBSIDIARY", "HEAD_SITE"}:
-                layout_revision = max(
-                    layout_revision,
-                    connection.execute(
-                        "SELECT coalesce(max(id), 0) FROM audit_events "
-                        "WHERE entity_type = 'report_presentation' AND entity_id = ? "
-                        "AND (json_extract(before_json, '$.plans') IS NOT "
-                        "json_extract(after_json, '$.plans') OR "
-                        "json_extract(before_json, '$.actuals') IS NOT "
-                        "json_extract(after_json, '$.actuals'))",
-                        (f"{organization_id}:{report_type}",),
-                    ).fetchone()[0],
-                )
+            layout_revision = max(
+                layout_revision,
+                connection.execute(
+                    "SELECT coalesce(max(id), 0) FROM audit_events "
+                    "WHERE entity_type = 'report_presentation' AND entity_id = ? "
+                    "AND (json_extract(before_json, '$.plans') IS NOT "
+                    "json_extract(after_json, '$.plans') OR "
+                    "json_extract(before_json, '$.actuals') IS NOT "
+                    "json_extract(after_json, '$.actuals') OR "
+                    "json_extract(before_json, '$.header') IS NOT "
+                    "json_extract(after_json, '$.header') OR "
+                    "json_extract(before_json, '$.production_codes') IS NOT "
+                    "json_extract(after_json, '$.production_codes'))",
+                    (f"{organization_id}:{report_type}",),
+                ).fetchone()[0],
+            )
             if report_type == "HEAD_SITE":
                 layout_revision = max(
                     layout_revision,

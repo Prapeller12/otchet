@@ -1,5 +1,9 @@
+import type { RecoveryBackup, RecoveryResult } from "./application-gateway";
+import type { ManageReportSignerRequest, ManageReportSignerResult } from "./application-gateway";
+import type { UiPreferences } from "./application-gateway";
 import type {
-  ApplicationGateway, ReferenceRequest,
+  ApplicationGateway, ReferenceRequest, ReportSigner, CreateReportSignerRequest,
+  AccessStatus, AccessUser, WriteAuthorization, AuthorizationHandler,
   MonthlyReportQuery, ReportVerification, VerifyReportRequest,
   CommitImportRequest,
   CommitImportResult,
@@ -26,9 +30,23 @@ type BridgeEnvelope =
   | { ok: false; error: { code: string; message: string } };
 
 type PyWebViewApi = {
+  list_recovery_backups(request: Record<string, never>): Promise<BridgeEnvelope>;
+  verify_recovery_backup(request: { backup_id: string }): Promise<BridgeEnvelope>;
+  restore_recovery_backup(request: { backup_id: string }): Promise<BridgeEnvelope>;
+  get_ui_preferences(request: Record<string, never>): Promise<BridgeEnvelope>;
+  save_ui_preferences(request: UiPreferences): Promise<BridgeEnvelope>;
+  get_access_status(request: Record<string, never>): Promise<BridgeEnvelope>;
+  setup_access(request: { display_name?: string; pin: string; signer_id?: string }): Promise<BridgeEnvelope>;
+  unlock_access(request: WriteAuthorization): Promise<BridgeEnvelope>;
+  enroll_access(request: WriteAuthorization): Promise<BridgeEnvelope>;
+  authenticate_access(request: WriteAuthorization): Promise<BridgeEnvelope>;
+  end_administration(request: Record<string, never>): Promise<BridgeEnvelope>;
   reference_report(request: ReferenceRequest): Promise<BridgeEnvelope>;
   export_pdf(request: MonthlyReportQuery): Promise<BridgeEnvelope>;
   get_report_verification(request: MonthlyReportQuery): Promise<BridgeEnvelope>;
+  list_report_signers(request: Record<string, never>): Promise<BridgeEnvelope>;
+  manage_report_signer(request: ManageReportSignerRequest): Promise<BridgeEnvelope>;
+  create_report_signer(request: CreateReportSignerRequest): Promise<BridgeEnvelope>;
   verify_report(request: VerifyReportRequest): Promise<BridgeEnvelope>;
   save_report_presentation(request: SaveReportPresentationRequest): Promise<BridgeEnvelope>;
   get_report_matrix(query: ReportMatrixQuery): Promise<BridgeEnvelope>;
@@ -59,6 +77,11 @@ function unwrap(envelope: BridgeEnvelope): unknown {
   if (!envelope.ok) {
     throw new Error(`${envelope.error.code}: ${envelope.error.message}`);
   }
+  if (envelope.data && typeof envelope.data === "object") {
+    const result = envelope.data as { backup_warning?: unknown; backup_complete?: unknown };
+    if (typeof result.backup_warning === "string") window.dispatchEvent(new CustomEvent("backup-warning", { detail: result.backup_warning }));
+    else if (result.backup_complete === true) window.dispatchEvent(new Event("backup-success"));
+  }
   return envelope.data;
 }
 
@@ -69,6 +92,24 @@ export function hasPyWebViewBridge(): boolean {
 export class PyWebViewGateway implements ApplicationGateway {
   readonly mode = "pywebview" as const;
   readonly #api: PyWebViewApi;
+  #authorizationHandler: AuthorizationHandler | null = null;
+
+  setAuthorizationHandler(handler: AuthorizationHandler | null): void { this.#authorizationHandler = handler; }
+  async listRecoveryBackups(): Promise<{ backups: RecoveryBackup[] }> { return unwrap(await this.#api.list_recovery_backups({})) as { backups: RecoveryBackup[] }; }
+  async verifyRecoveryBackup(backupId: string): Promise<{ valid: boolean; created_at: string }> { return unwrap(await this.#api.verify_recovery_backup({ backup_id: backupId })) as { valid: boolean; created_at: string }; }
+  async restoreRecoveryBackup(backupId: string): Promise<RecoveryResult> { return unwrap(await this.#api.restore_recovery_backup({ backup_id: backupId })) as RecoveryResult; }
+  async getUiPreferences(): Promise<UiPreferences> { return unwrap(await this.#api.get_ui_preferences({})) as UiPreferences; }
+  async saveUiPreferences(request: UiPreferences): Promise<UiPreferences> { return unwrap(await this.#api.save_ui_preferences(request)) as UiPreferences; }
+  async getAccessStatus(): Promise<AccessStatus> { return unwrap(await this.#api.get_access_status({})) as AccessStatus; }
+  async setupAccess(request: { display_name?: string; pin: string; signer_id?: string }): Promise<AccessStatus> { return unwrap(await this.#api.setup_access(request)) as AccessStatus; }
+  async unlockAccess(request: WriteAuthorization): Promise<AccessStatus> { return unwrap(await this.#api.unlock_access(request)) as AccessStatus; }
+  async enrollAccess(request: WriteAuthorization): Promise<AccessUser> { return await this.#write("Разрешить вход пользователю", true, request, value => this.#api.enroll_access(value)) as AccessUser; }
+  async authenticateAccess(request: WriteAuthorization): Promise<AccessUser> { return unwrap(await this.#api.authenticate_access(request)) as AccessUser; }
+  async endAdministration(): Promise<void> { unwrap(await this.#api.end_administration({})); }
+  async #write<T>(title: string, adminOnly: boolean, request: T, execute: (request: T & { authorization: WriteAuthorization }) => Promise<BridgeEnvelope>, confirmLabel?: string): Promise<unknown> {
+    if (!this.#authorizationHandler) throw new Error("Подтверждение записи недоступно. Вернитесь к рабочему экрану.");
+    return this.#authorizationHandler({ title, adminOnly, ...(confirmLabel ? { confirmLabel } : {}) }, async authorization => unwrap(await execute({ ...request, authorization })));
+  }
 
   constructor(api: PyWebViewApi) {
     this.#api = api;
@@ -95,17 +136,29 @@ export class PyWebViewGateway implements ApplicationGateway {
   }
 
   async referenceReport(request: ReferenceRequest): Promise<unknown> {
+    if (request.action === "save" || request.action === "transfer") {
+      return this.#write("Сохранить данные Excel", true, request, value => this.#api.reference_report(value));
+    }
     return unwrap(await this.#api.reference_report(request));
   }
 
   async exportPdf(request: MonthlyReportQuery): Promise<ExportResult> {
-    return unwrap(await this.#api.export_pdf(request)) as ExportResult;
+    return await this.#write("Проверить отчёт перед печатью", false, request, value => this.#api.export_pdf(value), "Подтвердить и печатать") as ExportResult;
   }
   async getReportVerification(request: MonthlyReportQuery): Promise<ReportVerification> {
     return unwrap(await this.#api.get_report_verification(request)) as ReportVerification;
   }
+  async listReportSigners(): Promise<ReportSigner[]> {
+    return unwrap(await this.#api.list_report_signers({})) as ReportSigner[];
+  }
+  async manageReportSigner(request: ManageReportSignerRequest): Promise<ManageReportSignerResult> {
+    return await this.#write("Подтвердить изменение доступа", true, request, value => this.#api.manage_report_signer(value)) as ManageReportSignerResult;
+  }
+  async createReportSigner(request: CreateReportSignerRequest): Promise<ReportSigner> {
+    return unwrap(await this.#api.create_report_signer(request)) as ReportSigner;
+  }
   async verifyReport(request: VerifyReportRequest): Promise<ReportVerification> {
-    return unwrap(await this.#api.verify_report(request)) as ReportVerification;
+    return unwrap(await this.#api.verify_report({ ...request, authorization: { signer_id: request.signer_id, pin: request.pin } } as VerifyReportRequest)) as ReportVerification;
   }
 
   async getReportMatrix(
@@ -115,21 +168,21 @@ export class PyWebViewGateway implements ApplicationGateway {
   }
 
   async saveReportPresentation(request: SaveReportPresentationRequest): Promise<ReportPresentation> {
-    return unwrap(await this.#api.save_report_presentation(request)) as ReportPresentation;
+    return await this.#write("Проверить и сохранить сведения отчёта", false, request, value => this.#api.save_report_presentation(value), "Сохранить и подтвердить") as ReportPresentation;
   }
 
   async saveReportCells(
     request: SaveReportCellsRequest,
   ): Promise<SaveReportCellsResponse> {
-    return parseSaveResponse(unwrap(await this.#api.save_report_cells(request)));
+    return parseSaveResponse(await this.#write("Проверить и сохранить изменения отчёта", false, request, value => this.#api.save_report_cells(value), "Сохранить и подтвердить"));
   }
 
   async validateImport(request: ImportRequest): Promise<ImportPreview> {
-    return unwrap(await this.#api.validate_import(request)) as ImportPreview;
+    return await this.#write("Подготовить импорт Excel", true, request, value => this.#api.validate_import(value)) as ImportPreview;
   }
 
   async commitImport(request: CommitImportRequest): Promise<CommitImportResult> {
-    return unwrap(await this.#api.commit_import(request)) as CommitImportResult;
+    return await this.#write("Применить импорт Excel", true, request, value => this.#api.commit_import(value)) as CommitImportResult;
   }
 
   async exportReport(request: ExportRequest): Promise<ExportResult> {
@@ -141,22 +194,18 @@ export class PyWebViewGateway implements ApplicationGateway {
   }
 
   async createOrganization(name: string): Promise<OrganizationResult> {
-    return unwrap(await this.#api.create_organization({ name })) as OrganizationResult;
+    return await this.#write("Добавить организацию", true, { name }, value => this.#api.create_organization(value)) as OrganizationResult;
   }
 
   async renameOrganization(
     organizationId: string,
     name: string,
   ): Promise<OrganizationResult> {
-    return unwrap(
-      await this.#api.rename_organization({ organization_id: organizationId, name }),
-    ) as OrganizationResult;
+    return await this.#write("Переименовать организацию", true, { organization_id: organizationId, name }, value => this.#api.rename_organization(value)) as OrganizationResult;
   }
 
   async archiveOrganization(organizationId: string): Promise<OrganizationList> {
-    return unwrap(
-      await this.#api.archive_organization({ organization_id: organizationId }),
-    ) as OrganizationList;
+    return await this.#write("Архивировать организацию", true, { organization_id: organizationId }, value => this.#api.archive_organization(value)) as OrganizationList;
   }
 
   async getReportLayout(query: ReportLayoutQuery): Promise<ReportLayoutContract> {
@@ -166,6 +215,6 @@ export class PyWebViewGateway implements ApplicationGateway {
   async saveReportLayout(
     request: SaveReportLayoutRequest,
   ): Promise<ReportLayoutContract> {
-    return unwrap(await this.#api.save_report_layout(request)) as ReportLayoutContract;
+    return await this.#write("Применить настройки формы", true, request, value => this.#api.save_report_layout(value)) as ReportLayoutContract;
   }
 }

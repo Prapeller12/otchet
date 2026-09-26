@@ -1,0 +1,299 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Target profile draft or verified inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "profile_version": {
+      "const": "1.0.0"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "verified"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "stack": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entry_points": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "source_ref",
+        "verified",
+        "stack",
+        "entry_points"
+      ]
+    },
+    "strategy": {
+      "enum": [
+        "undecided",
+        "reuse_react",
+        "adapt_web",
+        "native_reimplementation",
+        "existing_webview"
+      ]
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "snapshot": {
+          "type": "string"
+        },
+        "tokens": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshot",
+        "tokens"
+      ]
+    },
+    "preserve": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "business_logic": {
+          "const": true
+        },
+        "storage": {
+          "const": true
+        },
+        "migrations": {
+          "const": true
+        },
+        "import_export": {
+          "const": true
+        },
+        "user_workflow": {
+          "const": true
+        },
+        "offline_launch": {
+          "const": true
+        }
+      },
+      "required": [
+        "business_logic",
+        "storage",
+        "migrations",
+        "import_export",
+        "user_workflow",
+        "offline_launch"
+      ]
+    },
+    "screens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "source_path": {
+            "type": "string"
+          },
+          "reference_component": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "source_path",
+          "reference_component"
+        ]
+      }
+    },
+    "print": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "policy": {
+          "const": "preserve_target_requirements"
+        },
+        "paper": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "orientation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "minimum_font": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "value": {
+                  "type": "number"
+                },
+                "unit": {
+                  "enum": [
+                    "px",
+                    "pt"
+                  ]
+                },
+                "requirement_source": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "value",
+                "unit",
+                "requirement_source"
+              ]
+            }
+          ]
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "policy",
+        "paper",
+        "orientation",
+        "minimum_font",
+        "examples"
+      ]
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "launch_command": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "data_locations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "platforms",
+        "launch_command",
+        "data_locations"
+      ]
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "viewports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "width": {
+                "type": "integer"
+              },
+              "height": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "width",
+              "height"
+            ]
+          }
+        },
+        "os_scales": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "baseline_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "viewports",
+        "os_scales",
+        "baseline_files"
+      ]
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "$schema",
+    "profile_version",
+    "status",
+    "target",
+    "strategy",
+    "reference",
+    "preserve",
+    "screens",
+    "print",
+    "runtime",
+    "verification",
+    "notes"
+  ]
+}

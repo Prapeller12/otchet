@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import cast
 from uuid import uuid4
 
@@ -38,11 +38,18 @@ class SqliteReportWorkspaceRepository:
             connection.close()
 
     def save_presentation(
-        self, organization_id: int, report_type: str, patch: Mapping[str, object]
+        self,
+        organization_id: int,
+        report_type: str,
+        patch: Mapping[str, object],
+        *,
+        validate_current_state: Callable[[], None] | None = None,
     ) -> dict[str, object]:
         connection = connect_sqlite(self._database_path)
         try:
             connection.execute("BEGIN IMMEDIATE")
+            if validate_current_state is not None:
+                validate_current_state()
             row = connection.execute(
                 "SELECT settings_json FROM report_presentation "
                 "WHERE organization_id = ? AND report_type = ?",
@@ -301,7 +308,7 @@ class SqliteReportWorkspaceRepository:
             raise
         finally:
             connection.close()
-        return self._list_groups(organization_id, report_type)
+        return self.list_groups(organization_id, report_type)
 
     def save_groups(
         self,
@@ -472,9 +479,9 @@ class SqliteReportWorkspaceRepository:
             raise
         finally:
             connection.close()
-        return self._list_groups(organization_id, report_type)
+        return self.list_groups(organization_id, report_type)
 
-    def _list_groups(self, organization_id: int, report_type: str) -> tuple[WorkspaceGroup, ...]:
+    def list_groups(self, organization_id: int, report_type: str) -> tuple[WorkspaceGroup, ...]:
         connection = connect_sqlite(self._database_path)
         try:
             rows = connection.execute(

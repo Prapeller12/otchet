@@ -10,8 +10,14 @@
         "metric_code": "METRIC_TEST_ONLY",
         "operation_date": "2026-08-30"
       },
-      "value": { "kind": "QUANTITY", "quantity": "1" },
-      "state": { "access": "editable", "persistence": "saved" }
+      "value": {
+        "kind": "QUANTITY",
+        "quantity": "1"
+      },
+      "state": {
+        "access": "editable",
+        "persistence": "saved"
+      }
     }
   },
   {
@@ -23,8 +29,14 @@
         "product_id": "product-test-only",
         "operation_date": "2026-08-30"
       },
-      "value": { "kind": "QUANTITY", "quantity": "1" },
-      "state": { "access": "editable", "persistence": "saved" }
+      "value": {
+        "kind": "QUANTITY",
+        "quantity": "1"
+      },
+      "state": {
+        "access": "editable",
+        "persistence": "saved"
+      }
     }
   },
   {
@@ -38,8 +50,14 @@
         "operation_date": "2026-08-30",
         "period_start": "2026-08-01"
       },
-      "value": { "kind": "QUANTITY", "quantity": "1" },
-      "state": { "access": "editable", "persistence": "saved" }
+      "value": {
+        "kind": "QUANTITY",
+        "quantity": "1"
+      },
+      "state": {
+        "access": "editable",
+        "persistence": "saved"
+      }
     }
   },
   {
@@ -52,8 +70,14 @@
         "operation_type": "OPERATION_TEST_ONLY",
         "operation_date": "2026-02-30"
       },
-      "value": { "kind": "QUANTITY", "quantity": "1" },
-      "state": { "access": "editable", "persistence": "saved" }
+      "value": {
+        "kind": "QUANTITY",
+        "quantity": "1"
+      },
+      "state": {
+        "access": "editable",
+        "persistence": "saved"
+      }
     }
   },
   {
@@ -66,8 +90,14 @@
         "operation_type": "OPERATION_TEST_ONLY",
         "operation_date": "2026-08-30"
       },
-      "value": { "kind": "QUANTITY", "quantity": 0 },
-      "state": { "access": "editable", "persistence": "saved" }
+      "value": {
+        "kind": "QUANTITY",
+        "quantity": 0
+      },
+      "state": {
+        "access": "editable",
+        "persistence": "saved"
+      }
     }
   },
   {
@@ -80,8 +110,14 @@
         "operation_type": "OPERATION_TEST_ONLY",
         "operation_date": "2026-08-30"
       },
-      "value": { "kind": "QUANTITY", "quantity": "1e3" },
-      "state": { "access": "editable", "persistence": "saved" }
+      "value": {
+        "kind": "QUANTITY",
+        "quantity": "1e3"
+      },
+      "state": {
+        "access": "editable",
+        "persistence": "saved"
+      }
     }
   },
   {
@@ -94,8 +130,14 @@
         "metric_code": "METRIC_TEST_ONLY",
         "period_start": "2026-08-01"
       },
-      "value": { "kind": "DATA_NOT_PROVIDED", "quantity": "0" },
-      "state": { "access": "editable", "persistence": "saved" }
+      "value": {
+        "kind": "DATA_NOT_PROVIDED",
+        "quantity": "0"
+      },
+      "state": {
+        "access": "editable",
+        "persistence": "saved"
+      }
     }
   },
   {
@@ -108,8 +150,13 @@
         "metric_code": "METRIC_TEST_ONLY",
         "period_start": "2026-08-01"
       },
-      "value": { "kind": "DATA_NOT_PROVIDED" },
-      "state": { "access": "hidden", "persistence": "saved" }
+      "value": {
+        "kind": "DATA_NOT_PROVIDED"
+      },
+      "state": {
+        "access": "hidden",
+        "persistence": "saved"
+      }
     }
   },
   {
@@ -122,8 +169,33 @@
         "metric_code": "METRIC_TEST_ONLY",
         "period_start": "2026-08-01"
       },
-      "value": { "kind": "DATA_NOT_PROVIDED" },
-      "state": { "access": "editable", "persistence": "saved" }
+      "value": {
+        "kind": "DATA_NOT_PROVIDED"
+      },
+      "state": {
+        "access": "editable",
+        "persistence": "saved"
+      }
+    }
+  },
+  {
+    "name": "administrator edit hint must be boolean",
+    "cell": {
+      "coordinate": {
+        "report_type": "DAILY_MOVEMENT",
+        "organization_id": "organization-test-only",
+        "product_id": "product-test-only",
+        "metric_code": "METRIC_TEST_ONLY",
+        "operation_date": "2026-08-30"
+      },
+      "value": {
+        "kind": "DATA_NOT_PROVIDED"
+      },
+      "state": {
+        "access": "editable",
+        "persistence": "saved",
+        "admin_only": "false"
+      }
     }
   }
 ]

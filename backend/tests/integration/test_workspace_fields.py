@@ -168,6 +168,12 @@ def test_upgrade_preserves_opening_date_and_repairs_previous_preset(tmp_path: Pa
             "0009",
             "0010",
             "0011",
+            "0012",
+            "0013",
+            "0014",
+            "0015",
+            "0016",
+            "0017",
         )
         assert apply_migrations(conn, ROOT / "backend/migrations") == ()
     finally:
@@ -335,7 +341,7 @@ def test_configuration_images_formulas_and_history_survive_restart(
     )
     position["position_name"] = "ДСЕ с фотографией"
     data(app.save_report_layout({**QUERY, "rows": layout["rows"]}))
-    assert list((tmp_path / "backups").glob("*.sqlite3"))
+    assert list((tmp_path / "backups").rglob("*.sqlite3"))
     assert data(app.get_report_layout(QUERY))["rows"][0] == position
     matrix = data(app.get_report_matrix(QUERY))
     assert matrix["rows"][0]["image"] == picture()

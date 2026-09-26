@@ -78,5 +78,25 @@
         "persistence": "error"
       }
     }
+  },
+  {
+    "name": "administrator-only plan preserves independent persistence state",
+    "cell": {
+      "coordinate": {
+        "report_type": "DAILY_MOVEMENT",
+        "organization_id": "organization-test-only",
+        "product_id": "product-test-only",
+        "metric_code": "METRIC_TEST_ONLY",
+        "operation_date": "2026-08-30"
+      },
+      "value": {
+        "kind": "DATA_NOT_PROVIDED"
+      },
+      "state": {
+        "access": "editable",
+        "persistence": "saved",
+        "admin_only": true
+      }
+    }
   }
 ]

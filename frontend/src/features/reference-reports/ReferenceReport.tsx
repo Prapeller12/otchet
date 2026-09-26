@@ -1,4 +1,6 @@
+import { UiIcon } from "../../shared/ui/UiIcon";
 import { useEffect, useMemo, useState } from "react";
+import { HintValue } from "../../shared/ui/FieldHint";
 import type { ApplicationGateway, ReferenceWorkbook, ReferenceSheet, ExportResult } from "../../shared/api/application-gateway";
 import "./reference-report.css";
 
@@ -12,8 +14,8 @@ function point(address: string): [number, number] {
   return [Array.from(letters).reduce((v, c) => v * 26 + c.charCodeAt(0) - 64, 0), Number(address.slice(letters.length))];
 }
 
-export function ReferenceGrid({ sheet, drafts = {}, onEdit }: {
-  sheet: ReferenceSheet; drafts?: Record<string, string>; onEdit?: ((address: string, value: string) => void) | undefined;
+export function ReferenceGrid({ sheet, drafts = {}, onEdit, onEditingChange }: {
+  sheet: ReferenceSheet; drafts?: Record<string, string>; onEdit?: ((address: string, value: string) => void) | undefined; onEditingChange?: (editing: boolean) => void;
 }) {
   const spans = useMemo(() => {
     const result = new Map<string, [number, number] | null>();
@@ -26,6 +28,8 @@ export function ReferenceGrid({ sheet, drafts = {}, onEdit }: {
     return result;
   }, [sheet]);
   const [editing, setEditing] = useState<string | null>(null);
+  useEffect(() => { onEditingChange?.(editing !== null); }, [editing, onEditingChange]);
+  useEffect(() => () => { onEditingChange?.(false); }, [onEditingChange]);
   return <div className="reference-scroll"><table className="reference-grid" aria-label={sheet.name}>
     <colgroup>{Array.from({ length: sheet.columns }, (_, x) => <col key={x} style={{ width: [90,60,160,180,80,180,100,110,110][x] ?? 72 }} />)}</colgroup>
     <tbody>{Array.from({ length: sheet.rows }, (_, r) => <tr key={r}>{Array.from({ length: sheet.columns }, (_, c) => {
@@ -35,13 +39,15 @@ export function ReferenceGrid({ sheet, drafts = {}, onEdit }: {
       const cell = sheet.cells[address];
       const editable = onEdit !== undefined && r >= 8 && cell?.kind !== "f" && cell?.kind !== "d";
       return <td key={c} rowSpan={span?.[0]} colSpan={span?.[1]} className={`${r < 8 ? "reference-header" : ""} ${cell?.kind === "f" ? "reference-formula" : ""} ${editable ? "reference-editable" : ""}`}
-        title={cell?.kind === "f" ? `Расчёт: ${cell.value}` : editable ? "Двойной щелчок или Enter — ввод" : undefined}
+        title={editable ? "Двойной щелчок или Enter — ввод" : undefined}
         tabIndex={editable ? 0 : undefined} onDoubleClick={() => editable && setEditing(address)}
         onKeyDown={e => { if (editable && e.key === "Enter") setEditing(address); }}>
         {editing === address && editable ? <input autoFocus aria-label={`Значение ${address}`} defaultValue={drafts[address] ?? cell?.value ?? ""}
           onBlur={e => { onEdit(address, e.currentTarget.value); setEditing(null); }}
-          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } if (e.key === "Escape") { setEditing(null); } }} />
-          : drafts[address] ?? cell?.display ?? ""}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); e.currentTarget.blur(); } if (e.key === "Escape") { e.stopPropagation(); setEditing(null); } }} />
+          : editable ? drafts[address] ?? cell?.display ?? "" : <HintValue className="reference-readonly-value" hint={cell?.kind === "f"
+            ? `Расчёт из исходной книги Excel, ячейка ${address}.\n\nФормула: ${cell.value}\n\n${onEdit ? "Заполните исходные ячейки, указанные в формуле, затем нажмите «Сохранить изменения». Формула в этом просмотре не редактируется." : "В этом просмотре данные не меняются. Проверьте исходные ячейки формулы в книге Excel."}`
+            : `Значение из исходной книги Excel, ячейка ${address}. Это поле в данном просмотре не редактируется. Если значение неверно или отсутствует, проверьте соответствующую ячейку исходного файла.`}>{drafts[address] ?? cell?.display ?? ""}</HintValue>}
       </td>;
     })}</tr>)}</tbody>
   </table></div>;
@@ -56,6 +62,7 @@ export function ReferenceReport({ gateway, organizationId, identity, onBack, onD
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
   useEffect(() => {
     let active = true;
     setBook(null); setError(null); setDrafts({}); setSheet(0);
@@ -65,7 +72,7 @@ export function ReferenceReport({ gateway, organizationId, identity, onBack, onD
     return () => { active = false; };
   }, [gateway, organizationId, identity]);
   const changed = Object.keys(drafts).length > 0;
-  useEffect(() => { onDirty(changed || busy); return () => onDirty(false); }, [changed, busy, onDirty]);
+  useEffect(() => { onDirty(changed || busy || editing); return () => onDirty(false); }, [changed, busy, editing, onDirty]);
   async function save() {
     if (!book || !gateway.referenceReport) return;
     setBusy(true); setError(null);
@@ -85,16 +92,16 @@ export function ReferenceReport({ gateway, organizationId, identity, onBack, onD
   }
   return <section className="reference-report">
     <div className="reference-toolbar"><h2>{book?.file_name ?? "Загрузка отчёта…"}</h2>
-      <button disabled={busy || changed} onClick={onBack}>К рабочей форме</button>
-      <button disabled={busy || changed || !book} onClick={() => void exportBook()}>Экспорт Excel</button>
-      <button disabled={busy || !changed} onClick={() => setDrafts({})}>Отменить изменения</button>
-      <button disabled={busy || !changed} onClick={() => void save()}>Сохранить изменения</button>
+      <button disabled={busy || changed || editing} onClick={onBack}><UiIcon name="arrow-left" />К рабочей форме</button>
+      <button disabled={busy || changed || editing || !book} onClick={() => void exportBook()}><UiIcon name="export" />Экспорт Excel</button>
+      <button disabled={busy || !changed} onClick={() => setDrafts({})}><UiIcon name="undo" />Отменить изменения</button>
+      <button disabled={busy || !changed} onClick={() => void save()}><UiIcon name="save" />Сохранить изменения</button>
     </div>
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {book?.warnings.map(w => <p key={w} className="reference-warning">{w}</p>)}
     <p>Отчёт по исходному Excel. Двойной щелчок по ячейке — ввод. Серые ячейки рассчитываются автоматически.{changed ? " Есть несохранённые изменения." : ""}</p>
-    {book && <><label>Лист <select value={sheet} disabled={changed || busy} onChange={e => setSheet(Number(e.target.value))}>
+    {book && <><label>Лист <select value={sheet} disabled={changed || busy || editing} onChange={e => setSheet(Number(e.target.value))}>
       {book.sheets.map((s,i) => <option key={i} value={i}>{s.name}</option>)}</select></label>
-      <ReferenceGrid key={`${identity}:${sheet}`} sheet={book.sheets[sheet]!} drafts={drafts} onEdit={busy ? undefined : (a,v) => setDrafts(d => ({ ...d, [a]:v }))} /></>}
+      <ReferenceGrid key={`${identity}:${sheet}`} sheet={book.sheets[sheet]!} drafts={drafts} onEditingChange={setEditing} onEdit={busy ? undefined : (a,v) => setDrafts(d => ({ ...d, [a]:v }))} /></>}
   </section>;
 }

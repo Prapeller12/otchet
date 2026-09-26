@@ -5,7 +5,12 @@ from decimal import Decimal
 from typing import Any
 
 from backend.application.subsidiary_report import default_detail, number, result_value
-from backend.domain.calculations import QuantityValue, calculate_component_consumption
+from backend.domain.calculations import (
+    QuantityValue,
+    calculate_component_consumption,
+    subtract_quantities,
+    sum_quantities,
+)
 
 
 def build_head_rows(
@@ -90,13 +95,15 @@ def build_head_rows(
                 if not suppliers[i]["archived"] or number(c) is not None
             ]
             total = (
-                sum((v for v in values if v is not None), Decimal(0))
+                sum_quantities(v for v in values if v is not None)
                 if values and all(v is not None for v in values)
                 else None
             )
             opening_value = number(opening)
             available = (
-                opening_value + total if opening_value is not None and total is not None else None
+                sum_quantities((opening_value, total))
+                if opening_value is not None and total is not None
+                else None
             )
             targets = [
                 number(c)
@@ -104,13 +111,21 @@ def build_head_rows(
                 if not suppliers[i]["archived"] or number(c) is not None
             ]
             target = (
-                sum((v for v in targets if v is not None), Decimal(0))
+                sum_quantities(v for v in targets if v is not None)
                 if targets and all(v is not None for v in targets)
                 else None
             )
-            stock = available - used if available is not None and used is not None else None
+            stock = (
+                subtract_quantities(available, used)
+                if available is not None and used is not None
+                else None
+            )
             # Supplier monthly plans are component quantities; do not multiply them again.
-            delta = available - target if available is not None and target is not None else None
+            delta = (
+                subtract_quantities(available, target)
+                if available is not None and target is not None
+                else None
+            )
             links = config.get("head_links", [])
             linked_values = [
                 subsidiaries.get(link, {}).get("actuals", {}).get(period, "") for link in links
@@ -132,14 +147,14 @@ def build_head_rows(
                         "в указанных дочерних отчётах за этот месяц."
                     )
                 elif total is not None:
-                    linked_total = sum((Decimal(v) for v in linked_values), Decimal(0))
+                    linked_total = sum_quantities(Decimal(v) for v in linked_values)
                     if total > linked_total:
                         issue = (
                             location
                             + f"Факт головной площадки: {total} шт.; "
                             + "; ".join(sources)
                             + f"; всего у дочерних обществ: {linked_total} шт. "
-                            + f"Превышение: {total - linked_total} шт. "
+                            + f"Превышение: {subtract_quantities(total, linked_total)} шт. "
                             + "Проверьте столбец «Факт» этой части и поле «Выпущено, шт.» "
                             "связанных обществ за тот же месяц."
                         )

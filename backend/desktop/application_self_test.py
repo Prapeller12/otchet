@@ -124,16 +124,22 @@ def run_application_self_test(database: Path, migrations: Path, definitions: Pat
 
     publication_query = {**calendar_query, "month": 9}
     verification = checked(app.get_report_verification(publication_query))
-    checked(
+    signer = checked(
+        app.create_report_signer({"display_name": "Self-test", "pin": "test-only-pin"})
+    )
+    signed = checked(
         app.verify_report(
             {
                 **publication_query,
-                "signer_name": "Self-test",
+                "signer_id": signer["id"],
+                "pin": "test-only-pin",
                 "confirmed": True,
                 "snapshot_sha256": verification["snapshot_sha256"],
             }
         )
     )
+    if signed["status"] != "VERIFIED" or signed["algorithm"] != "Ed25519":
+        raise RuntimeError("Application self-test: signature validation failed")
     app.configure_pdf_dialog(partial(_destination, root / "self-test.pdf"))
     checked(app.export_pdf(publication_query))
     if not (root / "self-test.pdf").read_bytes().startswith(b"%PDF-"):

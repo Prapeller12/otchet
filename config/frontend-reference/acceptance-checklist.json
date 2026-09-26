@@ -1,0 +1,173 @@
+{
+  "_meta": {
+    "description": "Приёмка dev.29: passed допускается только с фактическим результатом. Существование теста не означает его успешный запуск.",
+    "baseline_commit": "35e4e6968917b3df5d5de59705caa116620be3bf"
+  },
+  "checks": [
+    {
+      "id": "BASE-01",
+      "category": "Основа",
+      "requirement": "Зафиксирована версия целевой программы и прочитаны её инструкции.",
+      "evidence_required": "Профиль с источником версии и списком экранов.",
+      "status": "passed",
+      "evidence_files": [
+        "config/frontend-reference/target-profile.json",
+        "config/frontend-reference/provenance.json"
+      ]
+    },
+    {
+      "id": "BASE-02",
+      "category": "Основа",
+      "requirement": "Бизнес-данные и рабочая база сохранены; контроль выполняется на копии/обезличенных данных.",
+      "evidence_required": "Запись о входных данных и контрольных результатах.",
+      "status": "passed",
+      "evidence_files": [
+        "docs/test-cases/alpha-dev29.md"
+      ],
+      "scope": "Автоматические regression-тесты на синтетических данных; пользовательская рабочая база не использована."
+    },
+    {
+      "id": "VIS-01",
+      "category": "Внешний вид",
+      "requirement": "Основные роли палитры, шрифт, кнопки и поверхности соответствуют выбранным токенам.",
+      "evidence_required": "Скриншоты и фактические значения по роли.",
+      "status": "not_run",
+      "evidence_files": []
+    },
+    {
+      "id": "VIS-02",
+      "category": "Внешний вид",
+      "requirement": "Длинные русские подписи, номера и значения помещаются или доступны полностью.",
+      "evidence_required": "Снимки длинных случаев и проверка просмотра полного текста.",
+      "status": "not_run",
+      "evidence_files": []
+    },
+    {
+      "id": "VIS-03",
+      "category": "Внешний вид",
+      "requirement": "Протестированы default/hover/active/focus/disabled/busy/error/empty/refresh.",
+      "evidence_required": "Матрица состояний с результатами.",
+      "status": "not_run",
+      "evidence_files": []
+    },
+    {
+      "id": "LAY-01",
+      "category": "Геометрия",
+      "requirement": "При поддерживаемых размерах окна и масштабе ОС нет недоступных полей/кнопок.",
+      "evidence_required": "Проверенные размеры и масштаб в профиле.",
+      "status": "not_run",
+      "evidence_files": []
+    },
+    {
+      "id": "LAY-02",
+      "category": "Геометрия",
+      "requirement": "Прокрутка и закреплённые заголовки согласованы; всплывающие меню не обрезаются.",
+      "evidence_required": "Снимки с вертикальной и горизонтальной прокруткой.",
+      "status": "not_run",
+      "evidence_files": []
+    },
+    {
+      "id": "KEY-01",
+      "category": "Доступность",
+      "requirement": "Главные сценарии доступны клавиатурой; проверены Tab, Enter, Escape и возврат фокуса.",
+      "evidence_required": "Результат ручного сценария, конкретные ограничения.",
+      "status": "not_run",
+      "evidence_files": []
+    },
+    {
+      "id": "DATA-01",
+      "category": "Данные",
+      "requirement": "Одинаковые исходные значения дают одинаковые результаты до и после.",
+      "evidence_required": "Сравнение расчётов и итоговых полей.",
+      "status": "passed",
+      "evidence_files": [
+        "docs/test-cases/alpha-dev29.md"
+      ],
+      "scope": "Автоматические regression-тесты на синтетических данных; пользовательская рабочая база не использована."
+    },
+    {
+      "id": "DATA-02",
+      "category": "Данные",
+      "requirement": "Сохранены различия 0/null/пустого, точность и формат дат/чисел.",
+      "evidence_required": "Проверенные пограничные случаи.",
+      "status": "passed",
+      "evidence_files": [
+        "docs/test-cases/alpha-dev29.md"
+      ],
+      "scope": "Автоматические regression-тесты на синтетических данных; пользовательская рабочая база не использована."
+    },
+    {
+      "id": "DATA-03",
+      "category": "Данные",
+      "requirement": "Создание/редактирование/отмена/удаление работают по существующим правилам.",
+      "evidence_required": "Результаты ключевых сценариев.",
+      "status": "passed",
+      "evidence_files": [
+        "docs/test-cases/alpha-dev29.md"
+      ],
+      "scope": "Автоматические regression-тесты на синтетических данных; пользовательская рабочая база не использована."
+    },
+    {
+      "id": "IO-01",
+      "category": "Импорт/экспорт",
+      "requirement": "Сохранены форматы, структура и значения выгрузок.",
+      "evidence_required": "Сравнение экспортов и повторный импорт.",
+      "status": "passed",
+      "evidence_files": [
+        "docs/test-cases/alpha-dev29.md"
+      ],
+      "scope": "Автоматические regression-тесты на синтетических данных; пользовательская рабочая база не использована."
+    },
+    {
+      "id": "ERR-01",
+      "category": "Ошибки",
+      "requirement": "Ошибки чтения/записи и обновления не выглядят как успех; повторный клик не дублирует операцию.",
+      "evidence_required": "Проверки недоступного файла, невалидного ввода и повторного нажатия.",
+      "status": "passed",
+      "evidence_files": [
+        "docs/test-cases/alpha-dev29.md"
+      ],
+      "scope": "Автоматические regression-тесты на синтетических данных; пользовательская рабочая база не использована."
+    },
+    {
+      "id": "PRN-01",
+      "category": "Печать",
+      "requirement": "Сохранены требуемые страницы, колонки, итоги, читаемость и единицы шрифта.",
+      "evidence_required": "Проверенные PDF/бумажные образцы.",
+      "status": "not_run",
+      "evidence_files": []
+    },
+    {
+      "id": "PRN-02",
+      "category": "Печать",
+      "requirement": "Нет обрезанных строк/итогов; шапки и многостраничные группы читаются.",
+      "evidence_required": "Образец длинного отчёта и большого графа.",
+      "status": "not_run",
+      "evidence_files": []
+    },
+    {
+      "id": "RUN-01",
+      "category": "Запуск",
+      "requirement": "Работает согласованный автономный сценарий и локальные ресурсы.",
+      "evidence_required": "Фактическая проверка на целевой системе без сети.",
+      "status": "not_run",
+      "evidence_files": []
+    },
+    {
+      "id": "RUN-02",
+      "category": "Запуск",
+      "requirement": "Сохранены ожидаемые пути данных и поведение при переносе/обновлении папки.",
+      "evidence_required": "Проверка путей и повторного открытия существующих данных.",
+      "status": "not_run",
+      "evidence_files": []
+    },
+    {
+      "id": "DEL-01",
+      "category": "Передача",
+      "requirement": "Предоставлены код, конфигурация переноса, инструкция, результаты и отклонения.",
+      "evidence_required": "Перечень файлов и заполненный отчёт.",
+      "status": "not_run",
+      "evidence_files": []
+    }
+  ]
+}

@@ -1,15 +1,47 @@
-schema_version: 1
-status: ROLE_NAMES_CONFIRMED_PERMISSIONS_OPEN
+schema_version: 3
+status: ACCEPTED_OWNER_DEV30
+# Documentation inventory. Runtime enforcement: access_policy.py / SecureDesktopBridge.
+# Three roles, not a sequential three-signature approval workflow.
+automatic_open:
+  mechanism: WINDOWS_DPAPI_CURRENT_USER
+  grants_personal_identity: false
+  grants_administrator_session: false
+  legacy_or_other_windows_profile_requires_one_time_code: true
 roles:
-  - name: наблюдатель
-    permissions: null
-  - name: оператор дочернего общества
-    permissions: null
-  - name: оператор головной площадки
-    permissions: null
-  - name: планировщик
-    permissions: null
-  - name: контролёр
-    permissions: null
+  - name: руководитель проекта
+    code: project_manager
+    can_enroll_database_recovery_key: false
+    permissions:
+      - view_reports_on_configured_windows_profile
+      - edit_unsaved_facts
+      - authorize_fact_save_with_fresh_code
+      - change_plans_and_presentation_with_fresh_code
+      - verify_and_print_report_with_fresh_code
+      - export_reports
+  - name: проверяющий
+    code: reviewer
+    can_enroll_database_recovery_key: true
+    permissions:
+      - configure_automatic_open_with_enrolled_personal_code
+      - view_reports_on_configured_windows_profile
+      - edit_unsaved_facts
+      - authorize_fact_save_with_fresh_code
+      - change_plans_and_presentation_with_fresh_code
+      - verify_and_print_report_with_fresh_code
+      - export_reports
   - name: администратор
-    permissions: null
+    code: admin
+    maximum_count: 1
+    can_enroll_database_recovery_key: true
+    permissions:
+      - configure_automatic_open_with_enrolled_personal_code
+      - view_reports_on_configured_windows_profile
+      - edit_unsaved_facts
+      - authorize_fact_save_with_fresh_code
+      - change_plans_and_presentation_with_fresh_code
+      - verify_and_print_report_with_fresh_code
+      - export_reports
+      - configure_workspace_with_fresh_code
+      - enter_administrator_session_with_fresh_code
+      - create_responsible_users_in_administrator_session
+      - import_excel_with_fresh_code
