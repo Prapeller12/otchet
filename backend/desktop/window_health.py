@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ctypes
 import importlib
 import json
+import sys
 import time
 from typing import Any
 
@@ -164,8 +166,21 @@ def _check_hint_client_bounds(window: Any) -> None:
         raise RuntimeError("Подсказка обрезана полосой прокрутки или краем рабочей области")
 
 
+def _park_test_pointer() -> None:
+    """Keep native hover separate from the self-test's synthetic pointer events."""
+    if sys.platform != "win32":
+        return
+    # The runner leaves its pointer in the middle of the screen. Removing a popup
+    # there exposes another hinted field and generates a real mouseover, which
+    # can open a different tooltip immediately after the synthetic Escape.
+    # The desktop origin is outside the client area of our normal framed window.
+    if not ctypes.windll.user32.SetCursorPos(0, 0):  # type: ignore[attr-defined]
+        raise RuntimeError("Не удалось отвести указатель мыши перед проверкой подсказок")
+
+
 def _exercise_readonly_hints(window: Any, paths: PortablePaths, tab: int) -> None:
     """Exercise actual React hover/focus help inside the narrow native WebView."""
+    _park_test_pointer()
     if not window.evaluate_js("""(() => {
       const cells = [...document.querySelectorAll(
         '.report-matrix button[aria-readonly=true]')];
