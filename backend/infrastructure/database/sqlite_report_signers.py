@@ -20,12 +20,28 @@ def load_signer(connection: sqlite3.Connection, signer_id: str) -> dict[str, Any
     return dict(zip((c[0] for c in cursor.description), row, strict=True))
 
 
-def access_role(connection: sqlite3.Connection, signer_id: str) -> str:
+def is_revoked(connection: sqlite3.Connection, signer_id: str) -> bool:
+    # A previous release is authenticated before applying its pending migrations.
+    if not connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='report_signer_status'"
+    ).fetchone():
+        return False
+    status = connection.execute(
+        "SELECT revoked FROM report_signer_status WHERE signer_id=?", (signer_id,)
+    ).fetchone()
+    return status is None or bool(status[0])
+
+
+def access_role(
+    connection: sqlite3.Connection, signer_id: str, *, require_active: bool = True
+) -> str:
     row = connection.execute(
         "SELECT role FROM report_access_roles WHERE signer_id=?", (signer_id,)
     ).fetchone()
     if row is None:
         raise ValueError("Профиль доступа не найден. Обратитесь к администратору")
+    if require_active and is_revoked(connection, signer_id):
+        raise ValueError("Доступ пользователя отозван")
     return str(row[0])
 
 
@@ -44,7 +60,13 @@ class SqliteReportSignersRepository:
                 "SELECT id FROM report_signers ORDER BY display_name"
             ).fetchall()
             return [
-                summary(load_signer(connection, row[0]), access_role(connection, row[0]))
+                {
+                    **summary(
+                        load_signer(connection, row[0]),
+                        access_role(connection, row[0], require_active=False),
+                    ),
+                    **({"revoked": True} if is_revoked(connection, row[0]) else {}),
+                }
                 for row in ids
             ]
 

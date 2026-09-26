@@ -68,7 +68,7 @@ Copy-Item $frontendRoot (Join-Path $stage "app\frontend") -Recurse
 Copy-Item (Join-Path $repositoryRoot "backend\migrations") (Join-Path $stage "app\migrations") -Recurse
 New-Item (Join-Path $stage "config") -ItemType Directory -Force | Out-Null
 Get-ChildItem (Join-Path $repositoryRoot "config") -Force |
-    Where-Object { $_.Name -ne "app.local.toml" } |
+    Where-Object { $_.Name -notin @("app.local.toml", "ui-preferences.json") -and $_.Name -notlike ".ui-preferences-*.tmp" } |
     Copy-Item -Destination (Join-Path $stage "config") -Recurse
 if ($EvergreenTestBuild) {
     Set-Content (Join-Path $stage "config\app.local.toml") "[webview2]`nruntime_mode = `"evergreen`"" -Encoding utf8

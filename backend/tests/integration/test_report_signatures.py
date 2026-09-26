@@ -129,7 +129,12 @@ def test_tampering_is_invalid(
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(f"UPDATE {table} SET {field}=?", (value,))
         # Simulate an external database editor bypassing the append-only trigger.
-        conn.execute(f"DROP TRIGGER {table}_no_update")
+        trigger = (
+            "report_signers_identity_immutable"
+            if table == "report_signers"
+            else f"{table}_no_update"
+        )
+        conn.execute(f"DROP TRIGGER {trigger}")
         conn.execute(f"UPDATE {table} SET {field}=?", (value,))
     result = data(app.get_report_verification(QUERY))
     assert result["status"] == "INVALID"
@@ -176,7 +181,14 @@ def test_legacy_migration_preserves_old_attestation(tmp_path: Path) -> None:
             ),
         )
         conn.commit()
-        assert apply_migrations(conn, ROOT / "backend/migrations") == ("0012", "0013", "0014")
+        assert apply_migrations(conn, ROOT / "backend/migrations") == (
+            "0012",
+            "0013",
+            "0014",
+            "0015",
+            "0016",
+            "0017",
+        )
         assert apply_migrations(conn, ROOT / "backend/migrations") == ()
     finally:
         conn.close()

@@ -89,3 +89,18 @@ def signature_valid(public_key: str, signature: str, payload: str) -> bool:
         return True
     except (InvalidSignature, ValueError):
         return False
+
+
+def rewrap_key(profile: dict[str, Any], current_pin: str, new_pin: str) -> dict[str, Any]:
+    """Change only the password wrapper, retaining the exact Ed25519 identity."""
+    private = unlock_key(profile, current_pin)
+    salt, nonce = os.urandom(16), os.urandom(12)
+    encrypted = ChaCha20Poly1305(_derive(new_pin, salt)).encrypt(
+        nonce, private.private_bytes_raw(), _identity(profile)
+    )
+    return {
+        **profile,
+        "salt": encode(salt),
+        "nonce": encode(nonce),
+        "encrypted_private_key": encode(encrypted),
+    }

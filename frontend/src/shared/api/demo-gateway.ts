@@ -347,6 +347,9 @@ function coordinateKey(value: ReportCellCoordinate): string {
 }
 
 export class DemoGateway implements ApplicationGateway {
+  #fieldHintsEnabled = true;
+  async getUiPreferences() { return { field_hints_enabled: this.#fieldHintsEnabled }; }
+  async saveUiPreferences(request: { field_hints_enabled: boolean }) { this.#fieldHintsEnabled = request.field_hints_enabled; return this.getUiPreferences(); }
   readonly mode = "demo" as const;
   readonly #matrices = new Map<string, ReportMatrixContract>();
   readonly #organizations: OrganizationOption[] = [

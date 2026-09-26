@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import stat
 from contextlib import closing
 from pathlib import Path
 
@@ -66,7 +67,8 @@ def test_legacy_migration_and_backups_keep_data_encrypted(
     def require_writable_flush(descriptor: int) -> None:
         # Enforce the Windows flush requirement on Linux too. This writes no data,
         # but rejects a read-only descriptor before the actual durability call.
-        os.write(descriptor, b"")
+        if not stat.S_ISDIR(os.fstat(descriptor).st_mode):
+            os.write(descriptor, b"")
         real_fsync(descriptor)
 
     monkeypatch.setattr(os, "fsync", require_writable_flush)

@@ -1,3 +1,6 @@
+import type { RecoveryBackup, RecoveryResult } from "./application-gateway";
+import type { ManageReportSignerRequest, ManageReportSignerResult } from "./application-gateway";
+import type { UiPreferences } from "./application-gateway";
 import type {
   ApplicationGateway, ReferenceRequest, ReportSigner, CreateReportSignerRequest,
   AccessStatus, AccessUser, WriteAuthorization, AuthorizationHandler,
@@ -27,6 +30,11 @@ type BridgeEnvelope =
   | { ok: false; error: { code: string; message: string } };
 
 type PyWebViewApi = {
+  list_recovery_backups(request: Record<string, never>): Promise<BridgeEnvelope>;
+  verify_recovery_backup(request: { backup_id: string }): Promise<BridgeEnvelope>;
+  restore_recovery_backup(request: { backup_id: string }): Promise<BridgeEnvelope>;
+  get_ui_preferences(request: Record<string, never>): Promise<BridgeEnvelope>;
+  save_ui_preferences(request: UiPreferences): Promise<BridgeEnvelope>;
   get_access_status(request: Record<string, never>): Promise<BridgeEnvelope>;
   setup_access(request: { display_name?: string; pin: string; signer_id?: string }): Promise<BridgeEnvelope>;
   unlock_access(request: WriteAuthorization): Promise<BridgeEnvelope>;
@@ -37,6 +45,7 @@ type PyWebViewApi = {
   export_pdf(request: MonthlyReportQuery): Promise<BridgeEnvelope>;
   get_report_verification(request: MonthlyReportQuery): Promise<BridgeEnvelope>;
   list_report_signers(request: Record<string, never>): Promise<BridgeEnvelope>;
+  manage_report_signer(request: ManageReportSignerRequest): Promise<BridgeEnvelope>;
   create_report_signer(request: CreateReportSignerRequest): Promise<BridgeEnvelope>;
   verify_report(request: VerifyReportRequest): Promise<BridgeEnvelope>;
   save_report_presentation(request: SaveReportPresentationRequest): Promise<BridgeEnvelope>;
@@ -68,6 +77,11 @@ function unwrap(envelope: BridgeEnvelope): unknown {
   if (!envelope.ok) {
     throw new Error(`${envelope.error.code}: ${envelope.error.message}`);
   }
+  if (envelope.data && typeof envelope.data === "object") {
+    const result = envelope.data as { backup_warning?: unknown; backup_complete?: unknown };
+    if (typeof result.backup_warning === "string") window.dispatchEvent(new CustomEvent("backup-warning", { detail: result.backup_warning }));
+    else if (result.backup_complete === true) window.dispatchEvent(new Event("backup-success"));
+  }
   return envelope.data;
 }
 
@@ -81,6 +95,11 @@ export class PyWebViewGateway implements ApplicationGateway {
   #authorizationHandler: AuthorizationHandler | null = null;
 
   setAuthorizationHandler(handler: AuthorizationHandler | null): void { this.#authorizationHandler = handler; }
+  async listRecoveryBackups(): Promise<{ backups: RecoveryBackup[] }> { return unwrap(await this.#api.list_recovery_backups({})) as { backups: RecoveryBackup[] }; }
+  async verifyRecoveryBackup(backupId: string): Promise<{ valid: boolean; created_at: string }> { return unwrap(await this.#api.verify_recovery_backup({ backup_id: backupId })) as { valid: boolean; created_at: string }; }
+  async restoreRecoveryBackup(backupId: string): Promise<RecoveryResult> { return unwrap(await this.#api.restore_recovery_backup({ backup_id: backupId })) as RecoveryResult; }
+  async getUiPreferences(): Promise<UiPreferences> { return unwrap(await this.#api.get_ui_preferences({})) as UiPreferences; }
+  async saveUiPreferences(request: UiPreferences): Promise<UiPreferences> { return unwrap(await this.#api.save_ui_preferences(request)) as UiPreferences; }
   async getAccessStatus(): Promise<AccessStatus> { return unwrap(await this.#api.get_access_status({})) as AccessStatus; }
   async setupAccess(request: { display_name?: string; pin: string; signer_id?: string }): Promise<AccessStatus> { return unwrap(await this.#api.setup_access(request)) as AccessStatus; }
   async unlockAccess(request: WriteAuthorization): Promise<AccessStatus> { return unwrap(await this.#api.unlock_access(request)) as AccessStatus; }
@@ -131,6 +150,9 @@ export class PyWebViewGateway implements ApplicationGateway {
   }
   async listReportSigners(): Promise<ReportSigner[]> {
     return unwrap(await this.#api.list_report_signers({})) as ReportSigner[];
+  }
+  async manageReportSigner(request: ManageReportSignerRequest): Promise<ManageReportSignerResult> {
+    return await this.#write("Подтвердить изменение доступа", true, request, value => this.#api.manage_report_signer(value)) as ManageReportSignerResult;
   }
   async createReportSigner(request: CreateReportSignerRequest): Promise<ReportSigner> {
     return unwrap(await this.#api.create_report_signer(request)) as ReportSigner;

@@ -11,6 +11,8 @@ on:
       - codex/report-workflow-dev27
       - codex/reference-frontend-dev29
       - codex/dev30-startup-cell-guidance
+      - codex/dev32-hints-toggle
+      - codex/dev33-recovery-excel-integration
   workflow_dispatch:
 
 permissions:
@@ -159,5 +161,5 @@ jobs:
               --target $env:GITHUB_SHA `
               --prerelease `
               --title "Reporting System $version test build" `
-              --notes "Windows x64 alpha. Automatic opening under the configured Windows account via DPAPI; legacy encrypted databases need one code after upgrade. Fresh personal codes still required for protected writes and print. Accessible guidance for read-only and calculated cells. Existing PDF fonts preserved. See docs/test-cases/alpha-dev31.md and docs/user-guide.md. Read TESTING.txt, extract and run start.cmd. WebView2 Fixed Runtime included; real-window startup test required. Windows 10 ACL limitations: docs/decisions/ADR-0001-webview2-fixed-runtime-windows10-acl.md."
+              --notes-file docs/release/notes-dev33.md
           }

@@ -1,0 +1,23 @@
+import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, expect, it } from "vitest";
+import { ImportChangePreview } from "../../src/features/reference-reports/ImportChangePreview";
+import type { ImportPreview } from "../../src/shared/api/application-gateway";
+afterEach(cleanup);
+it("shows exact old/new values, empty versus zero, changed requisites and paginates large previews", async () => {
+  const preview: ImportPreview = { cancelled: false, value_changes: Array.from({ length: 51 }, (_, index) => ({ source_cell: `Отчёт!A${index + 1}`, target: `Деталь ${index + 1} · Поступление`, period: "01–06 сентября 2026", before: index === 0 ? { kind: "DATA_NOT_PROVIDED" } : { kind: "QUANTITY", quantity: "12345678901234567890.001" }, after: { kind: "QUANTITY", quantity: String(index) }, classification: index === 50 ? "ERROR" : "CHANGED" })), metadata: { structural_changes: [{ source_cell: "Реквизиты!B2", before: "Изделие А", after: "Изделие Б" }] } };
+  render(<ImportChangePreview preview={preview} />); const user = userEvent.setup();
+  const table = within(screen.getByRole("region", { name: "Проверяемые значения импорта" })).getByRole("table");
+  expect(within(table).getAllByRole("row")).toHaveLength(51);
+  expect(within(table).getByText("Пусто — данные не представлены")).toBeVisible();
+  expect(within(table).getByText("0")).toBeVisible();
+  expect(within(table).getAllByText("12345678901234567890.001")).toHaveLength(49);
+  expect(screen.getByText("Изделие А")).toBeVisible(); expect(screen.getByText("Изделие Б")).toBeVisible();
+  expect(screen.queryByText("Отчёт!A51")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Следующие изменения" }));
+  expect(screen.getByText("Отчёт!A51")).toBeVisible();
+  await user.click(screen.getByLabelText("Только ошибочные значения"));
+  expect(within(table).getAllByRole("row")).toHaveLength(2);
+  await user.type(screen.getByLabelText("Поиск в изменениях"), "Несуществующая позиция");
+  expect(within(table).getAllByRole("row")).toHaveLength(1);
+});

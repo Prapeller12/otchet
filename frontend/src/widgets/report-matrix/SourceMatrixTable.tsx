@@ -63,7 +63,7 @@ export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndi
   const receivedIndex = selected("RECEIVED");
   const factIndex = selected("FACT");
   const varianceIndex = selected("VARIANCE");
-  const dates = visibleIndices.filter(index => head ? ["PLAN", "FACT"].includes(matrix.time_columns[index]?.kind ?? "") : matrix.time_columns[index]?.kind === "USED");
+  const dates = visibleIndices.filter(index => head ? ["PLAN", "FACT"].includes(matrix.time_columns[index]?.kind ?? "") : ["SUPPLIED", "USED"].includes(matrix.time_columns[index]?.kind ?? ""));
   const months: { key: string; span: number }[] = [];
   for (const index of dates) {
     const key = matrix.time_columns[index]!.group_label;
@@ -93,7 +93,7 @@ export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndi
             {mainHeaders.map(label => <th key={label} rowSpan={2} scope="col">{label}</th>)}
             {months.map(month => <th key={month.key} colSpan={month.span} scope="colgroup">{monthLabel(month.key)}</th>)}
           </tr>
-          <tr className="source-header-dates">{dates.map(index => <th key={matrix.time_columns[index]!.id} scope="col">{head ? matrix.time_columns[index]!.label : <button type="button" className="week-heading" aria-pressed={stockWeek === matrix.time_columns[index]!.id} title="Показать остаток на конец этой недели" disabled={blocked} onClick={() => onSelectStockWeek?.(matrix.time_columns[index]!.id)}>Расход<br />{matrix.time_columns[index]!.label}</button>}{renderResizeHandle?.(matrix.time_columns[index]!.id, `${matrix.time_columns[index]!.group_label} ${matrix.time_columns[index]!.label}`, Math.max(64, matrix.time_columns[index]!.width))}</th>)}</tr>
+          <tr className="source-header-dates">{dates.map(index => <th key={matrix.time_columns[index]!.id} scope="col">{head ? matrix.time_columns[index]!.label : <button type="button" className="week-heading" aria-pressed={stockWeek === matrix.time_columns[index]!.id.slice(0, 10)} title="Показать остаток на конец этой недели" disabled={blocked} onClick={() => onSelectStockWeek?.(matrix.time_columns[index]!.id.slice(0, 10))}>{matrix.time_columns[index]!.kind === "SUPPLIED" ? "Поступило" : "Расход"}<br />{matrix.time_columns[index]!.label.replace(/^(?:Поставлено|Поступило|Расход)\s+/i, "")}</button>}{renderResizeHandle?.(matrix.time_columns[index]!.id, `${matrix.time_columns[index]!.group_label} ${matrix.time_columns[index]!.label}`, Math.max(64, matrix.time_columns[index]!.width))}</th>)}</tr>
         </thead>
         <tbody>{matrix.rows.map((row, rowIndex) => {
           const span = spans.get(rowIndex);

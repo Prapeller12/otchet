@@ -11,11 +11,13 @@ import hashlib
 import json
 import re
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import date
 
 from backend.repositories.report_facts import (
     FactCoordinateRecord,
+    ReportCellUnitOfWork,
     ReportCellUnitOfWorkFactory,
     ReportFactRecord,
 )
@@ -241,6 +243,7 @@ class ReportCellService:
         actor_ref: str,
         validate_current_state: Callable[[], None] | None = None,
         request_context: Mapping[str, object] | None = None,
+        unit_of_work: ReportCellUnitOfWork | None = None,
     ) -> tuple[SavedReportCell, ...]:
         if not changes:
             raise ReportCellValidationError("changes must not be empty")
@@ -265,7 +268,10 @@ class ReportCellService:
             )
         request_sha256 = hashlib.sha256(request_json.encode("utf-8")).hexdigest()
 
-        with self._unit_of_work_factory() as unit_of_work:
+        transaction = (
+            self._unit_of_work_factory() if unit_of_work is None else nullcontext(unit_of_work)
+        )
+        with transaction as unit_of_work:
             previous_command = unit_of_work.idempotency.get(_SAVE_COMMAND, idempotency_key)
             if previous_command is not None:
                 if previous_command.request_sha256 != request_sha256:

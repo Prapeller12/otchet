@@ -8,8 +8,7 @@ import { sourceMatrix } from "../fixtures/source-matrix";
 
 afterEach(cleanup);
 
-function show() {
-  const initial = sourceMatrix();
+function show(initial = sourceMatrix()) {
   const gateway = Object.assign(new DemoGateway(), { saveReportPresentation: vi.fn(async () => ({})) });
   let latest = initial;
   const save = vi.spyOn(gateway, "saveReportCells").mockImplementation(async request => ({
@@ -55,4 +54,30 @@ it("header drafts block source editing and paste until explicitly cancelled", as
   await user.click(screen.getByRole("button", { name: "Отменить изменения шапки" }));
   await user.dblClick(cell);
   expect(screen.getByLabelText("Редактирование: ячейка")).toBeVisible();
+});
+
+
+it("shows weekly receipts separately from consumption, edits their coordinate and preserves monthly calculated receipts", async () => {
+  const initial = sourceMatrix();
+  const column = { id: "2026-09-01-SUPPLIED", kind: "SUPPLIED", label: "Поставлено 01–06", group_label: "2026-09", width: 100 };
+  initial.time_columns.splice(4, 0, column);
+  initial.rows.forEach((row, index) => {
+    row.cells[1]!.state.access = "calculated";
+    row.cells.splice(4, 0, { ...row.cells[1]!, column_id: column.id, coordinate: { report_type: "SUBSIDIARY", organization_id: initial.organization_id, component_id: index < 2 ? "detail-a" : "detail-b", metric_code: `SUB_SUPPLIED_${index}`, period_start: "2026-09-01" }, value: { kind: "QUANTITY", quantity: String(41 + index) }, state: { access: "editable", persistence: "saved" } });
+  });
+  const { latest, save } = show(initial);
+  expect(screen.getByRole("button", { name: "Поступило 01–06" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Расход 01–06" })).toBeVisible();
+  const user = userEvent.setup();
+  const supplied = screen.getByRole("button", { name: "значение 41, доступна для ввода" });
+  await user.click(supplied);
+  await user.tab();
+  expect(document.activeElement).toHaveAttribute("aria-label", "значение 120, доступна для ввода");
+  await user.dblClick(supplied);
+  await user.clear(screen.getByLabelText("Редактирование: ячейка"));
+  await user.type(screen.getByLabelText("Редактирование: ячейка"), "55{Enter}");
+  expect(latest().rows[0]!.cells[4]!.value).toEqual({ kind: "QUANTITY", quantity: "55" });
+  expect(latest().rows[0]!.cells[1]!.state.access).toBe("calculated");
+  await user.click(screen.getByRole("button", { name: "Сохранить (1)" }));
+  expect(save).toHaveBeenCalledWith(expect.objectContaining({ changes: [{ coordinate: initial.rows[0]!.cells[4]!.coordinate, value: { kind: "QUANTITY", quantity: "55" } }] }));
 });

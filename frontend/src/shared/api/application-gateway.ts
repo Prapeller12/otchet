@@ -131,6 +131,9 @@ export type SaveReportCellsResponse = SaveVerificationResult & {
 };
 
 export type ImportRequest = {
+  batch_id?: string;
+  sheet_decisions?: Record<string, { include: boolean; reason: string }>;
+  mode?: ImportMode;
   year?: number;
   report_type: ReportType;
   organization_id: string;
@@ -142,7 +145,29 @@ export type ImportIssue = {
   message: string;
 };
 
+export type ImportMode = "create" | "append" | "update";
+export type CanonicalSheetReview = { name: string; state: string; known?: boolean; requires_decision?: boolean; included?: boolean | null; reason?: string };
+export type ImportValueChange = { source_cell: string; target: string; period: string; before: ReportCellValue | null; after: ReportCellValue | null; classification: string };
+export type ImportRequisiteChange = { source_cell: string; before: unknown; after: unknown; label?: string };
+export type ImportReconciliation = { source_cell: string; sheet: string; address: string; source_value: string | null; program_value: string | null; unit: string; period: string | { start: string; end: string; calendar?: string } | null; status: "MATCH" | "MISMATCH" | "UNVERIFIED"; reason: string; rounding: string };
 export type ImportPreview = {
+  reconciliation?: ImportReconciliation[];
+  value_changes?: ImportValueChange[];
+  metadata?: { structural_changes?: ImportRequisiteChange[]; sheets?: CanonicalSheetReview[]; review_sheets?: CanonicalSheetReview[]; [key: string]: unknown };
+  mode?: ImportMode;
+  validation_pending?: boolean;
+  transfer_validated?: boolean;
+  target_matrix?: ReportMatrixContract;
+  applied_period_rules?: Record<string, TransferPeriodRule>;
+  applied_sheet_decisions?: Record<string, { include: boolean; reason: string }>;
+  profile_reused?: boolean;
+  sources?: Record<string, TransferSource>;
+  recognition?: ReferenceRecognition;
+  auto_mappings?: TransferMapping[];
+  structural_actions?: Record<string, unknown>[];
+  position_count?: number;
+  dictionary_count?: number;
+  skipped_count?: number;
   reference_workbook?: ReferenceWorkbook;
   cancelled: boolean;
   batch_id?: string;
@@ -271,10 +296,18 @@ export type ApplicationError = {
   }>;
 };
 
+export type UiPreferences = { field_hints_enabled: boolean };
+
 export interface ApplicationGateway {
+  listRecoveryBackups?(): Promise<{ backups: RecoveryBackup[] }>;
+  verifyRecoveryBackup?(backupId: string): Promise<{ valid: boolean; created_at: string }>;
+  restoreRecoveryBackup?(backupId: string): Promise<RecoveryResult>;
+  getUiPreferences?(): Promise<UiPreferences>;
+  saveUiPreferences?(request: UiPreferences): Promise<UiPreferences>;
   referenceReport?(request: ReferenceRequest): Promise<unknown>;
   exportPdf?(request: MonthlyReportQuery): Promise<ExportResult>;
   listReportSigners?(): Promise<ReportSigner[]>;
+  manageReportSigner?(request: ManageReportSignerRequest): Promise<ManageReportSignerResult>;
   createReportSigner?(request: CreateReportSignerRequest): Promise<ReportSigner>;
   getReportVerification?(request: MonthlyReportQuery): Promise<ReportVerification>;
   verifyReport?(request: VerifyReportRequest): Promise<ReportVerification>;
@@ -311,19 +344,37 @@ export type ReportVerification = {
 };
 export type VerifyReportRequest = MonthlyReportQuery & { signer_id: string; pin: string; snapshot_sha256: string; confirmed: boolean };
 
+export type TransferSource = {
+  sheet: string; address: string; value: string; formula?: string; role: string; unit?: string;
+  formula_status?: string; number_format?: string; metric?: string | null;
+  period?: { start: string; end: string; calendar: string } | null;
+  position?: { code: string; name: string; structure_number: string; parent_code: string; norm: string; manufacturer: string };
+  errors?: { code: string; message: string }[]; coordinate?: ReportCellCoordinate;
+};
+export type TransferMapping = { source: string; coordinate?: ReportCellCoordinate; quantity?: string; confirmed?: boolean; skip_reason?: string; method?: string };
+export type TransferStructureOverride = { code?: string; name?: string; manufacturer?: string; norm?: string; parent_code?: string; reason: string };
+export type TransferPeriodRule = { start: string; end: string; calendar: "USER_CONFIRMED"; reason: string };
+export type TransferPeriodBlock = { key: string; sheet: string; address: string; label: string; year: number | null; month: number | null; week_label?: string; errors?: { code: string; message: string }[] };
+export type ReferenceRecognition = { period_blocks?: TransferPeriodBlock[]; profile_id?: string; profile_version?: string | number; structure_fingerprint?: string; sources?: Record<string, TransferSource>; fields?: Record<string, TransferSource>; structural_actions?: Record<string, unknown>[]; sheets?: { index: number; name: string; state: string; decision_required: boolean }[]; issues?: ImportIssue[] };
 export type ReferenceCell = { value: string | null; kind: "n" | "s" | "f" | "d"; display: string; error?: string };
 export type ReferenceSheet = { name: string; rows: number; columns: number; merges: string[]; cells: Record<string, ReferenceCell> };
-export type ReferenceWorkbook = { id: string; file_name: string; report_type: ReportType; revision: number; warnings: string[]; errors: string[]; sheets: ReferenceSheet[] };
+export type ReferenceWorkbook = { id: string; file_name: string; report_type: ReportType; revision: number; warnings: string[]; errors: string[]; sheets: ReferenceSheet[]; recognition?: ReferenceRecognition };
 export type ReferenceSummary = Pick<ReferenceWorkbook, "id" | "file_name" | "report_type">;
 export type ReferenceRequest = {
-  report_type?: ReportType; year?: number; mappings?: unknown[]; action: "list" | "get" | "save" | "export" | "transfer"; organization_id: string; id?: string; revision?: number; changes?: { sheet: number; address: string; value: string | null }[] };
+  report_type?: ReportType; year?: number; mode?: ImportMode; period_rules?: Record<string, TransferPeriodRule>; sheet_decisions?: Record<string, { include: boolean; reason: string }>; structure_overrides?: Record<string, TransferStructureOverride>; mappings?: TransferMapping[]; action: "list" | "get" | "save" | "export" | "transfer"; organization_id: string; id?: string; revision?: number; changes?: { sheet: number; address: string; value: string | null }[] };
 
-export type ReportSigner = { can_unlock?: boolean; id: string; display_name: string; role: AccessRole; key_fingerprint: string; created_at: string };
+export type ReportSigner = { revoked?: boolean; can_unlock?: boolean; id: string; display_name: string; role: AccessRole; key_fingerprint: string; created_at: string };
 export type CreateReportSignerRequest = { display_name: string; pin: string; role?: AccessRole; admin_id?: string; admin_pin?: string };
 
 export type AccessRole = "admin" | "reviewer" | "project_manager";
-export type AccessUser = { can_unlock?: boolean; id: string; display_name: string; role: AccessRole };
+export type AccessUser = { revoked?: boolean; can_unlock?: boolean; id: string; display_name: string; role: AccessRole };
 export type AccessStatus = { state: "setup" | "legacy" | "locked" | "ready"; users: AccessUser[]; current_user?: AccessUser | null; automatic_open_available?: boolean; automatic_open_error?: string };
 export type WriteAuthorization = { signer_id: string; pin: string };
 export type AuthorizationPrompt = { title: string; adminOnly: boolean; confirmLabel?: string };
 export type AuthorizationHandler = (prompt: AuthorizationPrompt, execute: (authorization: WriteAuthorization) => Promise<unknown>) => Promise<unknown>;
+
+export type ManageReportSignerRequest = { action: "change_pin" | "revoke" | "transfer_admin"; signer_id: string; current_pin?: string; new_pin?: string };
+export type ManageReportSignerResult = { users: ReportSigner[]; administrator_changed: boolean; access_warning?: string | null };
+
+export type RecoveryBackup = { backup_id: string; path: string; valid: boolean; created_at?: string; application_version?: string; encrypted?: boolean; error?: string };
+export type RecoveryResult = { cancelled: boolean; directory?: string; database_path?: string; instructions?: string[] };

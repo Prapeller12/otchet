@@ -160,6 +160,9 @@ def test_reopen_moves_native_window_inside_desktop_before_capture(
         "_wait_for_script",
         "_check_reference_theme",
         "_check_action_icons",
+        "_check_all_disabled_hints",
+        "_set_field_hints",
+        "_exercise_readonly_hints",
     ):
         monkeypatch.setattr(window_health, name, Mock())
 

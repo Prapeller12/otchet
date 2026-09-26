@@ -5,8 +5,10 @@ from __future__ import annotations
 import sqlite3
 import threading
 from contextlib import closing
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
+from uuid import uuid4
 
 from backend.api.report_confirmation import (
     confirm_print_report,
@@ -14,9 +16,16 @@ from backend.api.report_confirmation import (
     prepare_save_confirmation,
 )
 from backend.api.working_reference_bridge import WorkingReferenceApplicationBridge
+from backend.application.access_lifecycle import AccessLifecycleService
 from backend.application.access_policy import classify_permission
 from backend.application.report_cells import ReportCellError
-from backend.desktop.database_bootstrap import backup_and_migrate
+from backend.desktop.database_bootstrap import (
+    backup_and_migrate,
+    backup_database,
+    list_backups,
+    restore_backup,
+    verify_backup,
+)
 from backend.infrastructure.access_vault import AccessVault
 from backend.infrastructure.database.migrator import MigrationError, connect_sqlite
 from backend.infrastructure.database.sqlite_report_signers import (
@@ -24,6 +33,7 @@ from backend.infrastructure.database.sqlite_report_signers import (
     load_signer,
 )
 from backend.infrastructure.report_crypto import unlock_key
+from backend.infrastructure.ui_preferences import UiPreferences
 from backend.infrastructure.windows_data_protection import DeviceProtector
 
 
@@ -58,8 +68,10 @@ class SecureDesktopBridge:
         inbox_directory: str | Path | None = None,
         backups_directory: str | Path | None = None,
         application_version: str = "development",
+        preferences_path: str | Path | None = None,
         device_protector: DeviceProtector | Literal["windows"] | None = "windows",
     ) -> None:
+        self._ui_preferences = UiPreferences(preferences_path)
         self._database = Path(database_path)
         self._kwargs: dict[str, Any] = {
             "migrations_directory": migrations_directory,
@@ -77,6 +89,68 @@ class SecureDesktopBridge:
         self._dialogs: dict[str, Any] = {}
         self._automatic_open_attempted = False
         self._automatic_open_error: str | None = None
+
+    def _backup_before_write(self) -> None:
+        """Do not start a persisted business change without a complete recovery point."""
+        if self._database.exists():
+            try:
+                backup_database(
+                    self._database,
+                    self._vault.backups,
+                    str(self._kwargs["application_version"]),
+                )
+            except (OSError, ValueError, sqlite3.Error) as error:
+                raise ValueError(
+                    "Сохранение отменено: не удалось создать полную резервную копию. "
+                    "Проверьте свободное место и права записи в папку backups."
+                ) from error
+
+    def _backup_after_write(self, result: dict[str, Any]) -> dict[str, Any]:
+        """A failed post-save snapshot must not misrepresent committed data as unsaved."""
+        if not result.get("ok"):
+            return result
+        data = result.get("data")
+        if not isinstance(data, dict) or data.get("cancelled"):
+            return result
+        try:
+            path = backup_database(
+                self._database,
+                self._vault.backups,
+                str(self._kwargs["application_version"]),
+            )
+            data["backup_file"] = str(path.relative_to(self._vault.backups))
+            data["backup_complete"] = True
+        except (OSError, ValueError, sqlite3.Error):
+            data["backup_complete"] = False
+            data["backup_warning"] = (
+                "Данные сохранены, но резервная копия нового состояния не создана. "
+                "Копия до сохранения сохранена. Проверьте свободное место и права записи "
+                "в папку backups перед следующим сохранением."
+            )
+        return result
+
+    def get_ui_preferences(self, payload: object) -> dict[str, Any]:
+        try:
+            if _request(payload):
+                raise ValueError("Запрос настроек интерфейса должен быть пустым")
+            return _success(self._ui_preferences.read())
+        except ValueError as error:
+            return {"ok": False, "error": {"code": "VALIDATION_ERROR", "message": str(error)}}
+
+    def save_ui_preferences(self, payload: object) -> dict[str, Any]:
+        # Presentation-only local preference: no business write, PIN, or session change.
+        try:
+            return _success(self._ui_preferences.save(payload))
+        except ValueError as error:
+            return {"ok": False, "error": {"code": "VALIDATION_ERROR", "message": str(error)}}
+        except OSError:
+            return {
+                "ok": False,
+                "error": {
+                    "code": "PREFERENCES_SAVE_FAILED",
+                    "message": "Не удалось сохранить настройку подсказок",
+                },
+            }
 
     def _legacy_users(self) -> list[dict[str, Any]]:
         if not self._database.exists():
@@ -232,7 +306,7 @@ class SecureDesktopBridge:
                 self._vault.finish_setup()
                 self._current_user = profile
                 self._remember_device()
-                return _success(self._status_with_device())
+                return self._backup_after_write(_success(self._status_with_device()))
             except (OSError, ValueError, KeyError, StopIteration, sqlite3.Error) as error:
                 self._application = None
                 self._current_user = None
@@ -340,9 +414,10 @@ class SecureDesktopBridge:
                     raise ValueError(
                         "Руководитель проекта заполняет уже открытую ответственным базу"
                     )
+                self._backup_before_write()
                 repo.record_access(admin, "enroll_access", "authorized")
                 self._vault.enroll(profile, request["pin"])
-                return _success(profile)
+                return self._backup_after_write(_success(profile))
             except (
                 OSError,
                 ValueError,
@@ -370,6 +445,7 @@ class SecureDesktopBridge:
                         _text(auth, "pin"),
                         admin_only=permission == "admin",
                     )
+                    self._backup_before_write()
                     self._application._signers.record_access(approver, method, "authorized")
                 context = None
                 print_verification = None
@@ -390,7 +466,7 @@ class SecureDesktopBridge:
                     result["data"] = [
                         {**p, "can_unlock": p["id"] in enrolled} for p in result["data"]
                     ]
-                return result
+                return self._backup_after_write(result) if permission is not None else result
             except (
                 OSError,
                 ValueError,
@@ -403,6 +479,96 @@ class SecureDesktopBridge:
 
     def _configure_excel_dialogs(self, **dialogs: Any) -> None:
         self._dialogs["excel"] = dialogs
+
+    def _configure_recovery_dialog(self, select_directory: Any) -> None:
+        self._dialogs["recovery"] = select_directory
+
+    def _recovery_directory(self) -> Path:
+        return Path(self._kwargs["backups_directory"] or self._database.parent.parent / "backups")
+
+    def _recovery_source(self, payload: object) -> Path:
+        request = _request(payload)
+        if set(request) != {"backup_id"}:
+            raise ValueError("Выберите резервную копию из списка")
+        identity = _text(request, "backup_id")
+        if not identity.startswith("snapshot-") or any(
+            character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
+            for character in identity
+        ):
+            raise ValueError("Некорректный идентификатор резервной копии")
+        directory = self._recovery_directory().resolve()
+        folder = directory / identity
+        if folder.is_symlink() or folder.resolve().parent != directory:
+            raise ValueError("Копия должна находиться в папке резервирования программы")
+        return folder / "reporting.sqlite3"
+
+    def list_recovery_backups(self, payload: object = None) -> dict[str, Any]:
+        # Listing encrypted recovery sets needs no live database or personal session.
+        with self._mutex:
+            try:
+                if payload is not None and _request(payload):
+                    raise ValueError("Запрос списка резервных копий должен быть пустым")
+                results = list_backups(self._recovery_directory())
+                return _success(
+                    {
+                        "backups": [
+                            {**item, "backup_id": Path(item["path"]).parent.name}
+                            for item in results
+                        ]
+                    }
+                )
+            except (OSError, ValueError) as error:
+                return {
+                    "ok": False,
+                    "error": {"code": "BACKUP_RECOVERY_FAILED", "message": str(error)},
+                }
+
+    def verify_recovery_backup(self, payload: object) -> dict[str, Any]:
+        with self._mutex:
+            try:
+                source = self._recovery_source(payload)
+                manifest = verify_backup(source)
+                return _success({"valid": True, "created_at": manifest["created_at"]})
+            except (OSError, ValueError, KeyError) as error:
+                return {
+                    "ok": False,
+                    "error": {"code": "BACKUP_RECOVERY_FAILED", "message": str(error)},
+                }
+
+    def restore_recovery_backup(self, payload: object) -> dict[str, Any]:
+        # Copies a verified set into a NEW directory. It never selects/replaces live
+        # data, writes business records, or grants permission to decrypt the result.
+        with self._mutex:
+            try:
+                source = self._recovery_source(payload)
+                verify_backup(source)
+                selector = self._dialogs.get("recovery")
+                parent = selector() if selector is not None else self._recovery_directory().parent
+                if parent is None:
+                    return _success({"cancelled": True})
+                stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+                destination = Path(parent) / f"recovery-{stamp}-{uuid4().hex[:8]}"
+                restored = restore_backup(source, destination)
+                return _success(
+                    {
+                        "cancelled": False,
+                        "directory": str(destination.resolve()),
+                        "database_path": str(restored.resolve()),
+                        "instructions": [
+                            "Распакуйте эту же или более новую сборку программы в отдельную папку.",
+                            "До первого запуска скопируйте все файлы из папки восстановления "
+                            "в папку data новой копии программы.",
+                            "Запустите новую копию и введите действовавший на дату резервной копии "
+                            "код администратора или проверяющего. Проверьте отчёты перед работой.",
+                            "Исходная программа и её рабочая база не изменены.",
+                        ],
+                    }
+                )
+            except (OSError, ValueError, KeyError, sqlite3.Error) as error:
+                return {
+                    "ok": False,
+                    "error": {"code": "BACKUP_RECOVERY_FAILED", "message": str(error)},
+                }
 
     def _configure_pdf_dialog(self, save_file: Any) -> None:
         self._dialogs["pdf"] = save_file
@@ -464,6 +630,7 @@ class SecureDesktopBridge:
                 if request.keys() - {"display_name", "pin", "role"}:
                     raise ValueError("Некорректный запрос создания ответственного лица")
                 repo = self._application._signers
+                self._backup_before_write()
                 repo.record_access(self._administrator, "create_report_signer", "authorized")
                 profile = repo.create_in_session(
                     _text(request, "display_name"),
@@ -473,7 +640,7 @@ class SecureDesktopBridge:
                 )
                 if profile["role"] in {"admin", "reviewer"}:
                     self._vault.enroll(profile, request["pin"])
-                return _success(profile)
+                return self._backup_after_write(_success(profile))
             except (
                 OSError,
                 ValueError,
@@ -482,6 +649,27 @@ class SecureDesktopBridge:
                 MigrationError,
                 ReportCellError,
             ) as error:
+                return _failure(error)
+
+    def manage_report_signer(self, payload: object) -> dict[str, Any]:
+        """Fresh administrator approval plus recoverable credential-file updates."""
+        with self._mutex:
+            try:
+                if self._application is None:
+                    raise ValueError("Сначала откройте базу")
+                request = _request(payload)
+                authorization = _request(request.get("authorization"))
+                self._application._signers.authorize(
+                    _text(authorization, "signer_id"),
+                    _text(authorization, "pin"),
+                    admin_only=True,
+                )
+                self._backup_before_write()
+                result = AccessLifecycleService(self._database, self._vault).execute(request)
+                self._administrator = None
+                self._current_user = None
+                return self._backup_after_write(_success(result))
+            except (OSError, ValueError, KeyError, sqlite3.Error, MigrationError) as error:
                 return _failure(error)
 
     def get_report_verification(self, payload: object) -> dict[str, Any]:

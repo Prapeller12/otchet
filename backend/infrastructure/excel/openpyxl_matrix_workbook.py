@@ -31,11 +31,19 @@ from backend.application.excel_reports import (
 )
 from backend.application.monthly_report import aggregate
 from backend.application.report_cells import ReportCellCoordinate, ReportCellValue
+from backend.infrastructure.excel.matrix_exchange_v2 import (
+    CLEAR_TOKEN,
+    METADATA_SHEET,
+    review_sheets,
+    validate_metadata,
+    write_metadata,
+)
+from backend.infrastructure.excel.reference_workbook import FormulaReader
 
 _MAP_SHEET = "_Системная карта"
 _VISIBLE_SHEET = "Отчёт"
 _MARKER = "REPORTING_SYSTEM_MATRIX_XLSX"
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _MAX_MAPPED_CELLS = 100_000
 
 _NAVY = "203A64"
@@ -79,7 +87,9 @@ class OpenpyxlMatrixWorkbookAdapter:
             name="Arial", size=10, italic=True
         )
         sheet.merge_cells(start_row=3, start_column=1, end_row=3, end_column=last_column)
-        sheet.cell(3, 1, "Пустая ячейка — данные не представлены; 0 — подтверждённый ноль.")
+        sheet.cell(
+            3, 1, "Пустая ячейка сохраняет прежнее значение; 0 — ноль; #CLEAR — явная очистка."
+        )
 
         thin = Side(style="thin", color=_BORDER)
         border = Border(left=thin, right=thin, top=thin, bottom=thin)
@@ -128,7 +138,7 @@ class OpenpyxlMatrixWorkbookAdapter:
         mapping.append(["report_type", report_type])
         mapping.append(["organization_id", organization_id])
         mapping.append(["visible_sheet", _VISIBLE_SHEET])
-        mapping.append(["visible_cell", "coordinate_json", "access"])
+        mapping.append(["visible_cell", "coordinate_json", "access", "value_kind", "quantity"])
 
         editable_cells: list[str] = []
         exported_count = 0
@@ -216,19 +226,25 @@ class OpenpyxlMatrixWorkbookAdapter:
                         sort_keys=True,
                         separators=(",", ":"),
                     )
-                    mapping.append([target.coordinate, coordinate_json, access])
+                    mapping.append(
+                        [
+                            target.coordinate,
+                            coordinate_json,
+                            access,
+                            value.get("kind"),
+                            value.get("quantity"),
+                        ]
+                    )
                     editable_cells.append(target.coordinate)
                     exported_count += 1
 
         if editable_cells:
             validation = DataValidation(
-                type="decimal",
-                operator="between",
-                formula1="-999999999999999",
-                formula2="999999999999999",
+                type="custom",
+                formula1="TRUE",
                 allow_blank=True,
             )
-            validation.error = "Введите число или оставьте ячейку пустой."
+            validation.error = "Введите число, формулу, #CLEAR или оставьте ячейку пустой."
             validation.errorTitle = "Некорректное значение"
             validation.showErrorMessage = True
             sheet.add_data_validation(validation)
@@ -307,7 +323,7 @@ class OpenpyxlMatrixWorkbookAdapter:
             presentation = cast(dict[str, Any], matrix.get("presentation", {}))
             plans = presentation.get("plans", {})
             actuals = presentation.get("actuals", {})
-            for period in sorted(plans.keys() | actuals.keys()):
+            for period in [f"{matrix.get('year')}-{month:02d}" for month in range(1, 13)]:
                 value = plans.get(period, "")
                 actual = actuals.get(period, "")
                 percent = presentation.get("completion", {}).get(period, "")
@@ -327,9 +343,10 @@ class OpenpyxlMatrixWorkbookAdapter:
             plan_sheet.cell(
                 plan_sheet.max_row + 2,
                 1,
-                "План и выпуск изменяются в программе. Расчёты — снимок на момент экспорта.",
+                "План и выпуск доступны для обмена; итоги пересчитываются после импорта.",
             )
         _write_report_header(workbook, matrix, border)
+        write_metadata(workbook, matrix)
         workbook.calculation.fullCalcOnLoad = True
         workbook.calculation.forceFullCalc = True
         workbook.calculation.calcMode = "auto"
@@ -345,6 +362,9 @@ class OpenpyxlMatrixWorkbookAdapter:
         matrix: Mapping[str, object],
     ) -> ParsedWorkbook:
         try:
+            with zipfile.ZipFile(source) as archive:
+                if sum(item.file_size for item in archive.infolist()) > 100 * 1024 * 1024:
+                    raise ExcelWorkbookValidationError("Распакованная книга превышает 100 МБ")
             workbook = load_workbook(source, data_only=False, read_only=False, keep_links=False)
         except (InvalidFileException, OSError, ValueError, zipfile.BadZipFile) as exc:
             raise ExcelWorkbookValidationError(
@@ -355,21 +375,101 @@ class OpenpyxlMatrixWorkbookAdapter:
                 "Книга не создана этой программой: системная карта отсутствует"
             )
         mapping = cast(Worksheet, workbook[_MAP_SHEET])
-        if mapping["A1"].value != _MARKER or mapping["B1"].value != _SCHEMA_VERSION:
+        if mapping["A1"].value != _MARKER or mapping["B1"].value not in (1, _SCHEMA_VERSION):
             raise ExcelWorkbookValidationError("Версия системной карты Excel не поддерживается")
         if mapping["B2"].value != report_type:
             raise ExcelWorkbookValidationError("Книга относится к другому типу отчёта")
-        if str(mapping["B3"].value) != str(organization_id):
+        if str(mapping["B3"].value) != str(organization_id) and not matrix.get(
+            "exchange_source_dataset_id"
+        ):
             raise ExcelWorkbookValidationError("Книга относится к другой организации")
         visible_sheet = mapping["B4"].value
         if not isinstance(visible_sheet, str) or visible_sheet not in workbook.sheetnames:
             raise ExcelWorkbookValidationError("Рабочий лист Excel не найден")
         sheet = cast(Worksheet, workbook[visible_sheet])
+        if sheet.max_row * sheet.max_column > 500_000:
+            workbook.close()
+            raise ExcelWorkbookValidationError("Лист превышает 500 000 ячеек")
         allowed = _editable_coordinates(matrix)
         cells: list[ParsedExcelCell] = []
         issues: list[WorkbookIssue] = []
+        metadata: dict[str, Any] = {
+            "schema_version": 1,
+            "non_imported_fields": [
+                "Формат v1: шапка, планы и структура не включены в карту импорта"
+            ],
+        }
+        if mapping["B1"].value == 2:
+            metadata, metadata_issues = validate_metadata(workbook, matrix)
+            issues.extend(metadata_issues)
+        else:
+            # v1 carries only local IDs. Require the visible business context too;
+            # a coinciding component_id in another workbook is not enough.
+            for row_index, raw_row in enumerate(_sequence(matrix.get("rows"), "rows"), 7):
+                row_context = _mapping(_mapping(raw_row, "row").get("left_values"), "left_values")
+                for column_index, raw_column in enumerate(
+                    _sequence(matrix.get("left_columns"), "left_columns"), 1
+                ):
+                    expected = str(
+                        row_context.get(_string(_mapping(raw_column, "column"), "id"), "")
+                    )
+                    actual = sheet.cell(row_index, column_index)
+                    if not isinstance(actual, Cell):
+                        continue
+                    if str(actual.value if actual.value is not None else "") != expected:
+                        issues.append(
+                            WorkbookIssue(
+                                actual.coordinate,
+                                "LEGACY_CONTEXT_MISMATCH",
+                                "Книга v1: обозначение, позиция или изготовитель "
+                                "не совпадают с рабочей структурой. Требуется сопоставление.",
+                            )
+                        )
+        known_sheets = {
+            _MAP_SHEET,
+            METADATA_SHEET,
+            visible_sheet,
+            "Месячные планы",
+            "Шапка и выпуск",
+        }
+        reviewed_sheets, sheet_issues = review_sheets(
+            workbook, known_sheets, matrix.get("exchange_sheet_decisions")
+        )
+        metadata["sheets"] = reviewed_sheets
+        issues.extend(sheet_issues)
+        cached_workbook = load_workbook(source, data_only=True, read_only=False, keep_links=False)
+        formula_reader = FormulaReader(
+            {
+                cell.coordinate: {"value": cell.value, "kind": cell.data_type}
+                for row in sheet
+                for cell in row
+                if cell.value is not None
+            }
+        )
+        skipped_count = 0
         source_cells: set[str] = set()
         coordinates: set[str] = set()
+        expected_coordinates = set(allowed)
+        declared_sources: dict[str, str] = {}
+        if mapping["B1"].value == 2:
+            manifest = metadata["snapshot"].get("coordinates")
+            if not isinstance(manifest, list) or not manifest:
+                raise ExcelWorkbookValidationError(
+                    "В метаданных v2 отсутствует перечень исходных координат"
+                )
+            expected_coordinates = set()
+            remap = cast(Mapping[str, object], matrix.get("exchange_coordinate_remap", {}))
+            for entry in manifest:
+                original = json.dumps(
+                    entry["coordinate"], ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                )
+                declared_sources[entry["source_cell"]] = original
+                target_coordinate = remap.get(original, entry["coordinate"])
+                expected_coordinates.add(
+                    json.dumps(
+                        target_coordinate, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                    )
+                )
 
         for index, values in enumerate(
             mapping.iter_rows(min_row=6, max_col=3, values_only=True), start=6
@@ -398,6 +498,25 @@ class OpenpyxlMatrixWorkbookAdapter:
                 raw_coordinate = json.loads(coordinate_json)
                 if not isinstance(raw_coordinate, dict):
                     raise ValueError("coordinate must be an object")
+                source_canonical = json.dumps(
+                    raw_coordinate, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                )
+                if (
+                    mapping["B1"].value == 2
+                    and declared_sources.get(source_cell) != source_canonical
+                ):
+                    issues.append(
+                        WorkbookIssue(
+                            source_cell,
+                            "UNDECLARED_COORDINATE",
+                            "Системная карта изменена: координата отсутствует "
+                            "в исходном перечне обмена",
+                        )
+                    )
+                    continue
+                remap = cast(Mapping[str, object], matrix.get("exchange_coordinate_remap", {}))
+                if source_canonical in remap:
+                    raw_coordinate = remap[source_canonical]
                 coordinate = ReportCellCoordinate.from_mapping(raw_coordinate)
                 canonical = json.dumps(
                     coordinate.to_dict(),
@@ -431,23 +550,62 @@ class OpenpyxlMatrixWorkbookAdapter:
                 )
                 continue
             coordinates.add(canonical)
-            raw_value = sheet[source_cell].value
-            if isinstance(raw_value, str) and raw_value.startswith("="):
+            try:
+                raw_value = sheet[source_cell].value
+            except (ValueError, KeyError, IndexError, AttributeError):
                 issues.append(
-                    WorkbookIssue(
-                        source_cell, "FORMULA_IN_INPUT", "В вводимой ячейке обнаружена формула"
-                    )
+                    WorkbookIssue(source_cell, "INVALID_ADDRESS", "Некорректный адрес ячейки")
                 )
                 continue
-            try:
-                value = _report_value(raw_value)
-            except ValueError as exc:
-                issues.append(WorkbookIssue(source_cell, "INVALID_NUMBER", str(exc)))
-                continue
-            cells.append(ParsedExcelCell(source_cell, coordinate, value))
+            provenance: dict[str, object] = {
+                "sheet": visible_sheet,
+                "address": source_cell,
+                "raw_value": str(raw_value) if raw_value is not None else None,
+                "schema_version": mapping["B1"].value,
+                "action": "SET",
+            }
+            if raw_value == CLEAR_TOKEN and mapping["B1"].value == 2:
+                value = ReportCellValue(kind="DATA_NOT_PROVIDED")
+                provenance["action"] = "CLEAR"
+            else:
+                if isinstance(raw_value, str) and raw_value.startswith("="):
+                    provenance.update(formula=raw_value, formula_status="CALCULATED_NO_CACHE")
+                    try:
+                        raw_value = formula_reader.cell(source_cell)
+                        if not isinstance(raw_value, (Decimal, int, float)) or isinstance(
+                            raw_value, bool
+                        ):
+                            raise ValueError("Формула должна возвращать число")
+                        cached = cached_workbook[visible_sheet][source_cell].value
+                        provenance["cached_value"] = str(cached) if cached is not None else None
+                        provenance["formula_status"] = (
+                            "CALCULATED_NO_CACHE"
+                            if cached is None
+                            else "CACHE_VERIFIED"
+                            if _report_value(cached) == _report_value(raw_value)
+                            else "CACHE_DIFFERS"
+                        )
+                    except (
+                        ValueError,
+                        ArithmeticError,
+                        SyntaxError,
+                        TypeError,
+                        RecursionError,
+                    ) as exc:
+                        issues.append(WorkbookIssue(source_cell, "FORMULA_UNSUPPORTED", str(exc)))
+                        continue
+                try:
+                    value = _report_value(raw_value)
+                except ValueError as exc:
+                    issues.append(WorkbookIssue(source_cell, "INVALID_NUMBER", str(exc)))
+                    continue
+                if value.kind == "DATA_NOT_PROVIDED":
+                    provenance["action"] = "KEEP"
+                    skipped_count += 1
+            cells.append(ParsedExcelCell(source_cell, coordinate, value, provenance))
         if not source_cells:
             raise ExcelWorkbookValidationError("Системная карта не содержит импортируемых ячеек")
-        for missing in sorted(allowed - coordinates):
+        for missing in sorted(expected_coordinates - coordinates):
             issues.append(
                 WorkbookIssue(
                     None,
@@ -455,7 +613,9 @@ class OpenpyxlMatrixWorkbookAdapter:
                     f"В системной карте отсутствует ячейка текущей формы: {missing}",
                 )
             )
-        return ParsedWorkbook(tuple(cells), tuple(issues))
+        cached_workbook.close()
+        workbook.close()
+        return ParsedWorkbook(tuple(cells), tuple(issues), metadata, skipped_count)
 
 
 def _add_image(sheet: Worksheet, data_url: str, anchor: str, width: float, height: float) -> None:
@@ -522,8 +682,8 @@ def _write_report_header(workbook: Workbook, matrix: Mapping[str, object], borde
     sheet.append([])
     sheet.append(
         [
-            "Поля шапки и выпуск по кодам изменяются в программе. "
-            "Экспорт содержит снимок; обратный импорт этих полей не выполняется."
+            "Шифр, изделие, завод и месячные планы доступны для обмена. "
+            "Годовые итоги вычисляются программой; выпуск по кодам включён в метаданные."
         ]
     )
     sheet.column_dimensions["A"].width = 38
@@ -564,7 +724,14 @@ def _report_value(value: object) -> ReportCellValue:
     if isinstance(value, bool) or isinstance(value, (date, datetime)):
         raise ValueError("Ожидалось число или пустая ячейка")
     try:
-        decimal = Decimal(str(value).strip())
+        decimal = Decimal(
+            str(value)
+            .strip()
+            .replace("\u00a0", "")
+            .replace("\u202f", "")
+            .replace(" ", "")
+            .replace(",", ".")
+        )
     except (InvalidOperation, ValueError) as exc:
         raise ValueError("Ожидалось число или пустая ячейка") from exc
     if not decimal.is_finite():

@@ -76,7 +76,7 @@ def test_excel_export_preview_commit_and_duplicate_are_complete(
     commit_data = cast(dict[str, Any], committed["data"])
     assert commit_data["imported_count"] == 1
     assert commit_data["status"] == "COMMITTED"
-    assert list(backups.glob("*.sqlite3"))
+    assert list(backups.rglob("*.sqlite3"))
 
     matrix_response = application.get_report_matrix(
         {"report_type": report_type, "organization_id": "1"}
@@ -112,10 +112,10 @@ def test_excel_import_rejects_foreign_workbook(
     assert result["ok"] is False
     error = cast(dict[str, Any], result["error"])
     assert error["code"] == "EXCEL_VALIDATION_ERROR"
-    assert "не соответствует приложенным образцам" in str(error["message"])
+    assert "Не найдены заголовки отчётной таблицы" in str(error["message"])
 
 
-def test_excel_formula_in_input_is_previewed_and_cannot_be_committed(
+def test_unsupported_excel_formula_is_previewed_and_cannot_be_committed(
     bridge: tuple[WorkingReferenceApplicationBridge, Path, Path],
 ) -> None:
     application, exports, _backups = bridge
@@ -131,14 +131,14 @@ def test_excel_formula_in_input_is_previewed_and_cannot_be_committed(
     workbook = load_workbook(destination)
     visible_cell = workbook["_Системная карта"]["A6"].value
     assert isinstance(visible_cell, str)
-    workbook["Отчёт"][visible_cell] = "=1+1"
+    workbook["Отчёт"][visible_cell] = "=SIN(1)"
     workbook.save(destination)
 
     staged = application.validate_import({"report_type": "DAILY_MOVEMENT", "organization_id": "1"})
     preview = cast(dict[str, Any], staged["data"])
     assert preview["status"] == "INVALID"
     assert preview["error_count"] == 1
-    assert cast(list[dict[str, Any]], preview["issues"])[0]["code"] == "FORMULA_IN_INPUT"
+    assert cast(list[dict[str, Any]], preview["issues"])[0]["code"] == "FORMULA_UNSUPPORTED"
 
     committed = application.commit_import({"batch_id": preview["batch_id"]})
     assert committed["ok"] is False

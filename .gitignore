@@ -52,3 +52,6 @@ config/app.local.toml
 # SQLCipher access envelopes, including automatic Windows opening
 *.keys.json*
 *.device.json*
+
+config/ui-preferences.json
+config/.ui-preferences-*.tmp
