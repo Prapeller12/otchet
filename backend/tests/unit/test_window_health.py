@@ -1,3 +1,5 @@
+import ctypes
+import sys
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -197,3 +199,43 @@ def test_ui_toggle_check_requires_persisted_value(
     monkeypatch.setattr(window_health, "_wait_for_script", Mock())
     with pytest.raises(RuntimeError, match="не записана"):
         window_health._set_field_hints(Mock(), paths, False)
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+def test_native_hint_pointer_is_parked_only_on_windows(
+    monkeypatch: pytest.MonkeyPatch, platform: str
+) -> None:
+    native = Mock()
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(ctypes, "windll", native, raising=False)
+    window_health._park_test_pointer()
+    if platform == "win32":
+        native.user32.SetCursorPos.assert_called_once_with(0, 0)
+    else:
+        native.user32.SetCursorPos.assert_not_called()
+
+
+def test_hint_pointer_failure_is_not_silently_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
+    native = Mock()
+    native.user32.SetCursorPos.return_value = 0
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(ctypes, "windll", native, raising=False)
+    with pytest.raises(RuntimeError, match="указатель мыши"):
+        window_health._park_test_pointer()
+
+
+def test_hint_exercise_parks_native_pointer_before_synthetic_events(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    events: list[str] = []
+    monkeypatch.setattr(window_health, "_park_test_pointer", lambda: events.append("park"))
+    window = Mock()
+
+    def evaluate(expression: str) -> bool:
+        events.append("evaluate")
+        return False
+
+    window.evaluate_js.side_effect = evaluate
+    with pytest.raises(RuntimeError, match="отсутствует пояснение"):
+        window_health._exercise_readonly_hints(window, PortablePaths(tmp_path), 0)
+    assert events == ["park", "evaluate"]
