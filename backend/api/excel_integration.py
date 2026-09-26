@@ -8,7 +8,12 @@ import zipfile
 from pathlib import Path
 from typing import Any, cast
 
-from backend.application.excel_reports import _preview, _sha256, _source_context_hash
+from backend.application.excel_reports import (
+    ExcelWorkbookValidationError,
+    _preview,
+    _sha256,
+    _source_context_hash,
+)
 from backend.application.import_recognition import apply_structure_overrides, recognize_document
 from backend.application.import_workspace import (
     apply_structure,
@@ -318,6 +323,8 @@ def commit_package(app: Any, identity: str, year: int | None) -> dict[str, Any]:
     batch = app._excel._imports.get_batch(identity)
     if batch is None:
         raise ValueError("Пакет импорта не найден")
+    if batch.status == "INVALID" or batch.error_count:
+        raise ExcelWorkbookValidationError("Импорт содержит ошибки и не может быть проведён")
     try:
         package = get_package(app._database_path, identity, batch.organization_id)
     except ValueError:
@@ -390,10 +397,7 @@ def prepare_canonical(
 ) -> dict[str, Any]:
     from openpyxl import load_workbook
 
-    from backend.application.excel_reports import (
-        ExcelWorkbookValidationError,
-        _validate_source_file,
-    )
+    from backend.application.excel_reports import _validate_source_file
     from backend.application.import_workspace import coordinate_remap, exchange_actions
     from backend.infrastructure.excel.matrix_exchange_v2 import (
         METADATA_SHEET,
