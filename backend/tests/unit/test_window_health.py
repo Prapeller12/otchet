@@ -1,3 +1,5 @@
+import ctypes
+import sys
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -204,8 +206,8 @@ def test_native_hint_pointer_is_parked_only_on_windows(
     monkeypatch: pytest.MonkeyPatch, platform: str
 ) -> None:
     native = Mock()
-    monkeypatch.setattr(window_health.sys, "platform", platform)
-    monkeypatch.setattr(window_health.ctypes, "windll", native, raising=False)
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(ctypes, "windll", native, raising=False)
     window_health._park_test_pointer()
     if platform == "win32":
         native.user32.SetCursorPos.assert_called_once_with(0, 0)
@@ -216,8 +218,8 @@ def test_native_hint_pointer_is_parked_only_on_windows(
 def test_hint_pointer_failure_is_not_silently_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     native = Mock()
     native.user32.SetCursorPos.return_value = 0
-    monkeypatch.setattr(window_health.sys, "platform", "win32")
-    monkeypatch.setattr(window_health.ctypes, "windll", native, raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(ctypes, "windll", native, raising=False)
     with pytest.raises(RuntimeError, match="указатель мыши"):
         window_health._park_test_pointer()
 

@@ -174,7 +174,7 @@ def _park_test_pointer() -> None:
     # there exposes another hinted field and generates a real mouseover, which
     # can open a different tooltip immediately after the synthetic Escape.
     # The desktop origin is outside the client area of our normal framed window.
-    if not ctypes.windll.user32.SetCursorPos(0, 0):  # type: ignore[attr-defined]
+    if not ctypes.windll.user32.SetCursorPos(0, 0):
         raise RuntimeError("Не удалось отвести указатель мыши перед проверкой подсказок")
 
 
