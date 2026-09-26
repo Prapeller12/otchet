@@ -85,6 +85,7 @@ def _run_window(
             inbox_directory=paths.imports_inbox,
             backups_directory=paths.backups,
             application_version=_version(paths),
+            preferences_path=paths.config / "ui-preferences.json",
         )
 
     bridge = new_bridge()

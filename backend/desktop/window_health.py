@@ -241,6 +241,64 @@ def _exercise_readonly_hints(window: Any, paths: PortablePaths, tab: int) -> Non
     _settle_window_paint(window)
 
 
+def _set_field_hints(window: Any, paths: PortablePaths, enabled: bool) -> None:
+    """Use the UI switch, then verify acknowledgement and portable persistence."""
+    value = json.dumps(enabled)
+    _wait_for_script(
+        window,
+        """!!document.querySelector('input[aria-label="Подсказки при наведении"]:enabled')""",
+        "Переключатель подсказок не готов",
+    )
+    window.evaluate_js(f"""(() => {{
+      const input = document.querySelector('input[aria-label="Подсказки при наведении"]');
+      if (input.checked !== {value}) input.click();
+    }})()""")
+    _wait_for_script(
+        window,
+        f"""(() => {{
+          const input = document.querySelector('input[aria-label="Подсказки при наведении"]');
+          return input && !input.disabled && input.checked === {value};
+        }})()""",
+        "Не сохранилось состояние переключателя подсказок",
+    )
+    preferences = json.loads((paths.config / "ui-preferences.json").read_text(encoding="utf-8"))
+    if preferences != {"field_hints_enabled": enabled}:
+        raise RuntimeError("Настройка подсказок не записана в переносимую конфигурацию")
+
+
+def _check_disabled_hints(window: Any) -> None:
+    for mode in ("hover", "focus"):
+        if not window.evaluate_js(f"""(() => {{
+          const input = document.querySelector('input[aria-label="Подсказки при наведении"]');
+          const target = {json.dumps(mode)} === 'focus'
+            ? document.querySelector('button[data-field-hint], input[readonly][data-field-hint]')
+            : document.querySelector('.report-matrix [data-field-hint]');
+          if (!input || input.disabled || input.checked || !target) return false;
+          document.activeElement?.blur();
+          if ({json.dumps(mode)} === 'focus') {{
+            target.focus();
+            if (document.activeElement !== target) return false;
+          }}
+          else target.dispatchEvent(new MouseEvent('mouseover', {{bubbles: true}}));
+          return true;
+        }})()"""):
+            raise RuntimeError("Не восстановлена выключенная настройка подсказок")
+        # Wait beyond the normal delayed popup and include a native paint.
+        time.sleep(0.5)
+        _settle_window_paint(window)
+        if not window.evaluate_js("""!document.querySelector('.field-hint-popup') &&
+            !document.querySelector('[data-field-hint][aria-describedby]')"""):
+            raise RuntimeError("Выключенная подсказка появилась при наведении или фокусе")
+
+
+def _check_all_disabled_hints(window: Any) -> None:
+    for tab in range(3):
+        window.evaluate_js(f"document.querySelectorAll('.report-tab')[{tab}].click()")
+        time.sleep(0.5)
+        _wait_for_script(window, _READY, "Не загрузился отчёт для проверки подсказок")
+        _check_disabled_hints(window)
+
+
 def _capture_report_viewports(window: Any, paths: PortablePaths, tab: int) -> None:
     _check_reference_theme(window)
     _check_action_icons(window)
@@ -597,6 +655,16 @@ def monitor_window(
             )
             _check_reference_theme(window)
             _check_action_icons(window)
+            _check_all_disabled_hints(window)
+            _set_field_hints(window, paths, True)
+            for tab in range(3):
+                window.evaluate_js(f"document.querySelectorAll('.report-tab')[{tab}].click()")
+                time.sleep(0.5)
+                _wait_for_script(window, _READY, "Не загрузился отчёт после включения подсказок")
+                _exercise_readonly_hints(window, paths, tab)
+            window.evaluate_js("document.querySelectorAll('.report-tab')[0].click()")
+            time.sleep(0.5)
+            _wait_for_script(window, _READY, "Не восстановлен ежедневный отчёт после проверки")
             _capture_window(window, paths, "window-reopened.png")
             window.destroy()
             return
@@ -736,6 +804,9 @@ def monitor_window(
                 raise RuntimeError("Не отображается результат формулы импортированного отчёта")
             _check_icon_accessibility(window)
             _capture_window(window, paths, "window-4.png")
+            # Leave hints off for the separate --ui-reopen-test EXE invocation.
+            _set_field_hints(window, paths, False)
+            _check_all_disabled_hints(window)
             window.destroy()
     except Exception as exc:
         if ui_self_test or ui_reopen_test:

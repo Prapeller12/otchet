@@ -1,3 +1,4 @@
+import type { UiPreferences } from "./application-gateway";
 import type {
   ApplicationGateway, ReferenceRequest, ReportSigner, CreateReportSignerRequest,
   AccessStatus, AccessUser, WriteAuthorization, AuthorizationHandler,
@@ -27,6 +28,8 @@ type BridgeEnvelope =
   | { ok: false; error: { code: string; message: string } };
 
 type PyWebViewApi = {
+  get_ui_preferences(request: Record<string, never>): Promise<BridgeEnvelope>;
+  save_ui_preferences(request: UiPreferences): Promise<BridgeEnvelope>;
   get_access_status(request: Record<string, never>): Promise<BridgeEnvelope>;
   setup_access(request: { display_name?: string; pin: string; signer_id?: string }): Promise<BridgeEnvelope>;
   unlock_access(request: WriteAuthorization): Promise<BridgeEnvelope>;
@@ -81,6 +84,8 @@ export class PyWebViewGateway implements ApplicationGateway {
   #authorizationHandler: AuthorizationHandler | null = null;
 
   setAuthorizationHandler(handler: AuthorizationHandler | null): void { this.#authorizationHandler = handler; }
+  async getUiPreferences(): Promise<UiPreferences> { return unwrap(await this.#api.get_ui_preferences({})) as UiPreferences; }
+  async saveUiPreferences(request: UiPreferences): Promise<UiPreferences> { return unwrap(await this.#api.save_ui_preferences(request)) as UiPreferences; }
   async getAccessStatus(): Promise<AccessStatus> { return unwrap(await this.#api.get_access_status({})) as AccessStatus; }
   async setupAccess(request: { display_name?: string; pin: string; signer_id?: string }): Promise<AccessStatus> { return unwrap(await this.#api.setup_access(request)) as AccessStatus; }
   async unlockAccess(request: WriteAuthorization): Promise<AccessStatus> { return unwrap(await this.#api.unlock_access(request)) as AccessStatus; }

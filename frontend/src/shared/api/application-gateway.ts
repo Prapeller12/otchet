@@ -271,7 +271,11 @@ export type ApplicationError = {
   }>;
 };
 
+export type UiPreferences = { field_hints_enabled: boolean };
+
 export interface ApplicationGateway {
+  getUiPreferences?(): Promise<UiPreferences>;
+  saveUiPreferences?(request: UiPreferences): Promise<UiPreferences>;
   referenceReport?(request: ReferenceRequest): Promise<unknown>;
   exportPdf?(request: MonthlyReportQuery): Promise<ExportResult>;
   listReportSigners?(): Promise<ReportSigner[]>;

@@ -1,9 +1,12 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import "./field-hint.css";
 
+export const FieldHintsEnabledContext = createContext(true);
+
 /** A single field's help stays outside the scrolling table, without changing grid focus. */
 export function useFieldHint(text: string | undefined) {
+  const enabled = useContext(FieldHintsEnabledContext);
   const id = useId();
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [position, setPosition] = useState({ left: 8, top: 8 });
@@ -14,7 +17,7 @@ export function useFieldHint(text: string | undefined) {
   function hide() { cancelHide(); setAnchor(null); }
   function show(target: HTMLElement) {
     cancelHide();
-    if (!text) return;
+    if (!text || !enabled) return;
     document.dispatchEvent(new CustomEvent("report-field-hint-open", { detail: id }));
     setAnchor(target);
   }
@@ -23,6 +26,7 @@ export function useFieldHint(text: string | undefined) {
     if (!focused.current) hideTimer.current = setTimeout(() => setAnchor(null), 120);
   }
   useEffect(() => () => clearTimeout(hideTimer.current), []);
+  useEffect(() => { if (!enabled) { cancelHide(); setAnchor(null); } }, [enabled]);
   useLayoutEffect(() => {
     if (!anchor || !popup.current) return;
     const margin = 8;
@@ -57,7 +61,7 @@ export function useFieldHint(text: string | undefined) {
       document.removeEventListener("report-field-hint-open", otherHint);
     };
   }, [anchor, text]);
-  const open = !!text && !!anchor;
+  const open = enabled && !!text && !!anchor;
   return {
     hintProps: {
       "data-field-hint": text || undefined,
@@ -76,5 +80,6 @@ export function useFieldHint(text: string | undefined) {
 /** Static values get keyboard help; editable grid cells use the hook on their existing button. */
 export function HintValue({ hint, children, className = "" }: { hint: string; children: ReactNode; className?: string }) {
   const help = useFieldHint(hint);
-  return <><span className={`field-hint-value ${className}`} tabIndex={0} {...help.hintProps}>{children}</span>{help.hint}</>;
+  const enabled = useContext(FieldHintsEnabledContext);
+  return <><span className={`field-hint-value ${className}`} tabIndex={enabled ? 0 : undefined} {...help.hintProps}>{children}</span>{help.hint}</>;
 }

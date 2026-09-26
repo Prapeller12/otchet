@@ -68,6 +68,8 @@ def test_frontend_network_policy_rejects_network_capability(tmp_path: Path, sour
         ("temp/.portable-dir", b"private data disguised as marker"),
         ("resources/forgotten.db", b"SQLite user data"),
         ("resources/renamed-resource.dat", b"SQLite format 3\x00private database"),
+        ("config/ui-preferences.json", b'{"field_hints_enabled":false}'),
+        ("config/.ui-preferences-test.tmp", b"temporary preference"),
         ("config/report.sqlite3.keys.json", b'{"users":["private wrapped keys"]}'),
         ("config/report.sqlite3.keys.json.pending", b'{"users":["private wrapped keys"]}'),
         ("resources/report.sqlite3.keys.json.copy", b"private vault backup"),

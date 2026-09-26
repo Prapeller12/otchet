@@ -161,3 +161,39 @@ def test_icon_accessibility_rejects_unnamed_button() -> None:
     window.evaluate_js.return_value = False
     with pytest.raises(RuntimeError, match="доступное имя"):
         window_health._check_icon_accessibility(window)
+
+
+def test_disabled_hint_check_rejects_popup_after_delay(monkeypatch: pytest.MonkeyPatch) -> None:
+    window = Mock()
+    window.evaluate_js.side_effect = [True, False]
+    monkeypatch.setattr("backend.desktop.window_health.time.sleep", Mock())
+    monkeypatch.setattr(window_health, "_settle_window_paint", Mock())
+    with pytest.raises(RuntimeError, match="Выключенная подсказка появилась"):
+        window_health._check_disabled_hints(window)
+
+
+def test_disabled_hint_check_exercises_hover_and_focus(monkeypatch: pytest.MonkeyPatch) -> None:
+    window = Mock()
+    window.evaluate_js.return_value = True
+    monkeypatch.setattr("backend.desktop.window_health.time.sleep", Mock())
+    monkeypatch.setattr(window_health, "_settle_window_paint", Mock())
+    window_health._check_disabled_hints(window)
+    scripts = [call.args[0] for call in window.evaluate_js.call_args_list]
+    assert '"hover"' in scripts[0]
+    assert '"focus"' in scripts[2]
+    assert "input.disabled || input.checked" in scripts[0]
+    assert "input[readonly][data-field-hint]" in scripts[2]
+    assert "document.activeElement !== target" in scripts[2]
+    assert "document.querySelector('[data-field-hint][aria-describedby]')" in scripts[3]
+
+
+def test_ui_toggle_check_requires_persisted_value(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = PortablePaths(tmp_path)
+    paths.config.mkdir()
+    (paths.config / "ui-preferences.json").write_text('{"field_hints_enabled": true}')
+    monkeypatch.setattr(window_health, "_wait_for_script", Mock())
+    with pytest.raises(RuntimeError, match="не записана"):
+        window_health._set_field_hints(Mock(), paths, False)

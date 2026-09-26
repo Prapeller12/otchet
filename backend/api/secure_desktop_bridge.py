@@ -24,6 +24,7 @@ from backend.infrastructure.database.sqlite_report_signers import (
     load_signer,
 )
 from backend.infrastructure.report_crypto import unlock_key
+from backend.infrastructure.ui_preferences import UiPreferences
 from backend.infrastructure.windows_data_protection import DeviceProtector
 
 
@@ -58,8 +59,10 @@ class SecureDesktopBridge:
         inbox_directory: str | Path | None = None,
         backups_directory: str | Path | None = None,
         application_version: str = "development",
+        preferences_path: str | Path | None = None,
         device_protector: DeviceProtector | Literal["windows"] | None = "windows",
     ) -> None:
+        self._ui_preferences = UiPreferences(preferences_path)
         self._database = Path(database_path)
         self._kwargs: dict[str, Any] = {
             "migrations_directory": migrations_directory,
@@ -77,6 +80,29 @@ class SecureDesktopBridge:
         self._dialogs: dict[str, Any] = {}
         self._automatic_open_attempted = False
         self._automatic_open_error: str | None = None
+
+    def get_ui_preferences(self, payload: object) -> dict[str, Any]:
+        try:
+            if _request(payload):
+                raise ValueError("Запрос настроек интерфейса должен быть пустым")
+            return _success(self._ui_preferences.read())
+        except ValueError as error:
+            return {"ok": False, "error": {"code": "VALIDATION_ERROR", "message": str(error)}}
+
+    def save_ui_preferences(self, payload: object) -> dict[str, Any]:
+        # Presentation-only local preference: no business write, PIN, or session change.
+        try:
+            return _success(self._ui_preferences.save(payload))
+        except ValueError as error:
+            return {"ok": False, "error": {"code": "VALIDATION_ERROR", "message": str(error)}}
+        except OSError:
+            return {
+                "ok": False,
+                "error": {
+                    "code": "PREFERENCES_SAVE_FAILED",
+                    "message": "Не удалось сохранить настройку подсказок",
+                },
+            }
 
     def _legacy_users(self) -> list[dict[str, Any]]:
         if not self._database.exists():

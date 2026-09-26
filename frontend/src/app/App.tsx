@@ -1,3 +1,4 @@
+import { FieldHintsEnabledContext } from "../shared/ui/FieldHint";
 import { ReferenceReport } from "../features/reference-reports/ReferenceReport";
 import type { ReferenceSummary } from "../shared/api/application-gateway";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -30,6 +31,31 @@ export function App() {
 
 function Workspace() {
   const gateway = useApplicationGateway();
+  const [fieldHintsEnabled, setFieldHintsEnabled] = useState(true);
+  const [hintsLoaded, setHintsLoaded] = useState(false);
+  const [hintsSaving, setHintsSaving] = useState(false);
+  const [hintsError, setHintsError] = useState("");
+  useEffect(() => {
+    let active = true;
+    void (gateway.getUiPreferences?.() ?? Promise.resolve({ field_hints_enabled: true }))
+      .then(value => { if (active) setFieldHintsEnabled(value.field_hints_enabled); })
+      .catch(() => { if (active) setHintsError("Не удалось прочитать настройку подсказок. Выберите её заново."); })
+      .finally(() => { if (active) setHintsLoaded(true); });
+    return () => { active = false; };
+  }, [gateway]);
+  async function changeFieldHints(enabled: boolean) {
+    if (hintsSaving || !hintsLoaded) return;
+    const previous = fieldHintsEnabled;
+    setFieldHintsEnabled(enabled); setHintsSaving(true); setHintsError("");
+    try {
+      if (!gateway.saveUiPreferences) throw new Error("Настройка недоступна.");
+      const saved = await gateway.saveUiPreferences({ field_hints_enabled: enabled });
+      setFieldHintsEnabled(saved.field_hints_enabled);
+    } catch {
+      setFieldHintsEnabled(previous);
+      setHintsError("Не удалось сохранить настройку подсказок. Прежнее положение восстановлено. Повторите попытку.");
+    } finally { setHintsSaving(false); }
+  }
   const [workspaceMode, setWorkspaceMode] = useState<"entry" | "report-settings" | "admin">("entry");
   const [modeError, setModeError] = useState("");
   const [leavingAdministration, setLeavingAdministration] = useState(false);
@@ -148,13 +174,15 @@ function Workspace() {
   const activeReferences = references.filter((report) => report.report_type === reportType);
 
   return (
-    <div className="app-shell">
+    <FieldHintsEnabledContext.Provider value={hintsLoaded && fieldHintsEnabled}>
+    <div className="app-shell" data-field-hints-enabled={hintsLoaded && fieldHintsEnabled}>
       <header className="app-header">
         <div className="app-brand">
           <p className="app-eyebrow">{workspaceMode === "admin" ? "Раздел администратора" : workspaceMode === "report-settings" ? "План и сведения" : "Заполнение отчётов"}</p>
           <h1>Производственная отчётность</h1>
         </div>
         <div className="workspace-mode-actions">
+          <label className="field-hints-toggle"><input type="checkbox" aria-label="Подсказки при наведении" checked={fieldHintsEnabled} disabled={!hintsLoaded || hintsSaving} onChange={event => void changeFieldHints(event.target.checked)} />Подсказки при наведении</label>
           <button type="button" disabled={navigationBlocked} onClick={() => setOnboardingOpen(true)}><UiIcon name="help" />Как заполнить</button>
           {workspaceMode === "entry" ? <>
             <button type="button" disabled={navigationBlocked || !!referenceId} onClick={() => setWorkspaceMode("report-settings")}><UiIcon name="edit" />План и сведения</button>
@@ -205,6 +233,7 @@ function Workspace() {
         </select>
       </label>}
       {matrixBlocked && <p className="workspace-edit-notice" role="status">Завершите ввод и сохраните изменения перед переходом в другую форму, организацию или настройки.</p>}
+      {hintsError && <p className="workspace-edit-notice" role="alert">{hintsError}</p>}
       {modeError && <p className="workspace-edit-notice" role="alert">{modeError}</p>}
       <main>
         {workspaceMode === "admin" && adminSection === "users" ? <ResponsibleUsers gateway={gateway} /> : loadError !== null ? (
@@ -258,5 +287,6 @@ function Workspace() {
         />
       )}
     </div>
+    </FieldHintsEnabledContext.Provider>
   );
 }

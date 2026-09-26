@@ -110,6 +110,9 @@ def verify_distribution_hygiene(root: Path) -> None:
             or name.endswith(DATABASE_SIDECAR_SUFFIXES)
             or suffix in {".pending", ".encrypted-pending"}
             or VAULT_FILENAME.search(name)
+            or name == "ui-preferences.json"
+            or name.startswith(".ui-preferences-")
+            and name.endswith(".tmp")
         ):
             raise ReleaseVerificationError(f"Private or runtime file is packaged: {relative}")
         # Catch a plaintext SQLite database renamed to an innocuous resource extension.
