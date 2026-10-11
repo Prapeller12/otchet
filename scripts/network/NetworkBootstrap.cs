@@ -223,6 +223,13 @@ internal static class NetworkBootstrap
         return true;
     }
     private static string Quote(string argument) { return "\"" + System.Text.RegularExpressions.Regex.Replace(argument, "(\\\\*)\"", "$1$1\\\"").TrimEnd('\\') + new string('\\', argument.Reverse().TakeWhile(c => c == '\\').Count() * 2) + "\""; }
+    private static bool Ready(string path, string token)
+    {
+        // A reader or antivirus may briefly hold the marker. Keep the startup
+        // deadline and exact token check, rather than failing a healthy client.
+        try { return File.Exists(path) && File.ReadAllText(path, Encoding.UTF8).Trim() == token; }
+        catch (IOException) { return false; }
+    }
     private static void PrepareAndStart()
     {
         string source = CanonicalDirectory(AppDomain.CurrentDomain.BaseDirectory);
@@ -308,12 +315,15 @@ internal static class NetworkBootstrap
         while (true) {
             CheckTime();
             if (TestMode && Child.HasExited) { if (Child.ExitCode != 0) throw new IOException("Сетевая проверка клиента завершилась ошибкой."); break; }
-            if (!TestMode && File.Exists(ready) && File.ReadAllText(ready, Encoding.UTF8).Trim() == token) break;
+            if (!TestMode && Ready(ready, token)) break;
             if (Child.HasExited) throw new IOException("Клиент завершился до открытия рабочего окна. Проверьте доступ и целостность комплекта.");
             Thread.Sleep(100);
         }
         HandedOff = true;
-        if (File.Exists(ready)) File.Delete(ready);
+        // Readiness has already been acknowledged; cleanup cannot undo handoff.
+        try { if (File.Exists(ready)) File.Delete(ready); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
         if (ReportPath != null) {
             Directory.CreateDirectory(Path.GetDirectoryName(ReportPath));
             File.WriteAllText(ReportPath, Json.Serialize(new { result = "ok", source = source, share = share, executable = Path.Combine(client, "ReportingSystem.exe"), state = state, manifest_sha256 = manifestHash, child_pid = Child.Id, native_preparation_window = true }), Encoding.UTF8);

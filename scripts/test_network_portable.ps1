@@ -45,6 +45,12 @@ function Run-Bootstrap([string]$root, [string]$name, [switch]$Smoke) {
     return $result
 }
 try {
+    $compiler = Join-Path $env:WINDIR "Microsoft.NET/Framework64/v4.0.30319/csc.exe"
+    $probe = Join-Path $evidence "ReadyMarkerProbe.exe"
+    & $compiler /nologo /target:exe /platform:x64 "/out:$probe" (Join-Path $PSScriptRoot "network/ReadyMarkerProbe.cs")
+    if ($LASTEXITCODE -ne 0) { throw "Readiness regression probe failed compilation." }
+    & $probe (Join-Path $app "ReportingSystemNetwork.exe") $evidence
+    if ($LASTEXITCODE -ne 0) { throw "Native readiness sharing/token regression failed." }
     Write-Host "$( [DateTime]::UtcNow.ToString('O') ) creating disposable SMB share"
     New-SmbShare -Name $shareName -Path $app -FullAccess ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) | Out-Null
     Write-Host "$( [DateTime]::UtcNow.ToString('O') ) disposable SMB share created"

@@ -54,6 +54,20 @@ def _version(paths: PortablePaths) -> str:
     return (paths.root / "VERSION").read_text(encoding="utf-8").strip()
 
 
+def _publish_network_ready(path: Path, token: str) -> None:
+    """Expose the readiness token only after its writer has closed the file."""
+    descriptor, name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(token)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def _self_test(paths: PortablePaths) -> None:
     paths.validate_release_layout(require_frontend=True)
     paths.prepare_writable_directories()
@@ -253,7 +267,7 @@ def _run_window(
                         "document.querySelector('.access-page[data-startup-ready=\"true\"]')"
                         " || document.querySelector('.report-matrix')))"
                     ):
-                        ready_file.write_text(ready_token or "", encoding="utf-8")
+                        _publish_network_ready(ready_file, ready_token or "")
                         break
                 except Exception:
                     pass
