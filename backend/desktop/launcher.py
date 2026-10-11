@@ -242,24 +242,17 @@ def _run_window(
 
     def check_window() -> None:
         if ready_file is not None:
-            # Wait for a rendered React root, rather than merely starting Python.
+            # React owns access initialization and its network-envelope events.
+            # A second business probe here creates a transient maintenance journal.
             import time
 
             for _ in range(900):
                 try:
                     if window.evaluate_js(
-                        "Boolean(window.pywebview?.api && (document.querySelector('.access-page')"
+                        "Boolean(window.pywebview?.api && ("
+                        "document.querySelector('.access-page[data-startup-ready=\"true\"]')"
                         " || document.querySelector('.report-matrix')))"
                     ):
-                        network = bridge.get_network_status()
-                        network_data = network.get("data", {})
-                        recovering = (
-                            network.get("ok")
-                            and network_data.get("state") == "outcome_unknown"
-                            and bool(network_data.get("pending_operation_id"))
-                        )
-                        if not recovering and not bridge.get_access_status().get("ok"):
-                            raise RuntimeError("Не удалось открыть общие данные")
                         ready_file.write_text(ready_token or "", encoding="utf-8")
                         break
                 except Exception:

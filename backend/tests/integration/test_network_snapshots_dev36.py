@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
 from typing import Any
@@ -494,3 +496,126 @@ def test_pdf_cleanup_refusal_preserves_confirmed_publication(
     )
     assert receipt["ok"] and receipt["data"]["data_state"] == "committed"
     assert receipt["data"]["global_revision"] == result["data"]["global_revision"]
+
+
+def warm_client(
+    tmp_path: Path,
+) -> tuple[SecureDesktopBridge, SnapshotCoordinator, dict[str, str]]:
+    app, coordinator = client(tmp_path / "a", tmp_path / "shared")
+    protector = TestAccountProtector()
+    app._vault._device_protector = protector
+    auth = setup(app)
+    app._lock()
+    reopened, loaded = client(tmp_path / "a", tmp_path / "shared")
+    reopened._vault._device_protector = protector
+    return reopened, loaded, auth
+
+
+def test_warm_network_access_opens_without_personal_session_or_publication(tmp_path: Path) -> None:
+    app, coordinator, _auth = warm_client(tmp_path)
+    baseline = image(coordinator)
+    current = (tmp_path / "shared/CURRENT").read_bytes()
+    status = app.get_access_status({})
+    assert status["ok"] and status["data"]["state"] == "ready", status
+    assert app._automatic_open_attempted and app._vault._key is not None
+    assert app._current_user is None and app._administrator is None
+    assert status["network"]["state"] == "ready"
+    assert status["network"]["pending_operation_id"] is None
+    assert image(coordinator) == baseline and (tmp_path / "shared/CURRENT").read_bytes() == current
+
+
+@pytest.mark.parametrize("cached_device", [False, True])
+def test_status_waits_for_no_dirty_access_maintenance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cached_device: bool
+) -> None:
+    app, coordinator, _auth = warm_client(tmp_path)
+    if not cached_device:
+        app._vault._device_protector = None
+    current = (tmp_path / "shared/CURRENT").read_bytes()
+    entered, release, probe_started = threading.Event(), threading.Event(), threading.Event()
+    open_access = app._try_automatic_open
+
+    def paused_open() -> None:
+        assert coordinator.pending_operation_id is not None
+        entered.set()
+        assert release.wait(5), "Test failed to release automatic open"
+        open_access()
+
+    def probe() -> dict[str, Any]:
+        probe_started.set()
+        return app.get_network_status({})
+
+    monkeypatch.setattr(app, "_try_automatic_open", paused_open)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        access = pool.submit(app.get_access_status, {})
+        try:
+            assert entered.wait(5)
+            status = pool.submit(probe)
+            assert probe_started.wait(5)
+            with pytest.raises(TimeoutError):
+                status.result(timeout=0.05)
+        finally:
+            release.set()
+        assert access.result(timeout=5)["ok"]
+        result = status.result(timeout=5)
+    assert result["ok"] and result["data"]["state"] == "ready"
+    assert result["data"]["pending_operation_id"] is None and result["data"]["can_write"]
+    assert (tmp_path / "shared/CURRENT").read_bytes() == current
+
+
+def test_warm_client_with_real_interrupted_operation_keeps_unknown(tmp_path: Path) -> None:
+    app, coordinator, auth = warm_client(tmp_path)
+    assert app.get_access_status({})["data"]["state"] == "ready"
+    fail_at(coordinator, "before_ack")
+    failed = app.create_organization(write_request(coordinator, auth, "interrupted"))
+    assert failed["error"]["code"] == "SAVE_OUTCOME_UNKNOWN"
+    protector = app._vault._device_protector
+    current = (tmp_path / "shared/CURRENT").read_bytes()
+    app._lock()
+    reopened, pending = client(tmp_path / "a", tmp_path / "shared")
+    reopened._vault._device_protector = protector
+    status = reopened.get_access_status({})
+    assert status["ok"] and status["data"]["state"] == "locked"
+    assert not reopened._automatic_open_attempted and reopened._vault._key is None
+    assert reopened._application is None
+    assert status["network"]["state"] == "outcome_unknown"
+    assert not status["network"]["can_write"] and pending.pending_operation_id == "interrupted"
+    assert (tmp_path / "shared/CURRENT").read_bytes() == current
+
+
+def test_concurrent_write_waits_before_testing_coordinator_reentry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    app, coordinator, auth = warm_client(tmp_path)
+    entered, release, write_started = threading.Event(), threading.Event(), threading.Event()
+    open_access = app._try_automatic_open
+    baseline = coordinator.loaded_global_revision
+
+    def paused_open() -> None:
+        entered.set()
+        assert release.wait(5), "Test failed to release automatic open"
+        open_access()
+
+    def writer() -> dict[str, Any]:
+        write_started.set()
+        return app.create_organization(write_request(coordinator, auth, "concurrent-write"))
+
+    monkeypatch.setattr(app, "_try_automatic_open", paused_open)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        access = pool.submit(app.get_access_status, {})
+        try:
+            assert entered.wait(5)
+            write = pool.submit(writer)
+            assert write_started.wait(5)
+            with pytest.raises(TimeoutError):
+                write.result(timeout=0.05)
+        finally:
+            release.set()
+        assert access.result(timeout=5)["ok"]
+        result = write.result(timeout=5)
+    assert result["ok"] and result["network"]["state"] == "ready", result
+    assert result["data"]["global_revision"] == coordinator.loaded_global_revision != baseline
+    receipt = app.get_network_operation_result(
+        {"operation_id": "concurrent-write", "authorization": auth}
+    )
+    assert receipt["ok"] and receipt["data"]["data_state"] == "committed"

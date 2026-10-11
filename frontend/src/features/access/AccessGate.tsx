@@ -14,6 +14,7 @@ export function AccessGate({ gateway, children, reloadKey = 0 }: { gateway: Appl
   const [repeat, setRepeat] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [startupReady, setStartupReady] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [networkStatus, setNetworkStatus] = useState<NetworkStatus | null>(null);
@@ -31,7 +32,8 @@ export function AccessGate({ gateway, children, reloadKey = 0 }: { gateway: Appl
   }, []);
   useEffect(() => {
     let active = true;
-    if (!gateway.getAccessStatus) { setStatus({ state: "ready", users: [] }); setAllowWorkspace(true); return; }
+    setStartupReady(false);
+    if (!gateway.getAccessStatus) { setStatus({ state: "ready", users: [] }); setAllowWorkspace(true); setStartupReady(true); return; }
     setError(""); setBusy(true);
     void (async () => {
       const network = await gateway.getNetworkStatus?.();
@@ -52,7 +54,7 @@ export function AccessGate({ gateway, children, reloadKey = 0 }: { gateway: Appl
     })().then(next => {
       if (!active) return;
       setStatus(next); setAllowWorkspace(next.state === "ready"); setIdentity(next.users.find(user => user.role === "admin")?.id ?? next.users[0]?.id ?? "");
-    }).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); }).finally(() => { if (active) setBusy(false); });
+    }).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); }).finally(() => { if (active) { setBusy(false); setStartupReady(true); } });
     return () => { active = false; };
   }, [gateway, loadAttempt, reloadKey]);
   if (status?.state === "ready" && allowWorkspace) {
@@ -121,7 +123,7 @@ export function AccessGate({ gateway, children, reloadKey = 0 }: { gateway: Appl
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Снимок для проверки не открыт."); }
     finally { setBusy(false); }
   }
-  return <main className="access-page"><form className="access-card" onSubmit={event => { event.preventDefault(); void submit(); }}>
+  return <main className="access-page" data-startup-ready={startupReady ? "true" : "false"}><form className="access-card" onSubmit={event => { event.preventDefault(); void submit(); }}>
     <p className="access-eyebrow">Производственная отчётность</p>
     <h1>{networkStatus?.state === "outcome_unknown" ? "Проверить прежнюю общую запись" : !status ? "Открываем отчёты" : first ? "Первый запуск" : legacy ? "Защитить существующие данные" : "Настроить открытие без кода"}</h1>
     {!status && !error && <p role="status">Открываем сохранённые данные…</p>}

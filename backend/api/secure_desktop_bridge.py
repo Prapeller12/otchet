@@ -76,11 +76,12 @@ def _text(payload: dict[str, Any], key: str) -> str:
 def _network_boundary(function: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
     @wraps(function)
     def wrapped(self: SecureDesktopBridge, payload: object = None) -> dict[str, Any]:
-        if self._snapshot_coordinator is None or self._network_running:
-            return function(self, payload)
-        return self._network_execute(
-            function.__name__, payload, lambda request: function(self, request)
-        )
+        with self._mutex:
+            if self._snapshot_coordinator is None or self._network_running:
+                return function(self, payload)
+            return self._network_execute(
+                function.__name__, payload, lambda request: function(self, request)
+            )
 
     return wrapped
 
@@ -119,6 +120,7 @@ class SecureDesktopBridge:
         self._automatic_open_error: str | None = None
         self._snapshot_coordinator = snapshot_coordinator
         self._network_running = False
+        self._network_access_maintenance = False
         self._network_recovery_key: bytes | None = None
         if snapshot_coordinator is not None:
             if snapshot_coordinator.database_path.resolve() != self._database.resolve():
@@ -427,6 +429,7 @@ class SecureDesktopBridge:
 
                 def execute(clean: dict[str, Any]) -> dict[str, Any]:
                     self._network_running = True
+                    self._network_access_maintenance = method == "get_access_status"
                     try:
                         result = function(clean)
                         if method == "export_pdf" and result.get("ok") and artifact_destination:
@@ -437,6 +440,7 @@ class SecureDesktopBridge:
                             )
                         return result
                     finally:
+                        self._network_access_maintenance = False
                         self._network_running = False
 
                 result = coordinator.execute(
@@ -494,20 +498,21 @@ class SecureDesktopBridge:
                     artifact_directory.cleanup()
 
     def get_network_status(self, payload: object = None) -> dict[str, Any]:
-        if self._snapshot_coordinator is None:
-            return _success(
-                {
-                    "mode": "local",
-                    "state": "ready",
-                    "loaded_global_revision": None,
-                    "current_global_revision": None,
-                    "snapshot_changed": False,
-                    "can_write": True,
-                    "message": None,
-                    "pending_operation_id": None,
-                }
-            )
-        return self._network_envelope(_success(self._snapshot_coordinator.status()))
+        with self._mutex:
+            if self._snapshot_coordinator is None:
+                return _success(
+                    {
+                        "mode": "local",
+                        "state": "ready",
+                        "loaded_global_revision": None,
+                        "current_global_revision": None,
+                        "snapshot_changed": False,
+                        "can_write": True,
+                        "message": None,
+                        "pending_operation_id": None,
+                    }
+                )
+            return self._network_envelope(_success(self._snapshot_coordinator.status()))
 
     def refresh_network_data(self, payload: object) -> dict[str, Any]:
         coordinator = self._snapshot_coordinator
@@ -730,6 +735,7 @@ class SecureDesktopBridge:
                 if (
                     self._snapshot_coordinator is not None
                     and self._snapshot_coordinator.pending_operation_id is not None
+                    and not self._network_access_maintenance
                 ):
                     return _success(self._status_with_device())
                 if not self._automatic_open_attempted:
@@ -973,6 +979,12 @@ class SecureDesktopBridge:
                 return _failure(error)
 
     def _call(self, method: str, payload: object = None) -> dict[str, Any]:
+        # Reentry belongs to the thread holding the mutex. Another thread must
+        # wait before deciding whether the coordinator is already active.
+        with self._mutex:
+            return self._call_locked(method, payload)
+
+    def _call_locked(self, method: str, payload: object = None) -> dict[str, Any]:
         if self._snapshot_coordinator is not None and not self._network_running:
             if method == "get_report_draft_save_result":
                 request = _request(payload)

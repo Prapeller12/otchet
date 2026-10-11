@@ -209,3 +209,46 @@ it("distinguishes a confirmed PDF receipt from a delivered file and never automa
   expect(screen.queryByText(/PDF сохранён/)).toBeNull(); expect(pdf).not.toHaveBeenCalled(); expect(refresh).not.toHaveBeenCalled();
   expect(screen.getByRole("table", { name: "Дочерние общества" })).toBeVisible();
 });
+
+it("keeps startup readiness false until both network and access reads settle", async () => {
+  const network = deferred<NetworkStatus>(); const access = deferred<{ state: "setup"; users: [] }>();
+  const readAccess = vi.fn(() => access.promise);
+  const gateway = Object.assign(new DemoGateway(), { getNetworkStatus: () => network.promise, getAccessStatus: readAccess });
+  render(<AccessGate gateway={gateway}><p>Рабочие отчёты</p></AccessGate>);
+  expect(screen.getByRole("main")).toHaveAttribute("data-startup-ready", "false"); expect(readAccess).not.toHaveBeenCalled();
+  act(() => network.resolve(ready())); await waitFor(() => expect(readAccess).toHaveBeenCalledTimes(1));
+  expect(screen.getByRole("main")).toHaveAttribute("data-startup-ready", "false");
+  act(() => access.resolve({ state: "setup", users: [] }));
+  await screen.findByText("Первый запуск");
+  expect(screen.getByRole("main")).toHaveAttribute("data-startup-ready", "true");
+});
+
+it("marks an actionable pending restart ready only after recovery profiles settle", async () => {
+  const profiles = deferred<{ users: [] }>(); const readAccess = vi.fn();
+  const gateway = Object.assign(new DemoGateway(), { getNetworkStatus: async () => ready({ state: "outcome_unknown", can_write: false, pending_operation_id: "previous-operation" }),
+    getAccessStatus: readAccess, getNetworkRecoveryUsers: () => profiles.promise, recoverNetworkSetupOperation: vi.fn() });
+  render(<AccessGate gateway={gateway}><p>Рабочие отчёты</p></AccessGate>);
+  expect(screen.getByRole("main")).toHaveAttribute("data-startup-ready", "false");
+  await screen.findByText("Проверить прежнюю общую запись");
+  expect(screen.getByRole("main")).toHaveAttribute("data-startup-ready", "false");
+  act(() => profiles.resolve({ users: [] })); await screen.findByRole("alert");
+  expect(screen.getByRole("main")).toHaveAttribute("data-startup-ready", "true");
+  expect(screen.getByLabelText("Код администратора")).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Проверить результат прежней записи" })).toBeVisible(); expect(readAccess).not.toHaveBeenCalled();
+});
+
+it("marks a genuine startup error ready with its retry action after the failed read settles", async () => {
+  const network = deferred<NetworkStatus>(); const gateway = Object.assign(new DemoGateway(), { getNetworkStatus: () => network.promise, getAccessStatus: vi.fn(async () => ({ state: "setup" as const, users: [] })) });
+  render(<AccessGate gateway={gateway}><p>Рабочие отчёты</p></AccessGate>);
+  expect(screen.getByRole("main")).toHaveAttribute("data-startup-ready", "false");
+  act(() => network.reject(new Error("Общая папка недоступна")));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Общая папка недоступна");
+  expect(screen.getByRole("main")).toHaveAttribute("data-startup-ready", "true");
+  expect(screen.getByRole("button", { name: "Повторить открытие" })).toBeEnabled();
+});
+
+it("opens the existing gateway fallback when no access-status method is provided", () => {
+  const network = vi.fn(); const gateway = Object.assign(new DemoGateway(), { getNetworkStatus: network });
+  render(<AccessGate gateway={gateway}><main className="report-matrix">Рабочие отчёты</main></AccessGate>);
+  expect(screen.getByText("Рабочие отчёты")).toBeVisible(); expect(document.querySelector(".access-page")).toBeNull(); expect(network).not.toHaveBeenCalled();
+});
