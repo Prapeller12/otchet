@@ -15,14 +15,19 @@ function Run-Bootstrap([string]$root, [string]$name, [switch]$Smoke) {
     $report = Join-Path $evidence "$name-bootstrap.json"
     $args = @("--network-bootstrap-report", "`"$report`"")
     if ($Smoke) { $args += @("--network-self-test", "--self-test-report", "`"$(Join-Path $evidence "$name-smoke.json")`"") }
-    $process = Start-Process -FilePath (Join-Path $root "ReportingSystemNetwork.exe") -ArgumentList $args -PassThru
-    if (-not $process.WaitForExit(360000)) { Stop-Process -Id $process.Id -Force; throw "$name bootstrap timed out." }
+    Write-Host "$( [DateTime]::UtcNow.ToString('O') ) ${name}: starting native UNC client"
+    # NoNewWindow selects direct CreateProcess instead of ShellExecute.
+    # The WinExe still displays its own preparation and WebView2 windows.
+    $process = Start-Process -FilePath (Join-Path $root "ReportingSystemNetwork.exe") -ArgumentList $args -NoNewWindow -PassThru
+    Write-Host "$( [DateTime]::UtcNow.ToString('O') ) ${name}: child $($process.Id) started"
+    if (-not $process.WaitForExit(360000)) { Stop-Process -InputObject $process -Force; throw "$name bootstrap timed out." }
     if ($process.ExitCode -ne 0 -or -not (Test-Path $report)) { throw "$name bootstrap did not acknowledge a healthy client." }
     $result = Get-Content $report -Raw | ConvertFrom-Json
     if ($result.result -ne "ok" -or $result.executable.StartsWith("\\") -or $result.state.StartsWith("\\")) { throw "Client or database state is not local." }
     if (-not $Smoke) {
-        $script:children += $result.child_pid
         $client = Get-Process -Id $result.child_pid
+        $null = $client.Handle
+        $script:children += $client
         $windowDeadline = [DateTime]::UtcNow.AddSeconds(5)
         while ($client.MainWindowHandle -eq 0 -and [DateTime]::UtcNow -lt $windowDeadline) { Start-Sleep -Milliseconds 100; $client.Refresh() }
         if ($client.MainWindowHandle -eq 0) { throw "Client has no actual native WebView2 window." }
@@ -36,10 +41,13 @@ function Run-Bootstrap([string]$root, [string]$name, [switch]$Smoke) {
         $graphics.Dispose(); $bitmap.Dispose()
         if (-not $client.CloseMainWindow() -or -not $client.WaitForExit(30000)) { throw "Client failed normal window close." }
     }
+    Write-Host "$( [DateTime]::UtcNow.ToString('O') ) ${name}: verified and closed"
     return $result
 }
 try {
+    Write-Host "$( [DateTime]::UtcNow.ToString('O') ) creating disposable SMB share"
     New-SmbShare -Name $shareName -Path $app -FullAccess ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) | Out-Null
+    Write-Host "$( [DateTime]::UtcNow.ToString('O') ) disposable SMB share created"
     $testShare = Join-Path $app "shared"
     Set-Content (Join-Path $testShare ".otchet-network-self-test") "otchet-disposable-network-self-test-v1" -Encoding ascii -NoNewline
     $smoke = Run-Bootstrap $unc "unc-protocol" -Smoke
@@ -71,10 +79,12 @@ try {
     $override = Join-Path $app "network.local.json"
     @{ shared_directory = "nonexistent-shared-" + [Guid]::NewGuid().ToString("N") } | ConvertTo-Json | Set-Content $override -Encoding utf8
     $errorReport = Join-Path $evidence "unavailable-bootstrap.json"
-    $errorProcess = Start-Process -FilePath (Join-Path $unc "ReportingSystemNetwork.exe") -ArgumentList @("--network-bootstrap-report", "`"$errorReport`"") -PassThru
+    Write-Host "$( [DateTime]::UtcNow.ToString('O') ) checking visible native connection error"
+    $errorProcess = Start-Process -FilePath (Join-Path $unc "ReportingSystemNetwork.exe") -ArgumentList @("--network-bootstrap-report", "`"$errorReport`"") -NoNewWindow -PassThru
+    $script:children += $errorProcess
     $deadline = [DateTime]::UtcNow.AddSeconds(20)
     while (-not (Test-Path $errorReport) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
-    if (-not (Test-Path $errorReport)) { Stop-Process -Id $errorProcess.Id -Force; throw "Missing visible startup failure report." }
+    if (-not (Test-Path $errorReport)) { Stop-Process -InputObject $errorProcess -Force; throw "Missing visible startup failure report." }
     $failure = Get-Content $errorReport -Raw | ConvertFrom-Json
     if ($failure.result -ne "error" -or $failure.message -notlike "*Общая папка*") { throw "Network failure silently used a local store." }
     Add-Type @'
@@ -82,7 +92,7 @@ using System;
 using System.Runtime.InteropServices;
 public static class OtchetNativeError {
  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string cls,string title);
- [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hwnd,uint msg,IntPtr w,IntPtr l);
+ [DllImport("user32.dll",SetLastError=true)] public static extern bool PostMessage(IntPtr hwnd,uint msg,IntPtr w,IntPtr l);
 }
 '@
     $modal = [IntPtr]::Zero
@@ -93,15 +103,19 @@ public static class OtchetNativeError {
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     $graphics.CopyFromScreen($bounds.Location,[System.Drawing.Point]::Empty,$bounds.Size)
     $bitmap.Save((Join-Path $evidence "unavailable-native-error.png")); $graphics.Dispose(); $bitmap.Dispose()
-    [OtchetNativeError]::SendMessage($modal,0x0010,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null
+    if (-not [OtchetNativeError]::PostMessage($modal,0x0010,[IntPtr]::Zero,[IntPtr]::Zero)) { throw "Native error close could not be posted." }
     if (-not $errorProcess.WaitForExit(10000) -or $errorProcess.ExitCode -ne 1) { throw "Native error did not close cleanly." }
     Remove-Item $override
     $summary = @{ ok=$true; os=[Environment]::OSVersion.VersionString; checks=@("encrypted SMB roundtrip", "UNC native window", "verified warm cache", "mapped identity", "redirected-profile local fallback", "corrupt cache rejection", "visible native connection error"); unc=$unc; physical_remote_clients="NOT_RUN"; windows_10_11="NOT_RUN"; distinct_windows_accounts_dpapi="NOT_RUN"; ten_user_load="NOT_RUN" }
     $summary | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $evidence "network-windows-result.json") -Encoding utf8
 } finally {
+    Write-Host "$( [DateTime]::UtcNow.ToString('O') ) cleaning owned processes and disposable SMB share"
     $env:LOCALAPPDATA = $oldLocal
     $env:USERPROFILE = $oldProfile
-    foreach ($id in $children) { Get-Process -Id $id -ErrorAction SilentlyContinue | Stop-Process -Force }
+    foreach ($ownedChild in $children) {
+        if (-not $ownedChild.HasExited) { Stop-Process -InputObject $ownedChild -Force }
+    }
     & net.exe use $mapped /delete /y 2>$null
     Remove-SmbShare -Name $shareName -Force -ErrorAction SilentlyContinue
+    Write-Host "$( [DateTime]::UtcNow.ToString('O') ) disposable SMB cleanup completed"
 }

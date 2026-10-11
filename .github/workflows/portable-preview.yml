@@ -144,6 +144,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Test native network bootstrap and encrypted snapshots over SMB
+        timeout-minutes: 20
         shell: pwsh
         run: |
           $networkRoot = Join-Path $env:RUNNER_TEMP "Сетевой тест отчётности"
