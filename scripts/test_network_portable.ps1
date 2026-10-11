@@ -60,6 +60,8 @@ try {
     $repaired = Run-Bootstrap $unc "damaged-cache"
     if ($repaired.executable -eq $first.executable -or $repaired.state -ne $first.state) { throw "Damaged cache was activated or client state was replaced." }
     if ((Get-Content (Join-Path $cacheRoot "VERSION") -Raw).Trim() -ne "damaged-cache") { throw "Old executable cache was modified/deleted." }
+    $repairedWarm = Run-Bootstrap $unc "repaired-warm"
+    if ($repairedWarm.executable -ne $repaired.executable -or $repairedWarm.state -ne $repaired.state) { throw "Repaired immutable cache was recopied on the next startup." }
     $env:LOCALAPPDATA = Join-Path $unc "redirected-local"
     $env:USERPROFILE = Join-Path $unc "redirected-profile"
     New-Item $env:LOCALAPPDATA -ItemType Directory -Force | Out-Null

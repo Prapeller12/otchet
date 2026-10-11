@@ -245,7 +245,18 @@ internal static class NetworkBootstrap
         RequireLocal(versions);
         string client = Path.Combine(versions, manifestHash);
         using (var cacheLock = Acquire(Path.Combine(home, "prepare.lock"))) {
-            if (!Verified(client, entries, manifestHash)) {
+            bool verified = Verified(client, entries, manifestHash);
+            if (!verified) {
+                // A previously repaired immutable cache is reusable. Partial
+                // staging directories never enter this exact UUID inventory.
+                foreach (string alternative in Directory.GetDirectories(versions, manifestHash + "-*", SearchOption.TopDirectoryOnly).OrderBy(p => p, StringComparer.OrdinalIgnoreCase)) {
+                    string suffix = Path.GetFileName(alternative).Substring(manifestHash.Length + 1);
+                    Guid cacheId;
+                    if (!Guid.TryParseExact(suffix, "N", out cacheId)) continue;
+                    if (Verified(alternative, entries, manifestHash)) { client = alternative; verified = true; break; }
+                }
+            }
+            if (!verified) {
                 // A damaged/in-use directory is never replaced: activate a separate immutable copy.
                 if (Directory.Exists(client)) client = client + "-" + Guid.NewGuid().ToString("N");
                 string staging = client + ".staging-" + Guid.NewGuid().ToString("N");
