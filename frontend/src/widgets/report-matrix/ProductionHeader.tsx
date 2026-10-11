@@ -2,6 +2,7 @@ import { UiIcon } from "../../shared/ui/UiIcon";
 import { CompactProductionHeader } from "./CompactProductionHeader";
 import { useEffect, useRef, useState } from "react";
 import { HintValue } from "../../shared/ui/FieldHint";
+import type { ReportDraftPresentation } from "../../shared/api/application-gateway";
 import { REPORT_FIELD_HINTS } from "../../shared/config/report-field-hints";
 
 export type ReportHeaderFields = {
@@ -23,6 +24,8 @@ const EMPTY_HEADER: ReportHeaderFields = { product_designation: "", product_name
 
 export type ProductionHeaderProps = {
   workspaceMode?: "entry" | "report-settings" | "admin";
+  selectedMonth?: string; resetDraft?: number;
+  onDraftChange?(patch: ReportDraftPresentation | null): void;
   onSaveReady?(save: (() => Promise<void>) | null): void;
   presentation: ProductionHeaderPresentation; year: number; headSite: boolean; blocked: boolean;
   onSave(patch: ProductionHeaderPatch): Promise<void>;
@@ -39,7 +42,7 @@ export function ProductionHeader(props: ProductionHeaderProps) {
   return props.headSite ? <CompactProductionHeader {...props} /> : <DetailedProductionHeader {...props} />;
 }
 
-function DetailedProductionHeader({ presentation, year, headSite, blocked, onSave, onDirtyChange, onBusyChange, onSaveReady }: ProductionHeaderProps) {
+function DetailedProductionHeader({ presentation, year, headSite, blocked, onSave, onDirtyChange, onBusyChange, onSaveReady, onDraftChange, selectedMonth, resetDraft }: ProductionHeaderProps) {
   const baseline = JSON.stringify({ header: { ...EMPTY_HEADER, ...presentation.header }, codes: presentation.production_codes ?? [] });
   const [draft, setDraft] = useState<{header: ReportHeaderFields; codes: ProductionCode[]}>(() => JSON.parse(baseline));
   const [busy, setBusy] = useState(false);
@@ -48,7 +51,26 @@ function DetailedProductionHeader({ presentation, year, headSite, blocked, onSav
   const [confirmed, setConfirmed] = useState(false);
   const fileReader = useRef<FileReader | null>(null);
   const dirty = JSON.stringify(draft) !== baseline;
-  useEffect(() => { setDraft(JSON.parse(baseline)); setConfirmed(false); }, [baseline]);
+  const structural = JSON.stringify(draft.codes.map(({ id, label }) => ({ id, label }))) !== JSON.stringify((presentation.production_codes ?? []).map(({ id, label }) => ({ id, label })));
+  useEffect(() => { setDraft(JSON.parse(baseline)); setConfirmed(false); }, [baseline, resetDraft]);
+  useEffect(() => {
+    if (!onDraftChange) return;
+    if (!dirty || structural) { onDraftChange(null); return; }
+    const patch: ReportDraftPresentation = {};
+    if (JSON.stringify(draft.header) !== JSON.stringify({ ...EMPTY_HEADER, ...presentation.header })) patch.header = draft.header;
+    for (const field of ["plans", "actuals"] as const) {
+      const changes: Record<string, Record<string, string>> = {};
+      for (const code of draft.codes) {
+        const base = presentation.production_codes?.find(row => row.id === code.id);
+        for (const [month, value] of Object.entries(code[field])) {
+          if ((!selectedMonth || month === selectedMonth) && value !== (base?.[field][month] ?? "")) (changes[code.id] ??= {})[month] = value.replace(",", ".");
+        }
+      }
+      if (Object.keys(changes).length) patch[field === "plans" ? "production_code_plans" : "production_code_actuals"] = changes;
+    }
+    if (patch.production_code_plans || patch.production_code_actuals) patch.confirm_production_totals = confirmed;
+    onDraftChange(Object.keys(patch).length ? patch : null);
+  }, [draft, baseline, dirty, structural, confirmed, selectedMonth, onDraftChange]);
   useEffect(() => { onDirtyChange(dirty || reading); }, [dirty, reading, onDirtyChange]);
   useEffect(() => () => { fileReader.current?.abort(); }, []);
   const months = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
@@ -111,11 +133,13 @@ function DetailedProductionHeader({ presentation, year, headSite, blocked, onSav
             <tr>{months.flatMap(month => [<th scope="col" key={month + "p"}>План</th>, <th scope="col" key={month + "f"}>Факт</th>])}</tr></thead>
             <tbody>{draft.codes.map(code => <tr key={code.id}><th scope="row"><input aria-label="Код / модификация" maxLength={200} placeholder="Введите код изделия" value={code.label} onChange={e => setDraft(previous => ({ ...previous, codes: previous.codes.map(row => row.id === code.id ? { ...row, label: e.target.value } : row) }))} /></th>
               <td><HintValue hint={REPORT_FIELD_HINTS.codeAnnual}><output aria-label={`${code.label || "Новый код"}: выпущено за год`}>{presentation.production_code_annual?.[code.id] || "—"}</output></HintValue></td>
-              {months.flatMap(month => ( ["plans", "actuals"] as const).map(field => <td key={month + field}><input inputMode="decimal" aria-label={`${code.label || "Новый код"}: ${field === "plans" ? "план" : "факт"} ${month}`} value={code[field][month] ?? ""} onChange={e => editCode(code.id, field, month, e.target.value)} /></td>))}
+              {months.flatMap(month => ( ["plans", "actuals"] as const).map(field => <td key={month + field}><input inputMode="decimal" aria-label={`${code.label || "Новый код"}: ${field === "plans" ? "план" : "факт"} ${month}`} readOnly={!!onDraftChange && month !== selectedMonth} title={onDraftChange && month !== selectedMonth ? "Выберите этот месяц в контексте отчёта" : undefined} value={code[field][month] ?? ""} onChange={e => editCode(code.id, field, month, e.target.value)} /></td>))}
               <td><button type="button" className="mini-button" disabled={Object.values(code.plans).some(Boolean) || Object.values(code.actuals).some(Boolean)} title="Код с данными нельзя удалить; сначала явно очистите его значения" onClick={() => setDraft(previous => ({ ...previous, codes: previous.codes.filter(row => row.id !== code.id) }))}><UiIcon name="trash" />Убрать код</button></td>
             </tr>)}</tbody></table>
         </div>}
         <button type="button" className="button secondary" disabled={draft.codes.length >= 50} onClick={() => setDraft(previous => ({ ...previous, codes: [...previous.codes, { id: crypto.randomUUID().replaceAll("-", "").toUpperCase(), label: "", plans: {}, actuals: {} }] }))}><UiIcon name="add" />Код выпуска</button>
+        {structural && onDraftChange && <p role="status">Состав кодов изменён. Примените его отдельно до ввода количеств в общий черновик.</p>}
+        {structural && onDraftChange && <button type="button" className="button secondary" onClick={() => void save()}>Применить состав кодов</button>}
         {dirty && draft.codes.length > 0 && <label className="production-confirmation"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />При отличии от прежнего общего выпуска использовать суммы по кодам. Прежние общие значения сохранятся в базе.</label>}
       </>}
       <div className="compact-actions">

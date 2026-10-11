@@ -60,6 +60,10 @@ def prepare_save_confirmation(
     # Also validate that a selected week belongs to this report's month. Error
     # rows are allowed here: the requested edit may be correcting those rows.
     application._monthly_snapshot(snapshot_request)
+    if method == "save_report_draft":
+        clean["confirmation"] = {"year": year, "month": month}
+        if "week_start" in snapshot_request:
+            clean["confirmation"]["week_start"] = snapshot_request["week_start"]
     return clean, snapshot_request
 
 
@@ -86,10 +90,21 @@ def confirm_saved_report(
     """Sign committed data, retaining a truthful successful-save response."""
     if not result.get("ok") or context is None:
         return result
+    if result.get("data", {}).get("idempotent_replay"):
+        return result
+    confirmation: dict[str, Any]
     try:
-        confirmation = {"verification": _confirm(application, context, authorization)}
+        signing_context = dict(context)
+        operation_revision = result.get("data", {}).get("operation_revision")
+        if operation_revision:
+            signing_context["expected_revision"] = operation_revision
+        confirmation = {"verification": _confirm(application, signing_context, authorization)}
+        if operation_revision:
+            confirmation["verification_state"] = "verified"
     except (OSError, ValueError, KeyError, sqlite3.Error, ReportCellError) as error:
         confirmation = {"verification_error": {"code": "VERIFICATION_ERROR", "message": str(error)}}
+        if result.get("data", {}).get("operation_revision"):
+            confirmation["verification_state"] = "verification_error"
     return {**result, "data": {**result["data"], **confirmation}}
 
 

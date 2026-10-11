@@ -47,8 +47,9 @@ export function SubsidiaryDetailEditor({ row, onChange, onRemove, onMove, disabl
       <label>По договору, шт.<input disabled={supplier.archived} inputMode="decimal" value={supplier.contract} onChange={e => update({ suppliers: detail.suppliers.map((s, i) => i === index ? { ...s, contract: e.target.value.replace(",", ".") } : s) })} /></label>
       <button type="button" className="supplier-action" title={supplier.archived ? "Восстановить производителя" : "Убрать производителя"} aria-label={supplier.archived ? "Восстановить производителя" : "Убрать производителя"} onClick={() => toggleSupplier(index)}><UiIcon name={supplier.archived ? "undo" : "trash"} /></button>
     </div>)}
+    {!!detail.empty_supplier_slots && <p>Незаполненных строк производителей: {detail.empty_supplier_slots}. Добавьте производителя, чтобы заполнить следующую строку.</p>}
     <div className="row-actions">
-      <button type="button" onClick={() => update({ suppliers: [...detail.suppliers, { id: crypto.randomUUID().replaceAll("-", "").toUpperCase(), name: "", contract: "", archived: false }] })}><UiIcon name="add" />Добавить производителя</button>
+      <button type="button" onClick={() => update({ ...(detail.empty_supplier_slots ? { empty_supplier_slots: Math.max(0, detail.empty_supplier_slots - 1) } : {}), suppliers: [...detail.suppliers, { id: crypto.randomUUID().replaceAll("-", "").toUpperCase(), name: "", contract: "", archived: false }] })}><UiIcon name="add" />Добавить производителя</button>
       <button type="button" onClick={() => onMove(-1)}><UiIcon name="arrow-up" />Деталь выше</button><button type="button" onClick={() => onMove(1)}><UiIcon name="arrow-down" />Деталь ниже</button>
       <button type="button" onClick={onRemove}><UiIcon name="trash" />Убрать деталь целиком</button>
     </div>

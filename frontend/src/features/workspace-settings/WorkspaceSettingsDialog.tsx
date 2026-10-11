@@ -58,6 +58,8 @@ export function WorkspaceSettingsDialog({
   const [organizationId, setOrganizationId] = useState(initialOrganizationId);
   const [reportType, setReportType] = useState(initialReportType);
   const [layout, setLayout] = useState<ReportLayoutContract | null>(null);
+  const [selectedRow, setSelectedRow] = useState(0);
+  const [positionSearch, setPositionSearch] = useState("");
   const [rows, setRows] = useState<ReportLayoutRow[]>([]);
   const [organizationName, setOrganizationName] = useState("");
   const [newOrganizationName, setNewOrganizationName] = useState("");
@@ -88,7 +90,7 @@ export function WorkspaceSettingsDialog({
       .then((result) => {
         if (!active) return;
         setLayout(result);
-        setRows(result.rows);
+        setRows(result.rows); setSelectedRow(0); setPositionSearch("");
       })
       .catch((reason: unknown) => {
         if (active) setError(errorMessage(reason));
@@ -118,6 +120,7 @@ export function WorkspaceSettingsDialog({
       if (item !== undefined) next.splice(target, 0, item);
       return next;
     });
+    setSelectedRow(index + direction);
   }
 
   async function addOrganization(): Promise<void> {
@@ -277,7 +280,7 @@ export function WorkspaceSettingsDialog({
                   <strong>Строки рабочего поля</strong>
                   {reportType === "DAILY_MOVEMENT" && <button type="button" className="button secondary" onClick={() => {
                     const template = layout.templates.find(t => t.group_kind === "COMPONENT_POSITION");
-                    if (template) setRows(current => [...current, { id: null, template_group_id: template.id, party_name: "", position_name: "", configuration: { category: "PART", image: "", norm: "", opening: "", indicators: template.indicators ?? [] } }]);
+                    if (template) { setSelectedRow(rows.length); setRows(current => [...current, { id: null, template_group_id: template.id, party_name: "", position_name: "", configuration: { category: "PART", image: "", norm: "", opening: "", indicators: template.indicators ?? [] } }]); }
                   }}><UiIcon name="add" />Расход составной части</button>}
 
                   <button
@@ -285,17 +288,19 @@ export function WorkspaceSettingsDialog({
                     type="button"
                     onClick={() => {
                       const row = newRow(layout);
-                      if (row !== null) setRows((current) => [...current, row]);
+                      if (row !== null) { setSelectedRow(rows.length); setRows((current) => [...current, row]); }
                     }}
                   >
                     <UiIcon name="add" />{reportType === "SUBSIDIARY" ? "Добавить деталь" : "Добавить строку"}
                   </button>
                 </div>
+                <label className="position-settings-search">Найти позицию или производителя<input type="search" value={positionSearch} onChange={event => setPositionSearch(event.target.value)} /></label>
+                <nav className="position-settings-list" aria-label="Позиции рабочего поля">{rows.map((row, index) => ({ row, index })).filter(({ row }) => [row.position_name, row.party_name, row.configuration?.subsidiary?.designation].filter(Boolean).join(" ").toLocaleLowerCase("ru").includes(positionSearch.toLocaleLowerCase("ru"))).map(({ row, index }) => <button key={row.id ?? `new-${index}`} type="button" aria-pressed={index === selectedRow} onClick={() => setSelectedRow(index)}>{index + 1}. {row.position_name || "Наименование не заполнено"} · {row.party_name || "Производитель не заполнен"}</button>)}</nav>
                 <div className="layout-row-list">
                   {rows.length === 0 && (
                     <div className="settings-empty">Добавьте первую строку отчёта.</div>
                   )}
-                  {rows.map((row, index) => (reportType === "SUBSIDIARY" || reportType === "HEAD_SITE") ? <SubsidiaryDetailEditor key={row.id ?? `new-${index}`} row={row} linkOptions={reportType === "HEAD_SITE" ? organizations.filter(o => o.kind === "SUBSIDIARY") : undefined} usedLinks={rows.filter((_, i) => i !== index).flatMap(r => r.configuration?.head_links ?? [])} onBusy={setSaving} disabled={saving} onChange={next => updateRow(index, next)} onRemove={() => setRows(current => current.filter((_, i) => i !== index))} onMove={direction => moveRow(index, direction)} /> : (
+                  {rows.map((row, index) => ({ row, index })).filter(({ index }) => index === Math.min(selectedRow, rows.length - 1)).map(({ row, index }) => (reportType === "SUBSIDIARY" || reportType === "HEAD_SITE") ? <SubsidiaryDetailEditor key={row.id ?? `new-${index}`} row={row} linkOptions={reportType === "HEAD_SITE" ? organizations.filter(o => o.kind === "SUBSIDIARY") : undefined} usedLinks={rows.filter((_, i) => i !== index).flatMap(r => r.configuration?.head_links ?? [])} onBusy={setSaving} disabled={saving} onChange={next => updateRow(index, next)} onRemove={() => setRows(current => current.filter((_, i) => i !== index))} onMove={direction => moveRow(index, direction)} /> : (
                     <fieldset disabled={saving} className="layout-row-editor" key={row.id ?? `new-${index}`}>
                       <label>Категория позиции<select aria-label="Категория позиции" value={row.configuration?.category ?? "UNSPECIFIED"} onChange={(event) => updateRow(index, { configuration: { image: "", norm: "", opening: "", indicators: [], ...row.configuration, category: event.target.value } })}>
                         {Object.entries(CATEGORY_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}
@@ -326,7 +331,7 @@ export function WorkspaceSettingsDialog({
                         onChange={(event) => updateRow(index, { position_name: event.target.value })}
                       />
                       {layout.templates.find(t => t.id === row.template_group_id)?.repeatable !== false && <div className="row-actions">
-                        <button type="button" className="mini-button" onClick={() => setRows((current) => [...current, { ...row, id: null, position_name: `${row.position_name} — копия` }])}><UiIcon name="copy" />Копировать позицию</button>
+                        <button type="button" className="mini-button" onClick={() => { setSelectedRow(rows.length); setRows((current) => [...current, { ...row, id: null, position_name: `${row.position_name} — копия` }]); }}><UiIcon name="copy" />Копировать позицию</button>
                         <button type="button" className="mini-button" onClick={() => moveRow(index, -1)} aria-label="Переместить выше"><UiIcon name="arrow-up" />Выше</button>
                         <button type="button" className="mini-button" onClick={() => moveRow(index, 1)} aria-label="Переместить ниже"><UiIcon name="arrow-down" />Ниже</button>
                         <button type="button" className="mini-button remove" onClick={() => setRows((current) => current.filter((_, rowIndex) => rowIndex !== index))} aria-label="Убрать строку"><UiIcon name="trash" />Убрать строку</button>

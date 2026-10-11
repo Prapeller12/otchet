@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import re
 from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
 
@@ -57,13 +59,24 @@ def create_manifest(root: Path, version: str) -> dict[str, object]:
         {"path": relative, "sha256": _sha256(path), "size": path.stat().st_size}
         for relative, path in _immutable_files(root).items()
     ]
-    return {
+    payload: dict[str, object] = {
         "application": "reporting-system",
         "files": entries,
         "format_version": 1,
         "target": "windows-x64",
         "version": version,
     }
+    source_commit = os.environ.get("GITHUB_SHA", "")
+    build_run_id = os.environ.get("GITHUB_RUN_ID", "")
+    if source_commit:
+        if re.fullmatch(r"[0-9a-fA-F]{40}", source_commit) is None:
+            raise ManifestError("Source commit must be a complete 40-character Git SHA")
+        payload["source_commit"] = source_commit.lower()
+        if build_run_id:
+            if not build_run_id.isdecimal():
+                raise ManifestError("Build run ID must be numeric")
+            payload["build_run_id"] = build_run_id
+    return payload
 
 
 def write_manifest(root: Path, version: str) -> Path:
@@ -94,6 +107,15 @@ def verify_manifest(root: Path) -> None:
         raise ManifestError(f"Cannot read release manifest: {exc}") from exc
     if payload.get("format_version") != 1 or payload.get("target") != "windows-x64":
         raise ManifestError("Unsupported release manifest format or target")
+    if "source_commit" in payload and (
+        not isinstance(payload["source_commit"], str)
+        or re.fullmatch(r"[0-9a-f]{40}", payload["source_commit"]) is None
+    ):
+        raise ManifestError("Invalid source commit in release manifest")
+    if "build_run_id" in payload and (
+        not isinstance(payload["build_run_id"], str) or not payload["build_run_id"].isdecimal()
+    ):
+        raise ManifestError("Invalid build run ID in release manifest")
     raw_entries = payload.get("files")
     if not isinstance(raw_entries, list):
         raise ManifestError("Manifest files must be a list")

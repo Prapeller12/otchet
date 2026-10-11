@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useApplicationGateway } from "../../app/providers/ApplicationGatewayProvider";
-import type { ReportMatrixContract } from "../../shared/api/application-gateway";
+import type { ReportMatrixContract, DraftNavigation } from "../../shared/api/application-gateway";
 import type { ReportType } from "../../shared/api/report-cell-contract";
 import { ReportMatrix } from "../../widgets/report-matrix/ReportMatrix";
 
@@ -12,6 +12,8 @@ type ReportMatrixPageProps = {
   reloadKey: number;
   onStatusChange(status: string): void;
   onNavigationBlockedChange?(blocked: boolean): void;
+  onNavigationReady?(navigation: DraftNavigation | null): void;
+  startPeriod?: string; initialPeriod?: { year: number; month: number };
 };
 
 export function ReportMatrixPage({
@@ -20,15 +22,16 @@ export function ReportMatrixPage({
   organizationId,
   reloadKey,
   onStatusChange,
-  onNavigationBlockedChange,
+  onNavigationBlockedChange, onNavigationReady, startPeriod, initialPeriod,
 }: ReportMatrixPageProps) {
   const gateway = useApplicationGateway();
   const [matrix, setMatrix] = useState<ReportMatrixContract | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [year, setYear] = useState(new Date().getFullYear());
-  const [navigationBlocked, setNavigationBlocked] = useState(false);
+  const [year, setYear] = useState(initialPeriod?.year ?? (startPeriod ? Number(startPeriod.slice(0, 4)) : new Date().getFullYear()));
+  const navigation = useRef<DraftNavigation | null>(null);
+  const handleNavigationReady = useCallback((value: DraftNavigation | null) => { navigation.current = value; onNavigationReady?.(value); }, [onNavigationReady]);
+  useEffect(() => { setYear(initialPeriod?.year ?? (startPeriod ? Number(startPeriod.slice(0, 4)) : new Date().getFullYear())); }, [organizationId, startPeriod, initialPeriod?.year]);
   const handleNavigationBlocked = useCallback((blocked: boolean) => {
-    setNavigationBlocked(blocked);
     onNavigationBlockedChange?.(blocked);
   }, [onNavigationBlockedChange]);
 
@@ -59,8 +62,8 @@ export function ReportMatrixPage({
 
   return <>
     <div className="month-controls" aria-label="Период отчёта">
-      <label>Год отчёта <select value={year} disabled={navigationBlocked || (matrix === null && error === null)} onChange={event => setYear(Number(event.target.value))}>
-        {Array.from({ length: 201 }, (_, index) => 1900 + index).map(value => <option key={value} value={value}>{value}</option>)}
+      <label>Год отчёта <select value={year} disabled={matrix === null && error === null} onChange={event => { const nextYear = Number(event.target.value); const action = () => setYear(nextYear); if (navigation.current) navigation.current.request(action); else action(); }}>
+        {Array.from({ length: 201 }, (_, index) => 1900 + index).filter(value => !startPeriod || value >= Number(startPeriod.slice(0, 4))).map(value => <option key={value} value={value}>{value}</option>)}
       </select></label>
     </div>
     {error !== null ? (
@@ -79,6 +82,9 @@ export function ReportMatrixPage({
         onChange={setMatrix}
         onStatusChange={onStatusChange}
         onNavigationBlockedChange={handleNavigationBlocked}
+        onNavigationReady={handleNavigationReady}
+        {...(startPeriod ? { startPeriod } : {})}
+        {...(initialPeriod?.year === year ? { initialMonth: initialPeriod.month } : startPeriod && Number(startPeriod.slice(0, 4)) === year ? { initialMonth: Number(startPeriod.slice(5, 7)) } : {})}
       />
     )}
   </>;

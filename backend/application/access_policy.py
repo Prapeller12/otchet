@@ -16,6 +16,8 @@ READ_COMMANDS = frozenset(
         "list_report_signers",
         "list_organizations",
         "export_report",
+        "get_report_draft_save_result",
+        "list_blank_report_profiles",
     }
 )
 ADMIN_COMMANDS = frozenset(
@@ -27,6 +29,7 @@ ADMIN_COMMANDS = frozenset(
         "create_report_signer",
         "validate_import",
         "commit_import",
+        "create_blank_report_profiles",
     }
 )
 
@@ -51,7 +54,13 @@ def classify_permission(method: str, payload: object) -> Permission | None:
     if method in ADMIN_COMMANDS:
         return "admin"
     request = payload if isinstance(payload, Mapping) else {}
-    if method in {"save_report_cells", "save_report_presentation", "verify_report", "export_pdf"}:
+    if method in {
+        "save_report_cells",
+        "save_report_draft",
+        "save_report_presentation",
+        "verify_report",
+        "export_pdf",
+    }:
         return "responsible"
     if method == "reference_report":
         action = request.get("action")

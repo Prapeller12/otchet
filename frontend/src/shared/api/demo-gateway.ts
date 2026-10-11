@@ -18,6 +18,7 @@ import type {
   SaveReportCellsRequest,
   SaveReportCellsResponse,
   SaveReportLayoutRequest,
+  SaveReportDraftRequest, SaveReportDraftResponse, ReportDraftResultQuery, ReportDraftResult,
 } from "./application-gateway";
 import type {
   ReportCellAccessState,
@@ -347,6 +348,7 @@ function coordinateKey(value: ReportCellCoordinate): string {
 }
 
 export class DemoGateway implements ApplicationGateway {
+  readonly #draftResults = new Map<string, { payload: string; result: SaveReportDraftResponse }>();
   #fieldHintsEnabled = true;
   async getUiPreferences() { return { field_hints_enabled: this.#fieldHintsEnabled }; }
   async saveUiPreferences(request: { field_hints_enabled: boolean }) { this.#fieldHintsEnabled = request.field_hints_enabled; return this.getUiPreferences(); }
@@ -404,6 +406,28 @@ export class DemoGateway implements ApplicationGateway {
       matrix_revision: matrix.matrix_revision,
       cells: structuredClone(saved),
     };
+  }
+
+  async saveReportDraft(request: SaveReportDraftRequest): Promise<SaveReportDraftResponse> {
+    const payload = JSON.stringify(request);
+    const previous = this.#draftResults.get(request.idempotency_key);
+    if (previous) {
+      if (previous.payload !== payload) throw Object.assign(new Error("IDEMPOTENCY_CONFLICT: пакет изменён"), { outcomeKnown: true });
+      return { ...structuredClone(previous.result), idempotent_replay: true };
+    }
+    const result = await this.saveReportCells(request);
+    const matrix = this.#matrices.get(`${request.report_type}:${request.organization_id}`) ?? await this.getReportMatrix(request);
+    const patch = request.presentation ?? {};
+    const { production_code_actuals, production_code_plans, confirm_production_totals: _confirmed, ...fields } = patch;
+    matrix.presentation = { ...matrix.presentation, ...fields };
+    if (fields.title) matrix.title = fields.title;
+    if (matrix.presentation.production_codes) matrix.presentation.production_codes = matrix.presentation.production_codes.map(code => ({ ...code, plans: { ...code.plans, ...production_code_plans?.[code.id] }, actuals: { ...code.actuals, ...production_code_actuals?.[code.id] } }));
+    const saved: SaveReportDraftResponse = { ...result, data_state: "committed", operation_revision: result.matrix_revision, current_revision: result.matrix_revision, idempotent_replay: false, presentation: structuredClone(matrix.presentation), verification_state: "pending", backup_state: "pending" };
+    this.#draftResults.set(request.idempotency_key, { payload, result: saved });
+    return structuredClone(saved);
+  }
+  async getReportDraftSaveResult(request: ReportDraftResultQuery): Promise<ReportDraftResult> {
+    return structuredClone(this.#draftResults.get(request.idempotency_key)?.result ?? { data_state: "unknown" });
   }
 
   async validateImport(_request: ImportRequest): Promise<ImportPreview> {

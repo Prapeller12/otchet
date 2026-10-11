@@ -4,7 +4,12 @@ from collections.abc import Callable
 from decimal import Decimal
 from typing import Any
 
-from backend.application.subsidiary_report import default_detail, number, result_value
+from backend.application.subsidiary_report import (
+    default_detail,
+    display_suppliers,
+    number,
+    result_value,
+)
 from backend.domain.calculations import (
     QuantityValue,
     calculate_component_consumption,
@@ -41,7 +46,7 @@ def build_head_rows(
     rows = []
     for group, config in groups:
         detail = config.get("subsidiary", default_detail(group.party_name))
-        suppliers = sorted(detail["suppliers"], key=lambda s: s["archived"])
+        suppliers = display_suppliers(detail)
         if not suppliers:
             continue
         common = next((i for i, s in enumerate(suppliers) if not s["archived"]), 0)
@@ -73,11 +78,23 @@ def build_head_rows(
             day = period + "-01"
             opening = read(group, "HEAD_OPENING", day, period + "-OPENING", True)
             plans = [
-                read(group, "HEAD_PLAN_" + s["id"], day, period + "-PLAN", not s["archived"])
+                read(
+                    group,
+                    "HEAD_PLAN_" + s["id"],
+                    day,
+                    period + "-PLAN",
+                    not s["archived"] and not s.get("unassigned", False),
+                )
                 for s in suppliers
             ]
             facts = [
-                read(group, "HEAD_FACT_" + s["id"], day, period + "-FACT", not s["archived"])
+                read(
+                    group,
+                    "HEAD_FACT_" + s["id"],
+                    day,
+                    period + "-FACT",
+                    not s["archived"] and not s.get("unassigned", False),
+                )
                 for s in suppliers
             ]
             norm = config.get("norm", "")

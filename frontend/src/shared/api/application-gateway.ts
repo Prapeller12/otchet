@@ -130,6 +130,28 @@ export type SaveReportCellsResponse = SaveVerificationResult & {
   cells: ReportCellContract[];
 };
 
+/** A single atomic command for the current report draft; structure is configured separately. */
+export type ReportDraftPresentation = Pick<ReportPresentation, "title" | "widths" | "plans" | "actuals" | "header"> & {
+  production_code_plans?: Record<string, Record<string, string>>;
+  production_code_actuals?: Record<string, Record<string, string>>;
+  confirm_production_totals?: boolean;
+};
+export type SaveReportDraftRequest = SaveReportCellsRequest & { presentation?: ReportDraftPresentation };
+export type ReportDraftResultQuery = Pick<SaveReportDraftRequest, "report_type" | "organization_id" | "year" | "confirmation" | "idempotency_key">;
+export type SaveReportDraftResponse = SaveReportCellsResponse & {
+  data_state: "committed";
+  operation_revision: string;
+  current_revision: string;
+  idempotent_replay: boolean;
+  presentation: ReportPresentation;
+  verification_state: "verified" | "verification_error" | "pending" | "stale";
+  backup_state: "complete" | "post_backup_warning" | "pending";
+  backup_complete?: boolean;
+  backup_warning?: string;
+};
+export type ReportDraftResult = SaveReportDraftResponse | { data_state: "unknown" };
+export type DraftNavigation = { request(action: () => void): void };
+
 export type ImportRequest = {
   batch_id?: string;
   sheet_decisions?: Record<string, { include: boolean; reason: string }>;
@@ -217,11 +239,15 @@ export type OrganizationOption = {
   id: string;
   name: string;
   kind: "HEAD" | "SUBSIDIARY";
+  default_period?: { year: number; month: number };
+  start_period?: string;
 };
 
 export type OrganizationList = {
   organizations: OrganizationOption[];
 };
+export type BlankReportProfiles = { profile_set_id: string; initial_period: string; quantity_policy: string; organizations: { template_id: string; label: string; report_type: ReportType; position_count: number; distinct_manufacturer_count: number; supplier_row_count: number; display_row_count: number }[] };
+export type BlankReportProfilesResult = { created: boolean; initial_period: string; organizations: { template_id: string; organization_id: string; report_type: ReportType; label: string }[] };
 
 export type OrganizationResult = {
   organization: OrganizationOption;
@@ -237,7 +263,7 @@ export type ReportLayoutTemplate = {
 
 export type FieldIndicator = { code: string; label: string; formula: string };
 export type FieldPreset = { label: string; required_codes: string[]; indicators: FieldIndicator[] };
-export type SubsidiaryDetail = { number: string; designation: string; suppliers: { id: string; name: string; contract: string; archived: boolean }[] };
+export type SubsidiaryDetail = { empty_supplier_slots?: number; number: string; designation: string; suppliers: { id: string; name: string; contract: string; archived: boolean }[] };
 export type FieldConfiguration = {
   subsidiary?: SubsidiaryDetail;
   head_links?: string[];
@@ -299,6 +325,10 @@ export type ApplicationError = {
 export type UiPreferences = { field_hints_enabled: boolean };
 
 export interface ApplicationGateway {
+  listBlankReportProfiles?(): Promise<BlankReportProfiles>;
+  createBlankReportProfiles?(request: { profile_set_id: string }): Promise<BlankReportProfilesResult>;
+  saveReportDraft?(request: SaveReportDraftRequest): Promise<SaveReportDraftResponse>;
+  getReportDraftSaveResult?(request: ReportDraftResultQuery): Promise<ReportDraftResult>;
   listRecoveryBackups?(): Promise<{ backups: RecoveryBackup[] }>;
   verifyRecoveryBackup?(backupId: string): Promise<{ valid: boolean; created_at: string }>;
   restoreRecoveryBackup?(backupId: string): Promise<RecoveryResult>;

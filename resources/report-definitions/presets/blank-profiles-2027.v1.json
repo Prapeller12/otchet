@@ -1,0 +1,5068 @@
+{
+  "schema_version": 1,
+  "initial_period": "2027-09-01",
+  "quantity_policy": "DATA_NOT_PROVIDED",
+  "component_classification": "UNSPECIFIED",
+  "organizations": [
+    {
+      "template_id": "kge",
+      "label": "КГЭ",
+      "report_type": "HEAD_SITE",
+      "position_count": 8,
+      "distinct_manufacturer_count": 8,
+      "supplier_row_count": 9,
+      "source_table_full_span_rows": 10,
+      "source_spacer_rows": [
+        16
+      ],
+      "manufacturer_ids": [
+        "MFG-001",
+        "MFG-002",
+        "MFG-003",
+        "MFG-004",
+        "MFG-005",
+        "MFG-006",
+        "MFG-007",
+        "MFG-008"
+      ],
+      "positions": [
+        {
+          "ordinal": 1,
+          "source_anchor_row": 9,
+          "source_end_row": 9,
+          "manufacturer_rows": [
+            {
+              "source_row": 9,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 2,
+          "source_anchor_row": 10,
+          "source_end_row": 10,
+          "manufacturer_rows": [
+            {
+              "source_row": 10,
+              "manufacturer_id": "MFG-002"
+            }
+          ]
+        },
+        {
+          "ordinal": 3,
+          "source_anchor_row": 11,
+          "source_end_row": 11,
+          "manufacturer_rows": [
+            {
+              "source_row": 11,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 4,
+          "source_anchor_row": 12,
+          "source_end_row": 13,
+          "manufacturer_rows": [
+            {
+              "source_row": 12,
+              "manufacturer_id": "MFG-003"
+            },
+            {
+              "source_row": 13,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 5,
+          "source_anchor_row": 14,
+          "source_end_row": 14,
+          "manufacturer_rows": [
+            {
+              "source_row": 14,
+              "manufacturer_id": "MFG-005"
+            }
+          ]
+        },
+        {
+          "ordinal": 6,
+          "source_anchor_row": 15,
+          "source_end_row": 15,
+          "manufacturer_rows": [
+            {
+              "source_row": 15,
+              "manufacturer_id": "MFG-006"
+            }
+          ]
+        },
+        {
+          "ordinal": 7,
+          "source_anchor_row": 17,
+          "source_end_row": 17,
+          "manufacturer_rows": [
+            {
+              "source_row": 17,
+              "manufacturer_id": "MFG-007"
+            }
+          ]
+        },
+        {
+          "ordinal": 8,
+          "source_anchor_row": 18,
+          "source_end_row": 18,
+          "manufacturer_rows": [
+            {
+              "source_row": 18,
+              "manufacturer_id": "MFG-008"
+            }
+          ]
+        }
+      ],
+      "display_row_count": 9
+    },
+    {
+      "template_id": "molot",
+      "label": "Молот",
+      "report_type": "SUBSIDIARY",
+      "position_count": 154,
+      "distinct_manufacturer_count": 33,
+      "supplier_row_count": 198,
+      "source_table_full_span_rows": 203,
+      "source_spacer_rows": [
+        131
+      ],
+      "manufacturer_ids": [
+        "MFG-009",
+        "MFG-010",
+        "MFG-011",
+        "MFG-012",
+        "MFG-013",
+        "MFG-014",
+        "MFG-015",
+        "MFG-016",
+        "MFG-017",
+        "MFG-018",
+        "MFG-019",
+        "MFG-020",
+        "MFG-021",
+        "MFG-022",
+        "MFG-023",
+        "MFG-024",
+        "MFG-025",
+        "MFG-026",
+        "MFG-027",
+        "MFG-028",
+        "MFG-029",
+        "MFG-030",
+        "MFG-031",
+        "MFG-032",
+        "MFG-033",
+        "MFG-034",
+        "MFG-035",
+        "MFG-036",
+        "MFG-037",
+        "MFG-038",
+        "MFG-039",
+        "MFG-040",
+        "MFG-041"
+      ],
+      "positions": [
+        {
+          "ordinal": 1,
+          "source_anchor_row": 9,
+          "source_end_row": 9,
+          "manufacturer_rows": [
+            {
+              "source_row": 9,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 2,
+          "source_anchor_row": 10,
+          "source_end_row": 10,
+          "manufacturer_rows": [
+            {
+              "source_row": 10,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 3,
+          "source_anchor_row": 11,
+          "source_end_row": 12,
+          "manufacturer_rows": [
+            {
+              "source_row": 11,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 12,
+              "manufacturer_id": "MFG-010"
+            }
+          ]
+        },
+        {
+          "ordinal": 4,
+          "source_anchor_row": 13,
+          "source_end_row": 13,
+          "manufacturer_rows": [
+            {
+              "source_row": 13,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 5,
+          "source_anchor_row": 14,
+          "source_end_row": 14,
+          "manufacturer_rows": [
+            {
+              "source_row": 14,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 6,
+          "source_anchor_row": 15,
+          "source_end_row": 15,
+          "manufacturer_rows": [
+            {
+              "source_row": 15,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 7,
+          "source_anchor_row": 16,
+          "source_end_row": 17,
+          "manufacturer_rows": [
+            {
+              "source_row": 16,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 17,
+              "manufacturer_id": "MFG-010"
+            }
+          ]
+        },
+        {
+          "ordinal": 8,
+          "source_anchor_row": 18,
+          "source_end_row": 18,
+          "manufacturer_rows": [
+            {
+              "source_row": 18,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 9,
+          "source_anchor_row": 19,
+          "source_end_row": 19,
+          "manufacturer_rows": [
+            {
+              "source_row": 19,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 10,
+          "source_anchor_row": 20,
+          "source_end_row": 20,
+          "manufacturer_rows": [
+            {
+              "source_row": 20,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 11,
+          "source_anchor_row": 21,
+          "source_end_row": 22,
+          "manufacturer_rows": [
+            {
+              "source_row": 21,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 22,
+              "manufacturer_id": "MFG-010"
+            }
+          ]
+        },
+        {
+          "ordinal": 12,
+          "source_anchor_row": 23,
+          "source_end_row": 23,
+          "manufacturer_rows": [
+            {
+              "source_row": 23,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 13,
+          "source_anchor_row": 24,
+          "source_end_row": 24,
+          "manufacturer_rows": [
+            {
+              "source_row": 24,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 14,
+          "source_anchor_row": 25,
+          "source_end_row": 25,
+          "manufacturer_rows": [
+            {
+              "source_row": 25,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 15,
+          "source_anchor_row": 26,
+          "source_end_row": 26,
+          "manufacturer_rows": [
+            {
+              "source_row": 26,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 16,
+          "source_anchor_row": 27,
+          "source_end_row": 27,
+          "manufacturer_rows": [
+            {
+              "source_row": 27,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 17,
+          "source_anchor_row": 28,
+          "source_end_row": 28,
+          "manufacturer_rows": [
+            {
+              "source_row": 28,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 18,
+          "source_anchor_row": 29,
+          "source_end_row": 29,
+          "manufacturer_rows": [
+            {
+              "source_row": 29,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 19,
+          "source_anchor_row": 30,
+          "source_end_row": 33,
+          "manufacturer_rows": [
+            {
+              "source_row": 30,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 31,
+              "manufacturer_id": "MFG-010"
+            },
+            {
+              "source_row": 32,
+              "manufacturer_id": "MFG-011"
+            },
+            {
+              "source_row": 33,
+              "manufacturer_id": "MFG-012"
+            }
+          ]
+        },
+        {
+          "ordinal": 20,
+          "source_anchor_row": 34,
+          "source_end_row": 39,
+          "manufacturer_rows": [
+            {
+              "source_row": 34,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 35,
+              "manufacturer_id": "MFG-010"
+            },
+            {
+              "source_row": 36,
+              "manufacturer_id": "MFG-013"
+            },
+            {
+              "source_row": 37,
+              "manufacturer_id": "MFG-014"
+            },
+            {
+              "source_row": 38,
+              "manufacturer_id": "MFG-015"
+            },
+            {
+              "source_row": 39,
+              "manufacturer_id": "MFG-011"
+            }
+          ]
+        },
+        {
+          "ordinal": 21,
+          "source_anchor_row": 40,
+          "source_end_row": 40,
+          "manufacturer_rows": [
+            {
+              "source_row": 40,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 22,
+          "source_anchor_row": 41,
+          "source_end_row": 42,
+          "manufacturer_rows": [
+            {
+              "source_row": 41,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 42,
+              "manufacturer_id": "MFG-010"
+            }
+          ]
+        },
+        {
+          "ordinal": 23,
+          "source_anchor_row": 43,
+          "source_end_row": 43,
+          "manufacturer_rows": [
+            {
+              "source_row": 43,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 24,
+          "source_anchor_row": 44,
+          "source_end_row": 46,
+          "manufacturer_rows": [
+            {
+              "source_row": 44,
+              "manufacturer_id": "MFG-016"
+            },
+            {
+              "source_row": 45,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 46,
+              "manufacturer_id": "MFG-017"
+            }
+          ]
+        },
+        {
+          "ordinal": 25,
+          "source_anchor_row": 47,
+          "source_end_row": 47,
+          "manufacturer_rows": [
+            {
+              "source_row": 47,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 26,
+          "source_anchor_row": 48,
+          "source_end_row": 50,
+          "manufacturer_rows": [
+            {
+              "source_row": 48,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 49,
+              "manufacturer_id": "MFG-010"
+            },
+            {
+              "source_row": 50,
+              "manufacturer_id": "MFG-013"
+            }
+          ]
+        },
+        {
+          "ordinal": 27,
+          "source_anchor_row": 51,
+          "source_end_row": 51,
+          "manufacturer_rows": [
+            {
+              "source_row": 51,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 28,
+          "source_anchor_row": 52,
+          "source_end_row": 52,
+          "manufacturer_rows": [
+            {
+              "source_row": 52,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 29,
+          "source_anchor_row": 53,
+          "source_end_row": 53,
+          "manufacturer_rows": [
+            {
+              "source_row": 53,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 30,
+          "source_anchor_row": 54,
+          "source_end_row": 56,
+          "manufacturer_rows": [
+            {
+              "source_row": 54,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 55,
+              "manufacturer_id": "MFG-010"
+            },
+            {
+              "source_row": 56,
+              "manufacturer_id": "MFG-018"
+            }
+          ]
+        },
+        {
+          "ordinal": 31,
+          "source_anchor_row": 57,
+          "source_end_row": 57,
+          "manufacturer_rows": [
+            {
+              "source_row": 57,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 32,
+          "source_anchor_row": 58,
+          "source_end_row": 60,
+          "manufacturer_rows": [
+            {
+              "source_row": 58,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 59,
+              "manufacturer_id": "MFG-013"
+            },
+            {
+              "source_row": 60,
+              "manufacturer_id": "MFG-010"
+            }
+          ]
+        },
+        {
+          "ordinal": 33,
+          "source_anchor_row": 61,
+          "source_end_row": 63,
+          "manufacturer_rows": [
+            {
+              "source_row": 61,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 62,
+              "manufacturer_id": "MFG-010"
+            },
+            {
+              "source_row": 63,
+              "manufacturer_id": "MFG-013"
+            }
+          ]
+        },
+        {
+          "ordinal": 34,
+          "source_anchor_row": 64,
+          "source_end_row": 64,
+          "manufacturer_rows": [
+            {
+              "source_row": 64,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 35,
+          "source_anchor_row": 65,
+          "source_end_row": 65,
+          "manufacturer_rows": [
+            {
+              "source_row": 65,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 36,
+          "source_anchor_row": 66,
+          "source_end_row": 68,
+          "manufacturer_rows": [
+            {
+              "source_row": 66,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 67,
+              "manufacturer_id": "MFG-010"
+            },
+            {
+              "source_row": 68,
+              "manufacturer_id": "MFG-013"
+            }
+          ]
+        },
+        {
+          "ordinal": 37,
+          "source_anchor_row": 69,
+          "source_end_row": 73,
+          "manufacturer_rows": [
+            {
+              "source_row": 69,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 70,
+              "manufacturer_id": "MFG-010"
+            },
+            {
+              "source_row": 71,
+              "manufacturer_id": "MFG-018"
+            },
+            {
+              "source_row": 72,
+              "manufacturer_id": "MFG-019"
+            },
+            {
+              "source_row": 73,
+              "manufacturer_id": "MFG-013"
+            }
+          ]
+        },
+        {
+          "ordinal": 38,
+          "source_anchor_row": 74,
+          "source_end_row": 77,
+          "manufacturer_rows": [
+            {
+              "source_row": 74,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 75,
+              "manufacturer_id": "MFG-010"
+            },
+            {
+              "source_row": 76,
+              "manufacturer_id": "MFG-018"
+            },
+            {
+              "source_row": 77,
+              "manufacturer_id": "MFG-013"
+            }
+          ]
+        },
+        {
+          "ordinal": 39,
+          "source_anchor_row": 78,
+          "source_end_row": 78,
+          "manufacturer_rows": [
+            {
+              "source_row": 78,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 40,
+          "source_anchor_row": 79,
+          "source_end_row": 79,
+          "manufacturer_rows": [
+            {
+              "source_row": 79,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 41,
+          "source_anchor_row": 80,
+          "source_end_row": 80,
+          "manufacturer_rows": [
+            {
+              "source_row": 80,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 42,
+          "source_anchor_row": 81,
+          "source_end_row": 81,
+          "manufacturer_rows": [
+            {
+              "source_row": 81,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 43,
+          "source_anchor_row": 82,
+          "source_end_row": 82,
+          "manufacturer_rows": [
+            {
+              "source_row": 82,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 44,
+          "source_anchor_row": 83,
+          "source_end_row": 83,
+          "manufacturer_rows": [
+            {
+              "source_row": 83,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 45,
+          "source_anchor_row": 84,
+          "source_end_row": 86,
+          "manufacturer_rows": [
+            {
+              "source_row": 84,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 85,
+              "manufacturer_id": "MFG-010"
+            },
+            {
+              "source_row": 86,
+              "manufacturer_id": "MFG-020"
+            }
+          ]
+        },
+        {
+          "ordinal": 46,
+          "source_anchor_row": 87,
+          "source_end_row": 87,
+          "manufacturer_rows": [
+            {
+              "source_row": 87,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 47,
+          "source_anchor_row": 88,
+          "source_end_row": 88,
+          "manufacturer_rows": [
+            {
+              "source_row": 88,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 48,
+          "source_anchor_row": 89,
+          "source_end_row": 91,
+          "manufacturer_rows": [
+            {
+              "source_row": 89,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 90,
+              "manufacturer_id": "MFG-010"
+            },
+            {
+              "source_row": 91,
+              "manufacturer_id": "MFG-018"
+            }
+          ]
+        },
+        {
+          "ordinal": 49,
+          "source_anchor_row": 92,
+          "source_end_row": 92,
+          "manufacturer_rows": [
+            {
+              "source_row": 92,
+              "manufacturer_id": "MFG-021"
+            }
+          ]
+        },
+        {
+          "ordinal": 50,
+          "source_anchor_row": 93,
+          "source_end_row": 95,
+          "manufacturer_rows": [
+            {
+              "source_row": 93,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 94,
+              "manufacturer_id": "MFG-010"
+            },
+            {
+              "source_row": 95,
+              "manufacturer_id": "MFG-013"
+            }
+          ]
+        },
+        {
+          "ordinal": 51,
+          "source_anchor_row": 96,
+          "source_end_row": 96,
+          "manufacturer_rows": [
+            {
+              "source_row": 96,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 52,
+          "source_anchor_row": 97,
+          "source_end_row": 97,
+          "manufacturer_rows": [
+            {
+              "source_row": 97,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 53,
+          "source_anchor_row": 98,
+          "source_end_row": 98,
+          "manufacturer_rows": [
+            {
+              "source_row": 98,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 54,
+          "source_anchor_row": 99,
+          "source_end_row": 100,
+          "manufacturer_rows": [
+            {
+              "source_row": 99,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 100,
+              "manufacturer_id": "MFG-010"
+            }
+          ]
+        },
+        {
+          "ordinal": 55,
+          "source_anchor_row": 101,
+          "source_end_row": 101,
+          "manufacturer_rows": [
+            {
+              "source_row": 101,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 56,
+          "source_anchor_row": 102,
+          "source_end_row": 104,
+          "manufacturer_rows": [
+            {
+              "source_row": 102,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 103,
+              "manufacturer_id": "MFG-011"
+            },
+            {
+              "source_row": 104,
+              "manufacturer_id": "MFG-010"
+            }
+          ]
+        },
+        {
+          "ordinal": 57,
+          "source_anchor_row": 105,
+          "source_end_row": 107,
+          "manufacturer_rows": [
+            {
+              "source_row": 105,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 106,
+              "manufacturer_id": "MFG-011"
+            },
+            {
+              "source_row": 107,
+              "manufacturer_id": "MFG-010"
+            }
+          ]
+        },
+        {
+          "ordinal": 58,
+          "source_anchor_row": 108,
+          "source_end_row": 108,
+          "manufacturer_rows": [
+            {
+              "source_row": 108,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 59,
+          "source_anchor_row": 109,
+          "source_end_row": 109,
+          "manufacturer_rows": [
+            {
+              "source_row": 109,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 60,
+          "source_anchor_row": 110,
+          "source_end_row": 110,
+          "manufacturer_rows": [
+            {
+              "source_row": 110,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 61,
+          "source_anchor_row": 111,
+          "source_end_row": 111,
+          "manufacturer_rows": [
+            {
+              "source_row": 111,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 62,
+          "source_anchor_row": 112,
+          "source_end_row": 114,
+          "manufacturer_rows": [
+            {
+              "source_row": 112,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 113,
+              "manufacturer_id": "MFG-011"
+            },
+            {
+              "source_row": 114,
+              "manufacturer_id": "MFG-010"
+            }
+          ]
+        },
+        {
+          "ordinal": 63,
+          "source_anchor_row": 115,
+          "source_end_row": 116,
+          "manufacturer_rows": [
+            {
+              "source_row": 115,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 116,
+              "manufacturer_id": "MFG-011"
+            }
+          ]
+        },
+        {
+          "ordinal": 64,
+          "source_anchor_row": 117,
+          "source_end_row": 119,
+          "manufacturer_rows": [
+            {
+              "source_row": 117,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 118,
+              "manufacturer_id": "MFG-011"
+            },
+            {
+              "source_row": 119,
+              "manufacturer_id": "MFG-018"
+            }
+          ]
+        },
+        {
+          "ordinal": 65,
+          "source_anchor_row": 120,
+          "source_end_row": 121,
+          "manufacturer_rows": [
+            {
+              "source_row": 120,
+              "manufacturer_id": "MFG-009"
+            },
+            {
+              "source_row": 121,
+              "manufacturer_id": "MFG-011"
+            }
+          ]
+        },
+        {
+          "ordinal": 66,
+          "source_anchor_row": 122,
+          "source_end_row": 122,
+          "manufacturer_rows": [
+            {
+              "source_row": 122,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 67,
+          "source_anchor_row": 123,
+          "source_end_row": 123,
+          "manufacturer_rows": [
+            {
+              "source_row": 123,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 68,
+          "source_anchor_row": 124,
+          "source_end_row": 124,
+          "manufacturer_rows": [
+            {
+              "source_row": 124,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 69,
+          "source_anchor_row": 125,
+          "source_end_row": 125,
+          "manufacturer_rows": [
+            {
+              "source_row": 125,
+              "manufacturer_id": "MFG-022"
+            }
+          ]
+        },
+        {
+          "ordinal": 70,
+          "source_anchor_row": 126,
+          "source_end_row": 126,
+          "manufacturer_rows": [
+            {
+              "source_row": 126,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 71,
+          "source_anchor_row": 127,
+          "source_end_row": 127,
+          "manufacturer_rows": [
+            {
+              "source_row": 127,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 72,
+          "source_anchor_row": 128,
+          "source_end_row": 128,
+          "manufacturer_rows": [
+            {
+              "source_row": 128,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 73,
+          "source_anchor_row": 129,
+          "source_end_row": 129,
+          "manufacturer_rows": [
+            {
+              "source_row": 129,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 74,
+          "source_anchor_row": 130,
+          "source_end_row": 130,
+          "manufacturer_rows": [
+            {
+              "source_row": 130,
+              "manufacturer_id": "MFG-009"
+            }
+          ]
+        },
+        {
+          "ordinal": 75,
+          "source_anchor_row": 132,
+          "source_end_row": 132,
+          "manufacturer_rows": [
+            {
+              "source_row": 132,
+              "manufacturer_id": "MFG-023"
+            }
+          ]
+        },
+        {
+          "ordinal": 76,
+          "source_anchor_row": 133,
+          "source_end_row": 133,
+          "manufacturer_rows": [
+            {
+              "source_row": 133,
+              "manufacturer_id": "MFG-024"
+            }
+          ]
+        },
+        {
+          "ordinal": 77,
+          "source_anchor_row": 134,
+          "source_end_row": 134,
+          "manufacturer_rows": [
+            {
+              "source_row": 134,
+              "manufacturer_id": "MFG-025"
+            }
+          ]
+        },
+        {
+          "ordinal": 78,
+          "source_anchor_row": 135,
+          "source_end_row": 135,
+          "manufacturer_rows": [
+            {
+              "source_row": 135,
+              "manufacturer_id": "MFG-026"
+            }
+          ]
+        },
+        {
+          "ordinal": 79,
+          "source_anchor_row": 136,
+          "source_end_row": 136,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 80,
+          "source_anchor_row": 137,
+          "source_end_row": 137,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 81,
+          "source_anchor_row": 138,
+          "source_end_row": 138,
+          "manufacturer_rows": [
+            {
+              "source_row": 138,
+              "manufacturer_id": "MFG-021"
+            }
+          ]
+        },
+        {
+          "ordinal": 82,
+          "source_anchor_row": 139,
+          "source_end_row": 139,
+          "manufacturer_rows": [
+            {
+              "source_row": 139,
+              "manufacturer_id": "MFG-021"
+            }
+          ]
+        },
+        {
+          "ordinal": 83,
+          "source_anchor_row": 140,
+          "source_end_row": 140,
+          "manufacturer_rows": [
+            {
+              "source_row": 140,
+              "manufacturer_id": "MFG-027"
+            }
+          ]
+        },
+        {
+          "ordinal": 84,
+          "source_anchor_row": 141,
+          "source_end_row": 141,
+          "manufacturer_rows": [
+            {
+              "source_row": 141,
+              "manufacturer_id": "MFG-028"
+            }
+          ]
+        },
+        {
+          "ordinal": 85,
+          "source_anchor_row": 142,
+          "source_end_row": 142,
+          "manufacturer_rows": [
+            {
+              "source_row": 142,
+              "manufacturer_id": "MFG-029"
+            }
+          ]
+        },
+        {
+          "ordinal": 86,
+          "source_anchor_row": 143,
+          "source_end_row": 143,
+          "manufacturer_rows": [
+            {
+              "source_row": 143,
+              "manufacturer_id": "MFG-029"
+            }
+          ]
+        },
+        {
+          "ordinal": 87,
+          "source_anchor_row": 144,
+          "source_end_row": 144,
+          "manufacturer_rows": [
+            {
+              "source_row": 144,
+              "manufacturer_id": "MFG-030"
+            }
+          ]
+        },
+        {
+          "ordinal": 88,
+          "source_anchor_row": 145,
+          "source_end_row": 145,
+          "manufacturer_rows": [
+            {
+              "source_row": 145,
+              "manufacturer_id": "MFG-031"
+            }
+          ]
+        },
+        {
+          "ordinal": 89,
+          "source_anchor_row": 146,
+          "source_end_row": 146,
+          "manufacturer_rows": [
+            {
+              "source_row": 146,
+              "manufacturer_id": "MFG-032"
+            }
+          ]
+        },
+        {
+          "ordinal": 90,
+          "source_anchor_row": 147,
+          "source_end_row": 147,
+          "manufacturer_rows": [
+            {
+              "source_row": 147,
+              "manufacturer_id": "MFG-029"
+            }
+          ]
+        },
+        {
+          "ordinal": 91,
+          "source_anchor_row": 148,
+          "source_end_row": 148,
+          "manufacturer_rows": [
+            {
+              "source_row": 148,
+              "manufacturer_id": "MFG-033"
+            }
+          ]
+        },
+        {
+          "ordinal": 92,
+          "source_anchor_row": 149,
+          "source_end_row": 149,
+          "manufacturer_rows": [
+            {
+              "source_row": 149,
+              "manufacturer_id": "MFG-034"
+            }
+          ]
+        },
+        {
+          "ordinal": 93,
+          "source_anchor_row": 150,
+          "source_end_row": 150,
+          "manufacturer_rows": [
+            {
+              "source_row": 150,
+              "manufacturer_id": "MFG-035"
+            }
+          ]
+        },
+        {
+          "ordinal": 94,
+          "source_anchor_row": 151,
+          "source_end_row": 151,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 95,
+          "source_anchor_row": 152,
+          "source_end_row": 152,
+          "manufacturer_rows": [
+            {
+              "source_row": 152,
+              "manufacturer_id": "MFG-036"
+            }
+          ]
+        },
+        {
+          "ordinal": 96,
+          "source_anchor_row": 153,
+          "source_end_row": 153,
+          "manufacturer_rows": [
+            {
+              "source_row": 153,
+              "manufacturer_id": "MFG-036"
+            }
+          ]
+        },
+        {
+          "ordinal": 97,
+          "source_anchor_row": 154,
+          "source_end_row": 154,
+          "manufacturer_rows": [
+            {
+              "source_row": 154,
+              "manufacturer_id": "MFG-026"
+            }
+          ]
+        },
+        {
+          "ordinal": 98,
+          "source_anchor_row": 155,
+          "source_end_row": 155,
+          "manufacturer_rows": [
+            {
+              "source_row": 155,
+              "manufacturer_id": "MFG-031"
+            }
+          ]
+        },
+        {
+          "ordinal": 99,
+          "source_anchor_row": 156,
+          "source_end_row": 156,
+          "manufacturer_rows": [
+            {
+              "source_row": 156,
+              "manufacturer_id": "MFG-030"
+            }
+          ]
+        },
+        {
+          "ordinal": 100,
+          "source_anchor_row": 157,
+          "source_end_row": 157,
+          "manufacturer_rows": [
+            {
+              "source_row": 157,
+              "manufacturer_id": "MFG-031"
+            }
+          ]
+        },
+        {
+          "ordinal": 101,
+          "source_anchor_row": 158,
+          "source_end_row": 158,
+          "manufacturer_rows": [
+            {
+              "source_row": 158,
+              "manufacturer_id": "MFG-031"
+            }
+          ]
+        },
+        {
+          "ordinal": 102,
+          "source_anchor_row": 159,
+          "source_end_row": 159,
+          "manufacturer_rows": [
+            {
+              "source_row": 159,
+              "manufacturer_id": "MFG-031"
+            }
+          ]
+        },
+        {
+          "ordinal": 103,
+          "source_anchor_row": 160,
+          "source_end_row": 160,
+          "manufacturer_rows": [
+            {
+              "source_row": 160,
+              "manufacturer_id": "MFG-030"
+            }
+          ]
+        },
+        {
+          "ordinal": 104,
+          "source_anchor_row": 161,
+          "source_end_row": 161,
+          "manufacturer_rows": [
+            {
+              "source_row": 161,
+              "manufacturer_id": "MFG-037"
+            }
+          ]
+        },
+        {
+          "ordinal": 105,
+          "source_anchor_row": 162,
+          "source_end_row": 162,
+          "manufacturer_rows": [
+            {
+              "source_row": 162,
+              "manufacturer_id": "MFG-030"
+            }
+          ]
+        },
+        {
+          "ordinal": 106,
+          "source_anchor_row": 163,
+          "source_end_row": 163,
+          "manufacturer_rows": [
+            {
+              "source_row": 163,
+              "manufacturer_id": "MFG-037"
+            }
+          ]
+        },
+        {
+          "ordinal": 107,
+          "source_anchor_row": 164,
+          "source_end_row": 164,
+          "manufacturer_rows": [
+            {
+              "source_row": 164,
+              "manufacturer_id": "MFG-030"
+            }
+          ]
+        },
+        {
+          "ordinal": 108,
+          "source_anchor_row": 165,
+          "source_end_row": 165,
+          "manufacturer_rows": [
+            {
+              "source_row": 165,
+              "manufacturer_id": "MFG-037"
+            }
+          ]
+        },
+        {
+          "ordinal": 109,
+          "source_anchor_row": 166,
+          "source_end_row": 166,
+          "manufacturer_rows": [
+            {
+              "source_row": 166,
+              "manufacturer_id": "MFG-030"
+            }
+          ]
+        },
+        {
+          "ordinal": 110,
+          "source_anchor_row": 167,
+          "source_end_row": 167,
+          "manufacturer_rows": [
+            {
+              "source_row": 167,
+              "manufacturer_id": "MFG-031"
+            }
+          ]
+        },
+        {
+          "ordinal": 111,
+          "source_anchor_row": 168,
+          "source_end_row": 168,
+          "manufacturer_rows": [
+            {
+              "source_row": 168,
+              "manufacturer_id": "MFG-027"
+            }
+          ]
+        },
+        {
+          "ordinal": 112,
+          "source_anchor_row": 169,
+          "source_end_row": 169,
+          "manufacturer_rows": [
+            {
+              "source_row": 169,
+              "manufacturer_id": "MFG-027"
+            }
+          ]
+        },
+        {
+          "ordinal": 113,
+          "source_anchor_row": 170,
+          "source_end_row": 170,
+          "manufacturer_rows": [
+            {
+              "source_row": 170,
+              "manufacturer_id": "MFG-027"
+            }
+          ]
+        },
+        {
+          "ordinal": 114,
+          "source_anchor_row": 171,
+          "source_end_row": 171,
+          "manufacturer_rows": [
+            {
+              "source_row": 171,
+              "manufacturer_id": "MFG-027"
+            }
+          ]
+        },
+        {
+          "ordinal": 115,
+          "source_anchor_row": 172,
+          "source_end_row": 172,
+          "manufacturer_rows": [
+            {
+              "source_row": 172,
+              "manufacturer_id": "MFG-030"
+            }
+          ]
+        },
+        {
+          "ordinal": 116,
+          "source_anchor_row": 173,
+          "source_end_row": 173,
+          "manufacturer_rows": [
+            {
+              "source_row": 173,
+              "manufacturer_id": "MFG-037"
+            }
+          ]
+        },
+        {
+          "ordinal": 117,
+          "source_anchor_row": 174,
+          "source_end_row": 174,
+          "manufacturer_rows": [
+            {
+              "source_row": 174,
+              "manufacturer_id": "MFG-027"
+            }
+          ]
+        },
+        {
+          "ordinal": 118,
+          "source_anchor_row": 175,
+          "source_end_row": 175,
+          "manufacturer_rows": [
+            {
+              "source_row": 175,
+              "manufacturer_id": "MFG-027"
+            }
+          ]
+        },
+        {
+          "ordinal": 119,
+          "source_anchor_row": 176,
+          "source_end_row": 176,
+          "manufacturer_rows": [
+            {
+              "source_row": 176,
+              "manufacturer_id": "MFG-027"
+            }
+          ]
+        },
+        {
+          "ordinal": 120,
+          "source_anchor_row": 177,
+          "source_end_row": 177,
+          "manufacturer_rows": [
+            {
+              "source_row": 177,
+              "manufacturer_id": "MFG-031"
+            }
+          ]
+        },
+        {
+          "ordinal": 121,
+          "source_anchor_row": 178,
+          "source_end_row": 178,
+          "manufacturer_rows": [
+            {
+              "source_row": 178,
+              "manufacturer_id": "MFG-028"
+            }
+          ]
+        },
+        {
+          "ordinal": 122,
+          "source_anchor_row": 179,
+          "source_end_row": 179,
+          "manufacturer_rows": [
+            {
+              "source_row": 179,
+              "manufacturer_id": "MFG-028"
+            }
+          ]
+        },
+        {
+          "ordinal": 123,
+          "source_anchor_row": 180,
+          "source_end_row": 180,
+          "manufacturer_rows": [
+            {
+              "source_row": 180,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 124,
+          "source_anchor_row": 181,
+          "source_end_row": 181,
+          "manufacturer_rows": [
+            {
+              "source_row": 181,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 125,
+          "source_anchor_row": 182,
+          "source_end_row": 182,
+          "manufacturer_rows": [
+            {
+              "source_row": 182,
+              "manufacturer_id": "MFG-028"
+            }
+          ]
+        },
+        {
+          "ordinal": 126,
+          "source_anchor_row": 183,
+          "source_end_row": 183,
+          "manufacturer_rows": [
+            {
+              "source_row": 183,
+              "manufacturer_id": "MFG-031"
+            }
+          ]
+        },
+        {
+          "ordinal": 127,
+          "source_anchor_row": 184,
+          "source_end_row": 184,
+          "manufacturer_rows": [
+            {
+              "source_row": 184,
+              "manufacturer_id": "MFG-039"
+            }
+          ]
+        },
+        {
+          "ordinal": 128,
+          "source_anchor_row": 185,
+          "source_end_row": 185,
+          "manufacturer_rows": [
+            {
+              "source_row": 185,
+              "manufacturer_id": "MFG-039"
+            }
+          ]
+        },
+        {
+          "ordinal": 129,
+          "source_anchor_row": 186,
+          "source_end_row": 186,
+          "manufacturer_rows": [
+            {
+              "source_row": 186,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 130,
+          "source_anchor_row": 187,
+          "source_end_row": 187,
+          "manufacturer_rows": [
+            {
+              "source_row": 187,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 131,
+          "source_anchor_row": 188,
+          "source_end_row": 188,
+          "manufacturer_rows": [
+            {
+              "source_row": 188,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 132,
+          "source_anchor_row": 189,
+          "source_end_row": 189,
+          "manufacturer_rows": [
+            {
+              "source_row": 189,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 133,
+          "source_anchor_row": 190,
+          "source_end_row": 190,
+          "manufacturer_rows": [
+            {
+              "source_row": 190,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 134,
+          "source_anchor_row": 191,
+          "source_end_row": 191,
+          "manufacturer_rows": [
+            {
+              "source_row": 191,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 135,
+          "source_anchor_row": 192,
+          "source_end_row": 192,
+          "manufacturer_rows": [
+            {
+              "source_row": 192,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 136,
+          "source_anchor_row": 193,
+          "source_end_row": 193,
+          "manufacturer_rows": [
+            {
+              "source_row": 193,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 137,
+          "source_anchor_row": 194,
+          "source_end_row": 194,
+          "manufacturer_rows": [
+            {
+              "source_row": 194,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 138,
+          "source_anchor_row": 195,
+          "source_end_row": 195,
+          "manufacturer_rows": [
+            {
+              "source_row": 195,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 139,
+          "source_anchor_row": 196,
+          "source_end_row": 196,
+          "manufacturer_rows": [
+            {
+              "source_row": 196,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 140,
+          "source_anchor_row": 197,
+          "source_end_row": 197,
+          "manufacturer_rows": [
+            {
+              "source_row": 197,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 141,
+          "source_anchor_row": 198,
+          "source_end_row": 198,
+          "manufacturer_rows": [
+            {
+              "source_row": 198,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 142,
+          "source_anchor_row": 199,
+          "source_end_row": 199,
+          "manufacturer_rows": [
+            {
+              "source_row": 199,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 143,
+          "source_anchor_row": 200,
+          "source_end_row": 200,
+          "manufacturer_rows": [
+            {
+              "source_row": 200,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 144,
+          "source_anchor_row": 201,
+          "source_end_row": 201,
+          "manufacturer_rows": [
+            {
+              "source_row": 201,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 145,
+          "source_anchor_row": 202,
+          "source_end_row": 202,
+          "manufacturer_rows": [
+            {
+              "source_row": 202,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 146,
+          "source_anchor_row": 203,
+          "source_end_row": 203,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 147,
+          "source_anchor_row": 204,
+          "source_end_row": 204,
+          "manufacturer_rows": [
+            {
+              "source_row": 204,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 148,
+          "source_anchor_row": 205,
+          "source_end_row": 205,
+          "manufacturer_rows": [
+            {
+              "source_row": 205,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 149,
+          "source_anchor_row": 206,
+          "source_end_row": 206,
+          "manufacturer_rows": [
+            {
+              "source_row": 206,
+              "manufacturer_id": "MFG-040"
+            }
+          ]
+        },
+        {
+          "ordinal": 150,
+          "source_anchor_row": 207,
+          "source_end_row": 207,
+          "manufacturer_rows": [
+            {
+              "source_row": 207,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 151,
+          "source_anchor_row": 208,
+          "source_end_row": 208,
+          "manufacturer_rows": [
+            {
+              "source_row": 208,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 152,
+          "source_anchor_row": 209,
+          "source_end_row": 209,
+          "manufacturer_rows": [
+            {
+              "source_row": 209,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 153,
+          "source_anchor_row": 210,
+          "source_end_row": 210,
+          "manufacturer_rows": [
+            {
+              "source_row": 210,
+              "manufacturer_id": "MFG-038"
+            }
+          ]
+        },
+        {
+          "ordinal": 154,
+          "source_anchor_row": 211,
+          "source_end_row": 211,
+          "manufacturer_rows": [
+            {
+              "source_row": 211,
+              "manufacturer_id": "MFG-041"
+            }
+          ]
+        }
+      ],
+      "display_row_count": 202
+    },
+    {
+      "template_id": "kulakova",
+      "label": "Кулакова",
+      "report_type": "SUBSIDIARY",
+      "position_count": 69,
+      "distinct_manufacturer_count": 7,
+      "supplier_row_count": 67,
+      "source_table_full_span_rows": 70,
+      "source_spacer_rows": [
+        70
+      ],
+      "manufacturer_ids": [
+        "MFG-042",
+        "MFG-001",
+        "MFG-043",
+        "MFG-044",
+        "MFG-045",
+        "MFG-046",
+        "MFG-047"
+      ],
+      "positions": [
+        {
+          "ordinal": 1,
+          "source_anchor_row": 9,
+          "source_end_row": 9,
+          "manufacturer_rows": [
+            {
+              "source_row": 9,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 2,
+          "source_anchor_row": 10,
+          "source_end_row": 10,
+          "manufacturer_rows": [
+            {
+              "source_row": 10,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 3,
+          "source_anchor_row": 11,
+          "source_end_row": 11,
+          "manufacturer_rows": [
+            {
+              "source_row": 11,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 4,
+          "source_anchor_row": 12,
+          "source_end_row": 12,
+          "manufacturer_rows": [
+            {
+              "source_row": 12,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 5,
+          "source_anchor_row": 13,
+          "source_end_row": 13,
+          "manufacturer_rows": [
+            {
+              "source_row": 13,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 6,
+          "source_anchor_row": 14,
+          "source_end_row": 14,
+          "manufacturer_rows": [
+            {
+              "source_row": 14,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 7,
+          "source_anchor_row": 15,
+          "source_end_row": 15,
+          "manufacturer_rows": [
+            {
+              "source_row": 15,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 8,
+          "source_anchor_row": 16,
+          "source_end_row": 16,
+          "manufacturer_rows": [
+            {
+              "source_row": 16,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 9,
+          "source_anchor_row": 17,
+          "source_end_row": 17,
+          "manufacturer_rows": [
+            {
+              "source_row": 17,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 10,
+          "source_anchor_row": 18,
+          "source_end_row": 18,
+          "manufacturer_rows": [
+            {
+              "source_row": 18,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 11,
+          "source_anchor_row": 19,
+          "source_end_row": 19,
+          "manufacturer_rows": [
+            {
+              "source_row": 19,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 12,
+          "source_anchor_row": 20,
+          "source_end_row": 20,
+          "manufacturer_rows": [
+            {
+              "source_row": 20,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 13,
+          "source_anchor_row": 21,
+          "source_end_row": 21,
+          "manufacturer_rows": [
+            {
+              "source_row": 21,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 14,
+          "source_anchor_row": 22,
+          "source_end_row": 22,
+          "manufacturer_rows": [
+            {
+              "source_row": 22,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 15,
+          "source_anchor_row": 23,
+          "source_end_row": 23,
+          "manufacturer_rows": [
+            {
+              "source_row": 23,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 16,
+          "source_anchor_row": 24,
+          "source_end_row": 24,
+          "manufacturer_rows": [
+            {
+              "source_row": 24,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 17,
+          "source_anchor_row": 25,
+          "source_end_row": 25,
+          "manufacturer_rows": [
+            {
+              "source_row": 25,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 18,
+          "source_anchor_row": 26,
+          "source_end_row": 26,
+          "manufacturer_rows": [
+            {
+              "source_row": 26,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 19,
+          "source_anchor_row": 27,
+          "source_end_row": 27,
+          "manufacturer_rows": [
+            {
+              "source_row": 27,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 20,
+          "source_anchor_row": 28,
+          "source_end_row": 28,
+          "manufacturer_rows": [
+            {
+              "source_row": 28,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 21,
+          "source_anchor_row": 29,
+          "source_end_row": 29,
+          "manufacturer_rows": [
+            {
+              "source_row": 29,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 22,
+          "source_anchor_row": 30,
+          "source_end_row": 30,
+          "manufacturer_rows": [
+            {
+              "source_row": 30,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 23,
+          "source_anchor_row": 31,
+          "source_end_row": 31,
+          "manufacturer_rows": [
+            {
+              "source_row": 31,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 24,
+          "source_anchor_row": 32,
+          "source_end_row": 32,
+          "manufacturer_rows": [
+            {
+              "source_row": 32,
+              "manufacturer_id": "MFG-043"
+            }
+          ]
+        },
+        {
+          "ordinal": 25,
+          "source_anchor_row": 33,
+          "source_end_row": 33,
+          "manufacturer_rows": [
+            {
+              "source_row": 33,
+              "manufacturer_id": "MFG-043"
+            }
+          ]
+        },
+        {
+          "ordinal": 26,
+          "source_anchor_row": 34,
+          "source_end_row": 34,
+          "manufacturer_rows": [
+            {
+              "source_row": 34,
+              "manufacturer_id": "MFG-043"
+            }
+          ]
+        },
+        {
+          "ordinal": 27,
+          "source_anchor_row": 35,
+          "source_end_row": 35,
+          "manufacturer_rows": [
+            {
+              "source_row": 35,
+              "manufacturer_id": "MFG-043"
+            }
+          ]
+        },
+        {
+          "ordinal": 28,
+          "source_anchor_row": 36,
+          "source_end_row": 36,
+          "manufacturer_rows": [
+            {
+              "source_row": 36,
+              "manufacturer_id": "MFG-043"
+            }
+          ]
+        },
+        {
+          "ordinal": 29,
+          "source_anchor_row": 37,
+          "source_end_row": 37,
+          "manufacturer_rows": [
+            {
+              "source_row": 37,
+              "manufacturer_id": "MFG-043"
+            }
+          ]
+        },
+        {
+          "ordinal": 30,
+          "source_anchor_row": 38,
+          "source_end_row": 38,
+          "manufacturer_rows": [
+            {
+              "source_row": 38,
+              "manufacturer_id": "MFG-043"
+            }
+          ]
+        },
+        {
+          "ordinal": 31,
+          "source_anchor_row": 39,
+          "source_end_row": 39,
+          "manufacturer_rows": [
+            {
+              "source_row": 39,
+              "manufacturer_id": "MFG-043"
+            }
+          ]
+        },
+        {
+          "ordinal": 32,
+          "source_anchor_row": 40,
+          "source_end_row": 40,
+          "manufacturer_rows": [
+            {
+              "source_row": 40,
+              "manufacturer_id": "MFG-043"
+            }
+          ]
+        },
+        {
+          "ordinal": 33,
+          "source_anchor_row": 41,
+          "source_end_row": 41,
+          "manufacturer_rows": [
+            {
+              "source_row": 41,
+              "manufacturer_id": "MFG-043"
+            }
+          ]
+        },
+        {
+          "ordinal": 34,
+          "source_anchor_row": 42,
+          "source_end_row": 42,
+          "manufacturer_rows": [
+            {
+              "source_row": 42,
+              "manufacturer_id": "MFG-043"
+            }
+          ]
+        },
+        {
+          "ordinal": 35,
+          "source_anchor_row": 43,
+          "source_end_row": 43,
+          "manufacturer_rows": [
+            {
+              "source_row": 43,
+              "manufacturer_id": "MFG-043"
+            }
+          ]
+        },
+        {
+          "ordinal": 36,
+          "source_anchor_row": 44,
+          "source_end_row": 44,
+          "manufacturer_rows": [
+            {
+              "source_row": 44,
+              "manufacturer_id": "MFG-043"
+            }
+          ]
+        },
+        {
+          "ordinal": 37,
+          "source_anchor_row": 45,
+          "source_end_row": 45,
+          "manufacturer_rows": [
+            {
+              "source_row": 45,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 38,
+          "source_anchor_row": 46,
+          "source_end_row": 46,
+          "manufacturer_rows": [
+            {
+              "source_row": 46,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 39,
+          "source_anchor_row": 47,
+          "source_end_row": 47,
+          "manufacturer_rows": [
+            {
+              "source_row": 47,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 40,
+          "source_anchor_row": 48,
+          "source_end_row": 48,
+          "manufacturer_rows": [
+            {
+              "source_row": 48,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 41,
+          "source_anchor_row": 49,
+          "source_end_row": 49,
+          "manufacturer_rows": [
+            {
+              "source_row": 49,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 42,
+          "source_anchor_row": 50,
+          "source_end_row": 50,
+          "manufacturer_rows": [
+            {
+              "source_row": 50,
+              "manufacturer_id": "MFG-044"
+            }
+          ]
+        },
+        {
+          "ordinal": 43,
+          "source_anchor_row": 51,
+          "source_end_row": 51,
+          "manufacturer_rows": [
+            {
+              "source_row": 51,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 44,
+          "source_anchor_row": 52,
+          "source_end_row": 52,
+          "manufacturer_rows": [
+            {
+              "source_row": 52,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 45,
+          "source_anchor_row": 53,
+          "source_end_row": 53,
+          "manufacturer_rows": [
+            {
+              "source_row": 53,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 46,
+          "source_anchor_row": 54,
+          "source_end_row": 54,
+          "manufacturer_rows": [
+            {
+              "source_row": 54,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 47,
+          "source_anchor_row": 55,
+          "source_end_row": 55,
+          "manufacturer_rows": [
+            {
+              "source_row": 55,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 48,
+          "source_anchor_row": 56,
+          "source_end_row": 56,
+          "manufacturer_rows": [
+            {
+              "source_row": 56,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 49,
+          "source_anchor_row": 57,
+          "source_end_row": 57,
+          "manufacturer_rows": [
+            {
+              "source_row": 57,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 50,
+          "source_anchor_row": 58,
+          "source_end_row": 58,
+          "manufacturer_rows": [
+            {
+              "source_row": 58,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 51,
+          "source_anchor_row": 59,
+          "source_end_row": 59,
+          "manufacturer_rows": [
+            {
+              "source_row": 59,
+              "manufacturer_id": "MFG-045"
+            }
+          ]
+        },
+        {
+          "ordinal": 52,
+          "source_anchor_row": 60,
+          "source_end_row": 60,
+          "manufacturer_rows": [
+            {
+              "source_row": 60,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 53,
+          "source_anchor_row": 61,
+          "source_end_row": 61,
+          "manufacturer_rows": [
+            {
+              "source_row": 61,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 54,
+          "source_anchor_row": 62,
+          "source_end_row": 62,
+          "manufacturer_rows": [
+            {
+              "source_row": 62,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 55,
+          "source_anchor_row": 63,
+          "source_end_row": 63,
+          "manufacturer_rows": [
+            {
+              "source_row": 63,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 56,
+          "source_anchor_row": 64,
+          "source_end_row": 64,
+          "manufacturer_rows": [
+            {
+              "source_row": 64,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 57,
+          "source_anchor_row": 65,
+          "source_end_row": 65,
+          "manufacturer_rows": [
+            {
+              "source_row": 65,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 58,
+          "source_anchor_row": 66,
+          "source_end_row": 66,
+          "manufacturer_rows": [
+            {
+              "source_row": 66,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 59,
+          "source_anchor_row": 67,
+          "source_end_row": 67,
+          "manufacturer_rows": [
+            {
+              "source_row": 67,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 60,
+          "source_anchor_row": 68,
+          "source_end_row": 68,
+          "manufacturer_rows": [
+            {
+              "source_row": 68,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 61,
+          "source_anchor_row": 69,
+          "source_end_row": 69,
+          "manufacturer_rows": [
+            {
+              "source_row": 69,
+              "manufacturer_id": "MFG-042"
+            }
+          ]
+        },
+        {
+          "ordinal": 62,
+          "source_anchor_row": 71,
+          "source_end_row": 71,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 63,
+          "source_anchor_row": 72,
+          "source_end_row": 72,
+          "manufacturer_rows": [
+            {
+              "source_row": 72,
+              "manufacturer_id": "MFG-046"
+            }
+          ]
+        },
+        {
+          "ordinal": 64,
+          "source_anchor_row": 73,
+          "source_end_row": 73,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 65,
+          "source_anchor_row": 74,
+          "source_end_row": 74,
+          "manufacturer_rows": [
+            {
+              "source_row": 74,
+              "manufacturer_id": "MFG-047"
+            }
+          ]
+        },
+        {
+          "ordinal": 66,
+          "source_anchor_row": 75,
+          "source_end_row": 75,
+          "manufacturer_rows": [
+            {
+              "source_row": 75,
+              "manufacturer_id": "MFG-047"
+            }
+          ]
+        },
+        {
+          "ordinal": 67,
+          "source_anchor_row": 76,
+          "source_end_row": 76,
+          "manufacturer_rows": [
+            {
+              "source_row": 76,
+              "manufacturer_id": "MFG-047"
+            }
+          ]
+        },
+        {
+          "ordinal": 68,
+          "source_anchor_row": 77,
+          "source_end_row": 77,
+          "manufacturer_rows": [
+            {
+              "source_row": 77,
+              "manufacturer_id": "MFG-046"
+            }
+          ]
+        },
+        {
+          "ordinal": 69,
+          "source_anchor_row": 78,
+          "source_end_row": 78,
+          "manufacturer_rows": [
+            {
+              "source_row": 78,
+              "manufacturer_id": "MFG-046"
+            }
+          ]
+        }
+      ],
+      "display_row_count": 69
+    },
+    {
+      "template_id": "srz",
+      "label": "СРЗ",
+      "report_type": "SUBSIDIARY",
+      "position_count": 82,
+      "distinct_manufacturer_count": 17,
+      "supplier_row_count": 103,
+      "source_table_full_span_rows": 189,
+      "source_spacer_rows": [
+        186
+      ],
+      "manufacturer_ids": [
+        "MFG-004",
+        "MFG-048",
+        "MFG-049",
+        "MFG-050",
+        "MFG-051",
+        "MFG-052",
+        "MFG-053",
+        "MFG-054",
+        "MFG-055",
+        "MFG-056",
+        "MFG-057",
+        "MFG-058",
+        "MFG-059",
+        "MFG-060",
+        "MFG-061",
+        "MFG-062",
+        "MFG-063"
+      ],
+      "positions": [
+        {
+          "ordinal": 1,
+          "source_anchor_row": 9,
+          "source_end_row": 9,
+          "manufacturer_rows": [
+            {
+              "source_row": 9,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 2,
+          "source_anchor_row": 10,
+          "source_end_row": 10,
+          "manufacturer_rows": [
+            {
+              "source_row": 10,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 3,
+          "source_anchor_row": 11,
+          "source_end_row": 13,
+          "manufacturer_rows": [
+            {
+              "source_row": 12,
+              "manufacturer_id": "MFG-048"
+            },
+            {
+              "source_row": 13,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 4,
+          "source_anchor_row": 14,
+          "source_end_row": 15,
+          "manufacturer_rows": [
+            {
+              "source_row": 15,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 5,
+          "source_anchor_row": 16,
+          "source_end_row": 16,
+          "manufacturer_rows": [
+            {
+              "source_row": 16,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 6,
+          "source_anchor_row": 17,
+          "source_end_row": 18,
+          "manufacturer_rows": [
+            {
+              "source_row": 18,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 7,
+          "source_anchor_row": 19,
+          "source_end_row": 20,
+          "manufacturer_rows": [
+            {
+              "source_row": 20,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 8,
+          "source_anchor_row": 21,
+          "source_end_row": 22,
+          "manufacturer_rows": [
+            {
+              "source_row": 22,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 9,
+          "source_anchor_row": 23,
+          "source_end_row": 23,
+          "manufacturer_rows": [
+            {
+              "source_row": 23,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 10,
+          "source_anchor_row": 24,
+          "source_end_row": 25,
+          "manufacturer_rows": [
+            {
+              "source_row": 25,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 11,
+          "source_anchor_row": 26,
+          "source_end_row": 27,
+          "manufacturer_rows": [
+            {
+              "source_row": 27,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 12,
+          "source_anchor_row": 28,
+          "source_end_row": 29,
+          "manufacturer_rows": [
+            {
+              "source_row": 29,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 13,
+          "source_anchor_row": 30,
+          "source_end_row": 30,
+          "manufacturer_rows": [
+            {
+              "source_row": 30,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 14,
+          "source_anchor_row": 31,
+          "source_end_row": 31,
+          "manufacturer_rows": [
+            {
+              "source_row": 31,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 15,
+          "source_anchor_row": 32,
+          "source_end_row": 34,
+          "manufacturer_rows": [
+            {
+              "source_row": 32,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 16,
+          "source_anchor_row": 35,
+          "source_end_row": 37,
+          "manufacturer_rows": [
+            {
+              "source_row": 36,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 17,
+          "source_anchor_row": 38,
+          "source_end_row": 39,
+          "manufacturer_rows": [
+            {
+              "source_row": 38,
+              "manufacturer_id": "MFG-050"
+            },
+            {
+              "source_row": 39,
+              "manufacturer_id": "MFG-048"
+            }
+          ]
+        },
+        {
+          "ordinal": 18,
+          "source_anchor_row": 40,
+          "source_end_row": 44,
+          "manufacturer_rows": [
+            {
+              "source_row": 44,
+              "manufacturer_id": "MFG-050"
+            }
+          ]
+        },
+        {
+          "ordinal": 19,
+          "source_anchor_row": 45,
+          "source_end_row": 46,
+          "manufacturer_rows": [
+            {
+              "source_row": 45,
+              "manufacturer_id": "MFG-051"
+            }
+          ]
+        },
+        {
+          "ordinal": 20,
+          "source_anchor_row": 47,
+          "source_end_row": 49,
+          "manufacturer_rows": [
+            {
+              "source_row": 48,
+              "manufacturer_id": "MFG-052"
+            }
+          ]
+        },
+        {
+          "ordinal": 21,
+          "source_anchor_row": 50,
+          "source_end_row": 51,
+          "manufacturer_rows": [
+            {
+              "source_row": 51,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 22,
+          "source_anchor_row": 52,
+          "source_end_row": 55,
+          "manufacturer_rows": [
+            {
+              "source_row": 53,
+              "manufacturer_id": "MFG-048"
+            },
+            {
+              "source_row": 54,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 23,
+          "source_anchor_row": 56,
+          "source_end_row": 58,
+          "manufacturer_rows": [
+            {
+              "source_row": 56,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 24,
+          "source_anchor_row": 59,
+          "source_end_row": 60,
+          "manufacturer_rows": [
+            {
+              "source_row": 60,
+              "manufacturer_id": "MFG-048"
+            }
+          ]
+        },
+        {
+          "ordinal": 25,
+          "source_anchor_row": 61,
+          "source_end_row": 61,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 26,
+          "source_anchor_row": 62,
+          "source_end_row": 66,
+          "manufacturer_rows": [
+            {
+              "source_row": 62,
+              "manufacturer_id": "MFG-051"
+            },
+            {
+              "source_row": 64,
+              "manufacturer_id": "MFG-053"
+            },
+            {
+              "source_row": 65,
+              "manufacturer_id": "MFG-054"
+            }
+          ]
+        },
+        {
+          "ordinal": 27,
+          "source_anchor_row": 67,
+          "source_end_row": 71,
+          "manufacturer_rows": [
+            {
+              "source_row": 67,
+              "manufacturer_id": "MFG-051"
+            },
+            {
+              "source_row": 68,
+              "manufacturer_id": "MFG-053"
+            },
+            {
+              "source_row": 69,
+              "manufacturer_id": "MFG-054"
+            },
+            {
+              "source_row": 70,
+              "manufacturer_id": "MFG-055"
+            },
+            {
+              "source_row": 71,
+              "manufacturer_id": "MFG-056"
+            }
+          ]
+        },
+        {
+          "ordinal": 28,
+          "source_anchor_row": 72,
+          "source_end_row": 76,
+          "manufacturer_rows": [
+            {
+              "source_row": 72,
+              "manufacturer_id": "MFG-051"
+            },
+            {
+              "source_row": 73,
+              "manufacturer_id": "MFG-053"
+            },
+            {
+              "source_row": 74,
+              "manufacturer_id": "MFG-054"
+            },
+            {
+              "source_row": 75,
+              "manufacturer_id": "MFG-055"
+            },
+            {
+              "source_row": 76,
+              "manufacturer_id": "MFG-056"
+            }
+          ]
+        },
+        {
+          "ordinal": 29,
+          "source_anchor_row": 77,
+          "source_end_row": 77,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 30,
+          "source_anchor_row": 78,
+          "source_end_row": 78,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 31,
+          "source_anchor_row": 79,
+          "source_end_row": 79,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 32,
+          "source_anchor_row": 80,
+          "source_end_row": 80,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 33,
+          "source_anchor_row": 81,
+          "source_end_row": 81,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 34,
+          "source_anchor_row": 82,
+          "source_end_row": 82,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 35,
+          "source_anchor_row": 83,
+          "source_end_row": 83,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 36,
+          "source_anchor_row": 84,
+          "source_end_row": 84,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 37,
+          "source_anchor_row": 85,
+          "source_end_row": 85,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 38,
+          "source_anchor_row": 86,
+          "source_end_row": 86,
+          "manufacturer_rows": []
+        },
+        {
+          "ordinal": 39,
+          "source_anchor_row": 87,
+          "source_end_row": 90,
+          "manufacturer_rows": [
+            {
+              "source_row": 89,
+              "manufacturer_id": "MFG-057"
+            },
+            {
+              "source_row": 90,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 40,
+          "source_anchor_row": 91,
+          "source_end_row": 94,
+          "manufacturer_rows": [
+            {
+              "source_row": 93,
+              "manufacturer_id": "MFG-057"
+            },
+            {
+              "source_row": 94,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 41,
+          "source_anchor_row": 95,
+          "source_end_row": 95,
+          "manufacturer_rows": [
+            {
+              "source_row": 95,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 42,
+          "source_anchor_row": 96,
+          "source_end_row": 96,
+          "manufacturer_rows": [
+            {
+              "source_row": 96,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 43,
+          "source_anchor_row": 97,
+          "source_end_row": 100,
+          "manufacturer_rows": [
+            {
+              "source_row": 100,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 44,
+          "source_anchor_row": 101,
+          "source_end_row": 104,
+          "manufacturer_rows": [
+            {
+              "source_row": 103,
+              "manufacturer_id": "MFG-049"
+            },
+            {
+              "source_row": 104,
+              "manufacturer_id": "MFG-058"
+            }
+          ]
+        },
+        {
+          "ordinal": 45,
+          "source_anchor_row": 105,
+          "source_end_row": 107,
+          "manufacturer_rows": [
+            {
+              "source_row": 107,
+              "manufacturer_id": "MFG-052"
+            }
+          ]
+        },
+        {
+          "ordinal": 46,
+          "source_anchor_row": 108,
+          "source_end_row": 111,
+          "manufacturer_rows": [
+            {
+              "source_row": 108,
+              "manufacturer_id": "MFG-051"
+            },
+            {
+              "source_row": 110,
+              "manufacturer_id": "MFG-055"
+            },
+            {
+              "source_row": 111,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 47,
+          "source_anchor_row": 112,
+          "source_end_row": 114,
+          "manufacturer_rows": [
+            {
+              "source_row": 114,
+              "manufacturer_id": "MFG-050"
+            }
+          ]
+        },
+        {
+          "ordinal": 48,
+          "source_anchor_row": 115,
+          "source_end_row": 119,
+          "manufacturer_rows": [
+            {
+              "source_row": 116,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 49,
+          "source_anchor_row": 120,
+          "source_end_row": 123,
+          "manufacturer_rows": [
+            {
+              "source_row": 121,
+              "manufacturer_id": "MFG-049"
+            },
+            {
+              "source_row": 122,
+              "manufacturer_id": "MFG-055"
+            }
+          ]
+        },
+        {
+          "ordinal": 50,
+          "source_anchor_row": 124,
+          "source_end_row": 124,
+          "manufacturer_rows": [
+            {
+              "source_row": 124,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 51,
+          "source_anchor_row": 125,
+          "source_end_row": 125,
+          "manufacturer_rows": [
+            {
+              "source_row": 125,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 52,
+          "source_anchor_row": 126,
+          "source_end_row": 129,
+          "manufacturer_rows": [
+            {
+              "source_row": 129,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 53,
+          "source_anchor_row": 130,
+          "source_end_row": 133,
+          "manufacturer_rows": [
+            {
+              "source_row": 132,
+              "manufacturer_id": "MFG-049"
+            },
+            {
+              "source_row": 133,
+              "manufacturer_id": "MFG-058"
+            }
+          ]
+        },
+        {
+          "ordinal": 54,
+          "source_anchor_row": 134,
+          "source_end_row": 136,
+          "manufacturer_rows": [
+            {
+              "source_row": 136,
+              "manufacturer_id": "MFG-052"
+            }
+          ]
+        },
+        {
+          "ordinal": 55,
+          "source_anchor_row": 137,
+          "source_end_row": 140,
+          "manufacturer_rows": [
+            {
+              "source_row": 137,
+              "manufacturer_id": "MFG-051"
+            },
+            {
+              "source_row": 139,
+              "manufacturer_id": "MFG-055"
+            },
+            {
+              "source_row": 140,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 56,
+          "source_anchor_row": 141,
+          "source_end_row": 143,
+          "manufacturer_rows": [
+            {
+              "source_row": 143,
+              "manufacturer_id": "MFG-050"
+            }
+          ]
+        },
+        {
+          "ordinal": 57,
+          "source_anchor_row": 144,
+          "source_end_row": 147,
+          "manufacturer_rows": [
+            {
+              "source_row": 145,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 58,
+          "source_anchor_row": 148,
+          "source_end_row": 151,
+          "manufacturer_rows": [
+            {
+              "source_row": 149,
+              "manufacturer_id": "MFG-049"
+            },
+            {
+              "source_row": 150,
+              "manufacturer_id": "MFG-055"
+            }
+          ]
+        },
+        {
+          "ordinal": 59,
+          "source_anchor_row": 152,
+          "source_end_row": 153,
+          "manufacturer_rows": [
+            {
+              "source_row": 153,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 60,
+          "source_anchor_row": 154,
+          "source_end_row": 155,
+          "manufacturer_rows": [
+            {
+              "source_row": 154,
+              "manufacturer_id": "MFG-048"
+            },
+            {
+              "source_row": 155,
+              "manufacturer_id": "MFG-053"
+            }
+          ]
+        },
+        {
+          "ordinal": 61,
+          "source_anchor_row": 156,
+          "source_end_row": 156,
+          "manufacturer_rows": [
+            {
+              "source_row": 156,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 62,
+          "source_anchor_row": 157,
+          "source_end_row": 160,
+          "manufacturer_rows": [
+            {
+              "source_row": 159,
+              "manufacturer_id": "MFG-057"
+            },
+            {
+              "source_row": 160,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 63,
+          "source_anchor_row": 161,
+          "source_end_row": 163,
+          "manufacturer_rows": [
+            {
+              "source_row": 161,
+              "manufacturer_id": "MFG-004"
+            },
+            {
+              "source_row": 162,
+              "manufacturer_id": "MFG-057"
+            },
+            {
+              "source_row": 163,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 64,
+          "source_anchor_row": 164,
+          "source_end_row": 166,
+          "manufacturer_rows": [
+            {
+              "source_row": 164,
+              "manufacturer_id": "MFG-004"
+            },
+            {
+              "source_row": 166,
+              "manufacturer_id": "MFG-057"
+            }
+          ]
+        },
+        {
+          "ordinal": 65,
+          "source_anchor_row": 167,
+          "source_end_row": 167,
+          "manufacturer_rows": [
+            {
+              "source_row": 167,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 66,
+          "source_anchor_row": 168,
+          "source_end_row": 170,
+          "manufacturer_rows": [
+            {
+              "source_row": 168,
+              "manufacturer_id": "MFG-004"
+            },
+            {
+              "source_row": 169,
+              "manufacturer_id": "MFG-057"
+            },
+            {
+              "source_row": 170,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 67,
+          "source_anchor_row": 171,
+          "source_end_row": 174,
+          "manufacturer_rows": [
+            {
+              "source_row": 173,
+              "manufacturer_id": "MFG-057"
+            },
+            {
+              "source_row": 174,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 68,
+          "source_anchor_row": 175,
+          "source_end_row": 178,
+          "manufacturer_rows": [
+            {
+              "source_row": 177,
+              "manufacturer_id": "MFG-055"
+            },
+            {
+              "source_row": 178,
+              "manufacturer_id": "MFG-049"
+            }
+          ]
+        },
+        {
+          "ordinal": 69,
+          "source_anchor_row": 179,
+          "source_end_row": 181,
+          "manufacturer_rows": [
+            {
+              "source_row": 180,
+              "manufacturer_id": "MFG-048"
+            }
+          ]
+        },
+        {
+          "ordinal": 70,
+          "source_anchor_row": 182,
+          "source_end_row": 184,
+          "manufacturer_rows": [
+            {
+              "source_row": 184,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 71,
+          "source_anchor_row": 185,
+          "source_end_row": 185,
+          "manufacturer_rows": [
+            {
+              "source_row": 185,
+              "manufacturer_id": "MFG-004"
+            }
+          ]
+        },
+        {
+          "ordinal": 72,
+          "source_anchor_row": 187,
+          "source_end_row": 187,
+          "manufacturer_rows": [
+            {
+              "source_row": 187,
+              "manufacturer_id": "MFG-059"
+            }
+          ]
+        },
+        {
+          "ordinal": 73,
+          "source_anchor_row": 188,
+          "source_end_row": 188,
+          "manufacturer_rows": [
+            {
+              "source_row": 188,
+              "manufacturer_id": "MFG-060"
+            }
+          ]
+        },
+        {
+          "ordinal": 74,
+          "source_anchor_row": 189,
+          "source_end_row": 189,
+          "manufacturer_rows": [
+            {
+              "source_row": 189,
+              "manufacturer_id": "MFG-059"
+            }
+          ]
+        },
+        {
+          "ordinal": 75,
+          "source_anchor_row": 190,
+          "source_end_row": 190,
+          "manufacturer_rows": [
+            {
+              "source_row": 190,
+              "manufacturer_id": "MFG-061"
+            }
+          ]
+        },
+        {
+          "ordinal": 76,
+          "source_anchor_row": 191,
+          "source_end_row": 191,
+          "manufacturer_rows": [
+            {
+              "source_row": 191,
+              "manufacturer_id": "MFG-059"
+            }
+          ]
+        },
+        {
+          "ordinal": 77,
+          "source_anchor_row": 192,
+          "source_end_row": 192,
+          "manufacturer_rows": [
+            {
+              "source_row": 192,
+              "manufacturer_id": "MFG-061"
+            }
+          ]
+        },
+        {
+          "ordinal": 78,
+          "source_anchor_row": 193,
+          "source_end_row": 193,
+          "manufacturer_rows": [
+            {
+              "source_row": 193,
+              "manufacturer_id": "MFG-062"
+            }
+          ]
+        },
+        {
+          "ordinal": 79,
+          "source_anchor_row": 194,
+          "source_end_row": 194,
+          "manufacturer_rows": [
+            {
+              "source_row": 194,
+              "manufacturer_id": "MFG-062"
+            }
+          ]
+        },
+        {
+          "ordinal": 80,
+          "source_anchor_row": 195,
+          "source_end_row": 195,
+          "manufacturer_rows": [
+            {
+              "source_row": 195,
+              "manufacturer_id": "MFG-063"
+            }
+          ]
+        },
+        {
+          "ordinal": 81,
+          "source_anchor_row": 196,
+          "source_end_row": 196,
+          "manufacturer_rows": [
+            {
+              "source_row": 196,
+              "manufacturer_id": "MFG-060"
+            }
+          ]
+        },
+        {
+          "ordinal": 82,
+          "source_anchor_row": 197,
+          "source_end_row": 197,
+          "manufacturer_rows": [
+            {
+              "source_row": 197,
+              "manufacturer_id": "MFG-060"
+            }
+          ]
+        }
+      ],
+      "display_row_count": 188
+    },
+    {
+      "template_id": "ravenstvo",
+      "label": "Равенство",
+      "report_type": "SUBSIDIARY",
+      "position_count": 62,
+      "distinct_manufacturer_count": 17,
+      "supplier_row_count": 194,
+      "source_table_full_span_rows": 195,
+      "source_spacer_rows": [
+        194
+      ],
+      "manufacturer_ids": [
+        "MFG-001",
+        "MFG-064",
+        "MFG-065",
+        "MFG-066",
+        "MFG-067",
+        "MFG-068",
+        "MFG-069",
+        "MFG-070",
+        "MFG-071",
+        "MFG-072",
+        "MFG-073",
+        "MFG-074",
+        "MFG-075",
+        "MFG-062",
+        "MFG-076",
+        "MFG-077",
+        "MFG-078"
+      ],
+      "positions": [
+        {
+          "ordinal": 1,
+          "source_anchor_row": 9,
+          "source_end_row": 9,
+          "manufacturer_rows": [
+            {
+              "source_row": 9,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 2,
+          "source_anchor_row": 10,
+          "source_end_row": 10,
+          "manufacturer_rows": [
+            {
+              "source_row": 10,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 3,
+          "source_anchor_row": 11,
+          "source_end_row": 13,
+          "manufacturer_rows": [
+            {
+              "source_row": 11,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 12,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 13,
+              "manufacturer_id": "MFG-065"
+            }
+          ]
+        },
+        {
+          "ordinal": 4,
+          "source_anchor_row": 14,
+          "source_end_row": 18,
+          "manufacturer_rows": [
+            {
+              "source_row": 14,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 15,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 16,
+              "manufacturer_id": "MFG-066"
+            },
+            {
+              "source_row": 17,
+              "manufacturer_id": "MFG-067"
+            },
+            {
+              "source_row": 18,
+              "manufacturer_id": "MFG-068"
+            }
+          ]
+        },
+        {
+          "ordinal": 5,
+          "source_anchor_row": 19,
+          "source_end_row": 19,
+          "manufacturer_rows": [
+            {
+              "source_row": 19,
+              "manufacturer_id": "MFG-069"
+            }
+          ]
+        },
+        {
+          "ordinal": 6,
+          "source_anchor_row": 20,
+          "source_end_row": 20,
+          "manufacturer_rows": [
+            {
+              "source_row": 20,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 7,
+          "source_anchor_row": 21,
+          "source_end_row": 23,
+          "manufacturer_rows": [
+            {
+              "source_row": 21,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 22,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 23,
+              "manufacturer_id": "MFG-065"
+            }
+          ]
+        },
+        {
+          "ordinal": 8,
+          "source_anchor_row": 24,
+          "source_end_row": 28,
+          "manufacturer_rows": [
+            {
+              "source_row": 24,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 25,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 26,
+              "manufacturer_id": "MFG-066"
+            },
+            {
+              "source_row": 27,
+              "manufacturer_id": "MFG-067"
+            },
+            {
+              "source_row": 28,
+              "manufacturer_id": "MFG-068"
+            }
+          ]
+        },
+        {
+          "ordinal": 9,
+          "source_anchor_row": 29,
+          "source_end_row": 29,
+          "manufacturer_rows": [
+            {
+              "source_row": 29,
+              "manufacturer_id": "MFG-069"
+            }
+          ]
+        },
+        {
+          "ordinal": 10,
+          "source_anchor_row": 30,
+          "source_end_row": 30,
+          "manufacturer_rows": [
+            {
+              "source_row": 30,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 11,
+          "source_anchor_row": 31,
+          "source_end_row": 35,
+          "manufacturer_rows": [
+            {
+              "source_row": 31,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 32,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 33,
+              "manufacturer_id": "MFG-070"
+            },
+            {
+              "source_row": 34,
+              "manufacturer_id": "MFG-071"
+            },
+            {
+              "source_row": 35,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 12,
+          "source_anchor_row": 36,
+          "source_end_row": 40,
+          "manufacturer_rows": [
+            {
+              "source_row": 36,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 37,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 38,
+              "manufacturer_id": "MFG-070"
+            },
+            {
+              "source_row": 39,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 40,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 13,
+          "source_anchor_row": 41,
+          "source_end_row": 41,
+          "manufacturer_rows": [
+            {
+              "source_row": 41,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 14,
+          "source_anchor_row": 42,
+          "source_end_row": 46,
+          "manufacturer_rows": [
+            {
+              "source_row": 42,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 43,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 44,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 45,
+              "manufacturer_id": "MFG-070"
+            },
+            {
+              "source_row": 46,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 15,
+          "source_anchor_row": 47,
+          "source_end_row": 51,
+          "manufacturer_rows": [
+            {
+              "source_row": 47,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 48,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 49,
+              "manufacturer_id": "MFG-070"
+            },
+            {
+              "source_row": 50,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 51,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 16,
+          "source_anchor_row": 52,
+          "source_end_row": 55,
+          "manufacturer_rows": [
+            {
+              "source_row": 52,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 53,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 54,
+              "manufacturer_id": "MFG-072"
+            },
+            {
+              "source_row": 55,
+              "manufacturer_id": "MFG-064"
+            }
+          ]
+        },
+        {
+          "ordinal": 17,
+          "source_anchor_row": 56,
+          "source_end_row": 56,
+          "manufacturer_rows": [
+            {
+              "source_row": 56,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 18,
+          "source_anchor_row": 57,
+          "source_end_row": 60,
+          "manufacturer_rows": [
+            {
+              "source_row": 57,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 58,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 59,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 60,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 19,
+          "source_anchor_row": 61,
+          "source_end_row": 66,
+          "manufacturer_rows": [
+            {
+              "source_row": 61,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 62,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 63,
+              "manufacturer_id": "MFG-070"
+            },
+            {
+              "source_row": 64,
+              "manufacturer_id": "MFG-071"
+            },
+            {
+              "source_row": 65,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 66,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 20,
+          "source_anchor_row": 67,
+          "source_end_row": 72,
+          "manufacturer_rows": [
+            {
+              "source_row": 67,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 68,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 69,
+              "manufacturer_id": "MFG-070"
+            },
+            {
+              "source_row": 70,
+              "manufacturer_id": "MFG-071"
+            },
+            {
+              "source_row": 71,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 72,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 21,
+          "source_anchor_row": 73,
+          "source_end_row": 73,
+          "manufacturer_rows": [
+            {
+              "source_row": 73,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 22,
+          "source_anchor_row": 74,
+          "source_end_row": 79,
+          "manufacturer_rows": [
+            {
+              "source_row": 74,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 75,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 76,
+              "manufacturer_id": "MFG-070"
+            },
+            {
+              "source_row": 77,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 78,
+              "manufacturer_id": "MFG-071"
+            },
+            {
+              "source_row": 79,
+              "manufacturer_id": "MFG-068"
+            }
+          ]
+        },
+        {
+          "ordinal": 23,
+          "source_anchor_row": 80,
+          "source_end_row": 83,
+          "manufacturer_rows": [
+            {
+              "source_row": 80,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 81,
+              "manufacturer_id": "MFG-072"
+            },
+            {
+              "source_row": 82,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 83,
+              "manufacturer_id": "MFG-068"
+            }
+          ]
+        },
+        {
+          "ordinal": 24,
+          "source_anchor_row": 84,
+          "source_end_row": 88,
+          "manufacturer_rows": [
+            {
+              "source_row": 84,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 85,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 86,
+              "manufacturer_id": "MFG-072"
+            },
+            {
+              "source_row": 87,
+              "manufacturer_id": "MFG-071"
+            },
+            {
+              "source_row": 88,
+              "manufacturer_id": "MFG-064"
+            }
+          ]
+        },
+        {
+          "ordinal": 25,
+          "source_anchor_row": 89,
+          "source_end_row": 94,
+          "manufacturer_rows": [
+            {
+              "source_row": 89,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 90,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 91,
+              "manufacturer_id": "MFG-071"
+            },
+            {
+              "source_row": 92,
+              "manufacturer_id": "MFG-073"
+            },
+            {
+              "source_row": 93,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 94,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 26,
+          "source_anchor_row": 95,
+          "source_end_row": 98,
+          "manufacturer_rows": [
+            {
+              "source_row": 95,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 96,
+              "manufacturer_id": "MFG-068"
+            },
+            {
+              "source_row": 97,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 98,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 27,
+          "source_anchor_row": 99,
+          "source_end_row": 101,
+          "manufacturer_rows": [
+            {
+              "source_row": 99,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 100,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 101,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 28,
+          "source_anchor_row": 102,
+          "source_end_row": 103,
+          "manufacturer_rows": [
+            {
+              "source_row": 102,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 103,
+              "manufacturer_id": "MFG-065"
+            }
+          ]
+        },
+        {
+          "ordinal": 29,
+          "source_anchor_row": 104,
+          "source_end_row": 107,
+          "manufacturer_rows": [
+            {
+              "source_row": 104,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 105,
+              "manufacturer_id": "MFG-071"
+            },
+            {
+              "source_row": 106,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 107,
+              "manufacturer_id": "MFG-065"
+            }
+          ]
+        },
+        {
+          "ordinal": 30,
+          "source_anchor_row": 108,
+          "source_end_row": 109,
+          "manufacturer_rows": [
+            {
+              "source_row": 108,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 109,
+              "manufacturer_id": "MFG-065"
+            }
+          ]
+        },
+        {
+          "ordinal": 31,
+          "source_anchor_row": 110,
+          "source_end_row": 113,
+          "manufacturer_rows": [
+            {
+              "source_row": 110,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 111,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 112,
+              "manufacturer_id": "MFG-072"
+            },
+            {
+              "source_row": 113,
+              "manufacturer_id": "MFG-064"
+            }
+          ]
+        },
+        {
+          "ordinal": 32,
+          "source_anchor_row": 114,
+          "source_end_row": 118,
+          "manufacturer_rows": [
+            {
+              "source_row": 114,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 115,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 116,
+              "manufacturer_id": "MFG-068"
+            },
+            {
+              "source_row": 117,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 118,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 33,
+          "source_anchor_row": 119,
+          "source_end_row": 122,
+          "manufacturer_rows": [
+            {
+              "source_row": 119,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 120,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 121,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 122,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 34,
+          "source_anchor_row": 123,
+          "source_end_row": 125,
+          "manufacturer_rows": [
+            {
+              "source_row": 123,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 124,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 125,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 35,
+          "source_anchor_row": 126,
+          "source_end_row": 129,
+          "manufacturer_rows": [
+            {
+              "source_row": 126,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 127,
+              "manufacturer_id": "MFG-070"
+            },
+            {
+              "source_row": 128,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 129,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 36,
+          "source_anchor_row": 130,
+          "source_end_row": 132,
+          "manufacturer_rows": [
+            {
+              "source_row": 130,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 131,
+              "manufacturer_id": "MFG-070"
+            },
+            {
+              "source_row": 132,
+              "manufacturer_id": "MFG-065"
+            }
+          ]
+        },
+        {
+          "ordinal": 37,
+          "source_anchor_row": 133,
+          "source_end_row": 136,
+          "manufacturer_rows": [
+            {
+              "source_row": 133,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 134,
+              "manufacturer_id": "MFG-070"
+            },
+            {
+              "source_row": 135,
+              "manufacturer_id": "MFG-066"
+            },
+            {
+              "source_row": 136,
+              "manufacturer_id": "MFG-068"
+            }
+          ]
+        },
+        {
+          "ordinal": 38,
+          "source_anchor_row": 137,
+          "source_end_row": 139,
+          "manufacturer_rows": [
+            {
+              "source_row": 137,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 138,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 139,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 39,
+          "source_anchor_row": 140,
+          "source_end_row": 142,
+          "manufacturer_rows": [
+            {
+              "source_row": 140,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 141,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 142,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 40,
+          "source_anchor_row": 143,
+          "source_end_row": 146,
+          "manufacturer_rows": [
+            {
+              "source_row": 143,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 144,
+              "manufacturer_id": "MFG-070"
+            },
+            {
+              "source_row": 145,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 146,
+              "manufacturer_id": "MFG-064"
+            }
+          ]
+        },
+        {
+          "ordinal": 41,
+          "source_anchor_row": 147,
+          "source_end_row": 150,
+          "manufacturer_rows": [
+            {
+              "source_row": 147,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 148,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 149,
+              "manufacturer_id": "MFG-072"
+            },
+            {
+              "source_row": 150,
+              "manufacturer_id": "MFG-064"
+            }
+          ]
+        },
+        {
+          "ordinal": 42,
+          "source_anchor_row": 151,
+          "source_end_row": 155,
+          "manufacturer_rows": [
+            {
+              "source_row": 151,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 152,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 153,
+              "manufacturer_id": "MFG-064"
+            },
+            {
+              "source_row": 154,
+              "manufacturer_id": "MFG-071"
+            },
+            {
+              "source_row": 155,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 43,
+          "source_anchor_row": 156,
+          "source_end_row": 159,
+          "manufacturer_rows": [
+            {
+              "source_row": 156,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 157,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 158,
+              "manufacturer_id": "MFG-072"
+            },
+            {
+              "source_row": 159,
+              "manufacturer_id": "MFG-064"
+            }
+          ]
+        },
+        {
+          "ordinal": 44,
+          "source_anchor_row": 160,
+          "source_end_row": 160,
+          "manufacturer_rows": [
+            {
+              "source_row": 160,
+              "manufacturer_id": "MFG-001"
+            }
+          ]
+        },
+        {
+          "ordinal": 45,
+          "source_anchor_row": 161,
+          "source_end_row": 164,
+          "manufacturer_rows": [
+            {
+              "source_row": 161,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 162,
+              "manufacturer_id": "MFG-067"
+            },
+            {
+              "source_row": 163,
+              "manufacturer_id": "MFG-068"
+            },
+            {
+              "source_row": 164,
+              "manufacturer_id": "MFG-064"
+            }
+          ]
+        },
+        {
+          "ordinal": 46,
+          "source_anchor_row": 165,
+          "source_end_row": 169,
+          "manufacturer_rows": [
+            {
+              "source_row": 165,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 166,
+              "manufacturer_id": "MFG-071"
+            },
+            {
+              "source_row": 167,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 168,
+              "manufacturer_id": "MFG-072"
+            },
+            {
+              "source_row": 169,
+              "manufacturer_id": "MFG-064"
+            }
+          ]
+        },
+        {
+          "ordinal": 47,
+          "source_anchor_row": 170,
+          "source_end_row": 173,
+          "manufacturer_rows": [
+            {
+              "source_row": 170,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 171,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 172,
+              "manufacturer_id": "MFG-072"
+            },
+            {
+              "source_row": 173,
+              "manufacturer_id": "MFG-064"
+            }
+          ]
+        },
+        {
+          "ordinal": 48,
+          "source_anchor_row": 174,
+          "source_end_row": 178,
+          "manufacturer_rows": [
+            {
+              "source_row": 174,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 175,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 176,
+              "manufacturer_id": "MFG-072"
+            },
+            {
+              "source_row": 177,
+              "manufacturer_id": "MFG-071"
+            },
+            {
+              "source_row": 178,
+              "manufacturer_id": "MFG-064"
+            }
+          ]
+        },
+        {
+          "ordinal": 49,
+          "source_anchor_row": 179,
+          "source_end_row": 181,
+          "manufacturer_rows": [
+            {
+              "source_row": 179,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 180,
+              "manufacturer_id": "MFG-065"
+            },
+            {
+              "source_row": 181,
+              "manufacturer_id": "MFG-072"
+            }
+          ]
+        },
+        {
+          "ordinal": 50,
+          "source_anchor_row": 182,
+          "source_end_row": 184,
+          "manufacturer_rows": [
+            {
+              "source_row": 182,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 183,
+              "manufacturer_id": "MFG-072"
+            },
+            {
+              "source_row": 184,
+              "manufacturer_id": "MFG-065"
+            }
+          ]
+        },
+        {
+          "ordinal": 51,
+          "source_anchor_row": 185,
+          "source_end_row": 187,
+          "manufacturer_rows": [
+            {
+              "source_row": 185,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 186,
+              "manufacturer_id": "MFG-072"
+            },
+            {
+              "source_row": 187,
+              "manufacturer_id": "MFG-065"
+            }
+          ]
+        },
+        {
+          "ordinal": 52,
+          "source_anchor_row": 188,
+          "source_end_row": 190,
+          "manufacturer_rows": [
+            {
+              "source_row": 188,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 189,
+              "manufacturer_id": "MFG-074"
+            },
+            {
+              "source_row": 190,
+              "manufacturer_id": "MFG-075"
+            }
+          ]
+        },
+        {
+          "ordinal": 53,
+          "source_anchor_row": 191,
+          "source_end_row": 193,
+          "manufacturer_rows": [
+            {
+              "source_row": 191,
+              "manufacturer_id": "MFG-001"
+            },
+            {
+              "source_row": 192,
+              "manufacturer_id": "MFG-074"
+            },
+            {
+              "source_row": 193,
+              "manufacturer_id": "MFG-075"
+            }
+          ]
+        },
+        {
+          "ordinal": 54,
+          "source_anchor_row": 195,
+          "source_end_row": 195,
+          "manufacturer_rows": [
+            {
+              "source_row": 195,
+              "manufacturer_id": "MFG-069"
+            }
+          ]
+        },
+        {
+          "ordinal": 55,
+          "source_anchor_row": 196,
+          "source_end_row": 196,
+          "manufacturer_rows": [
+            {
+              "source_row": 196,
+              "manufacturer_id": "MFG-069"
+            }
+          ]
+        },
+        {
+          "ordinal": 56,
+          "source_anchor_row": 197,
+          "source_end_row": 197,
+          "manufacturer_rows": [
+            {
+              "source_row": 197,
+              "manufacturer_id": "MFG-062"
+            }
+          ]
+        },
+        {
+          "ordinal": 57,
+          "source_anchor_row": 198,
+          "source_end_row": 198,
+          "manufacturer_rows": [
+            {
+              "source_row": 198,
+              "manufacturer_id": "MFG-076"
+            }
+          ]
+        },
+        {
+          "ordinal": 58,
+          "source_anchor_row": 199,
+          "source_end_row": 199,
+          "manufacturer_rows": [
+            {
+              "source_row": 199,
+              "manufacturer_id": "MFG-077"
+            }
+          ]
+        },
+        {
+          "ordinal": 59,
+          "source_anchor_row": 200,
+          "source_end_row": 200,
+          "manufacturer_rows": [
+            {
+              "source_row": 200,
+              "manufacturer_id": "MFG-078"
+            }
+          ]
+        },
+        {
+          "ordinal": 60,
+          "source_anchor_row": 201,
+          "source_end_row": 201,
+          "manufacturer_rows": [
+            {
+              "source_row": 201,
+              "manufacturer_id": "MFG-062"
+            }
+          ]
+        },
+        {
+          "ordinal": 61,
+          "source_anchor_row": 202,
+          "source_end_row": 202,
+          "manufacturer_rows": [
+            {
+              "source_row": 202,
+              "manufacturer_id": "MFG-062"
+            }
+          ]
+        },
+        {
+          "ordinal": 62,
+          "source_anchor_row": 203,
+          "source_end_row": 203,
+          "manufacturer_rows": [
+            {
+              "source_row": 203,
+              "manufacturer_id": "MFG-062"
+            }
+          ]
+        }
+      ],
+      "display_row_count": 194
+    }
+  ],
+  "profile_set_id": "blank-2027-v1"
+}

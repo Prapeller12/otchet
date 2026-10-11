@@ -120,8 +120,12 @@ class SecureDesktopBridge:
             )
             data["backup_file"] = str(path.relative_to(self._vault.backups))
             data["backup_complete"] = True
+            if data.get("operation_revision"):
+                data["backup_state"] = "complete"
         except (OSError, ValueError, sqlite3.Error):
             data["backup_complete"] = False
+            if data.get("operation_revision"):
+                data["backup_state"] = "post_backup_warning"
             data["backup_warning"] = (
                 "Данные сохранены, но резервная копия нового состояния не создана. "
                 "Копия до сохранения сохранена. Проверьте свободное место и права записи "
@@ -438,26 +442,30 @@ class SecureDesktopBridge:
                 permission = classify_permission(method, request)
                 approver = None
                 auth: dict[str, Any] = {}
-                if permission is not None:
+                is_draft_recovery = method == "get_report_draft_save_result"
+                if permission is not None or is_draft_recovery:
                     auth = _request(authorization)
                     approver = self._application._signers.authorize(
                         _text(auth, "signer_id"),
                         _text(auth, "pin"),
                         admin_only=permission == "admin",
                     )
-                    self._backup_before_write()
-                    self._application._signers.record_access(approver, method, "authorized")
+                    if not is_draft_recovery:
+                        self._backup_before_write()
+                        self._application._signers.record_access(approver, method, "authorized")
                 context = None
                 print_verification = None
-                if method in {"save_report_cells", "save_report_presentation"}:
+                if method in {"save_report_cells", "save_report_presentation", "save_report_draft"}:
                     request, context = prepare_save_confirmation(self._application, method, request)
                 if method == "export_pdf":
                     print_verification = confirm_print_report(self._application, request, auth)
                 function = getattr(self._application, method)
-                result: dict[str, Any] = (
-                    function() if method in {"health", "bootstrap"} else function(request)
-                )
-                if method in {"save_report_cells", "save_report_presentation"}:
+                if method in {"save_report_draft", "get_report_draft_save_result"}:
+                    assert approver is not None
+                    result: dict[str, Any] = function(request, actor_ref=approver["id"])
+                else:
+                    result = function() if method in {"health", "bootstrap"} else function(request)
+                if method in {"save_report_cells", "save_report_presentation", "save_report_draft"}:
                     result = confirm_saved_report(self._application, result, context, auth)
                 if result.get("ok") and print_verification is not None:
                     result["data"]["verification"] = print_verification
@@ -466,6 +474,29 @@ class SecureDesktopBridge:
                     result["data"] = [
                         {**p, "can_unlock": p["id"] in enrolled} for p in result["data"]
                     ]
+                if method == "save_report_draft" and result.get("ok"):
+                    assert approver is not None
+                    draft_data = result["data"]
+                    if not draft_data.get("idempotent_replay"):
+                        result = self._backup_after_write(result)
+                        try:
+                            current_revision = self._application._matrix_revision(
+                                _text(request, "report_type"),
+                                int(_text(request, "organization_id")),
+                            )
+                            result["data"]["matrix_revision"] = current_revision
+                            result["data"]["current_revision"] = current_revision
+                            if result["data"]["operation_revision"] != current_revision:
+                                result["data"]["verification_state"] = "stale"
+                            self._application._draft_outcomes.finalize(
+                                _text(request, "idempotency_key"), approver["id"], result["data"]
+                            )
+                        except (OSError, ValueError, sqlite3.Error):
+                            result["data"]["outcome_warning"] = (
+                                "Данные сохранены; результат подтверждения и копии не удалось "
+                                "зафиксировать для восстановления ответа"
+                            )
+                    return result
                 return self._backup_after_write(result) if permission is not None else result
             except (
                 OSError,
@@ -584,6 +615,18 @@ class SecureDesktopBridge:
 
     def save_report_cells(self, payload: object) -> dict[str, Any]:
         return self._call("save_report_cells", payload)
+
+    def save_report_draft(self, payload: object) -> dict[str, Any]:
+        return self._call("save_report_draft", payload)
+
+    def get_report_draft_save_result(self, payload: object) -> dict[str, Any]:
+        return self._call("get_report_draft_save_result", payload)
+
+    def list_blank_report_profiles(self, payload: object) -> dict[str, Any]:
+        return self._call("list_blank_report_profiles", payload)
+
+    def create_blank_report_profiles(self, payload: object) -> dict[str, Any]:
+        return self._call("create_blank_report_profiles", payload)
 
     def validate_import(self, payload: object) -> dict[str, Any]:
         return self._call("validate_import", payload)
