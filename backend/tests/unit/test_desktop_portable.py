@@ -101,3 +101,33 @@ def test_existing_database_is_backed_up_before_migration(tmp_path: Path) -> None
     assert backup is not None and backup.is_file()
     assert backup.with_suffix(".manifest.json").is_file()
     assert reapplied == ()
+
+
+def test_network_client_state_survives_executable_version_change(tmp_path: Path) -> None:
+    first = tmp_path / "versions" / "first"
+    second = tmp_path / "versions" / "second"
+    state = tmp_path / "client-state"
+    _write_config(first)
+    _write_config(second)
+    one = PortablePaths.discover(first, writable_root=state)
+    two = PortablePaths.discover(second, writable_root=state)
+    one.prepare_writable_directories()
+    one.preferences_path.write_text('{"field_hints_enabled": false}', encoding="utf-8")
+    assert two.database == one.database
+    assert two.preferences_path == one.preferences_path
+    assert two.frontend != one.frontend
+    assert two.webview2_profile == one.webview2_profile
+    assert not (first / "data").exists()
+    assert not (first / "temp").exists()
+
+
+@pytest.mark.parametrize("configured", ["../outside.sqlite3", "/absolute.sqlite3"])
+def test_network_database_cannot_escape_local_client_state(tmp_path: Path, configured: str) -> None:
+    root = tmp_path / "executable"
+    _write_config(root)
+    defaults = root / "config" / "app.defaults.toml"
+    defaults.write_text(
+        defaults.read_text().replace("data/reporting.sqlite3", configured), encoding="utf-8"
+    )
+    with pytest.raises(PortableLayoutError, match="local state"):
+        _ = PortablePaths.discover(root, writable_root=tmp_path / "state").database

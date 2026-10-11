@@ -1,0 +1,5 @@
+.network-status { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; min-width: 0; padding: 8px var(--report-page-inset, 16px); }
+.network-message { display: flex; flex: 1 1 240px; flex-direction: column; min-width: 0; gap: 2px; font-size: 12px; overflow-wrap: anywhere; }
+.network-actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.network-actions .button { min-height: 40px; font-size: 12px; }
+.network-status > p { flex-basis: 100%; margin: 0; overflow-wrap: anywhere; }

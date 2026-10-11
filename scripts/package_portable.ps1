@@ -53,6 +53,7 @@ if (Test-Path $outputRoot) {
 New-Item $stage -ItemType Directory -Force | Out-Null
 
 Copy-Item $launcher $stage
+& (Join-Path $PSScriptRoot "build_network_bootstrap.ps1") -OutputDirectory $stage
 Copy-Item (Join-Path $launcherRoot "runtime") (Join-Path $stage "runtime") -Recurse
 if (-not $EvergreenTestBuild) {
     Copy-Item $webViewRoot (Join-Path $stage "runtime\webview2") -Recurse
@@ -79,7 +80,7 @@ Copy-Item (Join-Path $repositoryRoot "VERSION") $stage
 Copy-Item (Join-Path $PSScriptRoot "templates\start.cmd") $stage
 Copy-Item (Join-Path $PSScriptRoot "templates\TESTING.txt") $stage
 
-foreach ($relative in @("data", "attachments", "imports\inbox", "exports", "backups", "temp")) {
+foreach ($relative in @("data", "attachments", "imports\inbox", "exports", "backups", "temp", "shared")) {
     $managedDirectory = Join-Path $stage $relative
     New-Item $managedDirectory -ItemType Directory -Force | Out-Null
     Set-Content (Join-Path $managedDirectory ".portable-dir") "managed by ReportingSystem" -Encoding ascii

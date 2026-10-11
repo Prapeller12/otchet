@@ -19,7 +19,7 @@ _READY = """(() => {
     header && getComputedStyle(document.body).fontFamily.includes('Golos Text') &&
     getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim()
       === '#e5402b' &&
-    document.querySelector('.status-database')?.textContent.includes('Данные на этом компьютере'));
+    document.querySelector('.status-database')?.textContent.trim().length > 0);
 })()"""
 
 

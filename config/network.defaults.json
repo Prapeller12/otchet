@@ -1,0 +1,6 @@
+{
+  "protocol_version": 1,
+  "shared_directory": "shared",
+  "startup_timeout_seconds": 300,
+  "writer_lock_timeout_seconds": 15
+}

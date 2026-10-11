@@ -11,7 +11,7 @@ import sqlite3
 import tempfile
 import zipfile
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import closing
+from contextlib import ExitStack, closing
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -655,6 +655,7 @@ class WorkingReferenceApplicationBridge:
 
     def validate_import(self, payload: object) -> dict[str, object]:
         request_id = uuid4().hex
+        source_resources = ExitStack()
         try:
             request = _mapping(payload, "payload")
             _reject_unknown(
@@ -674,9 +675,9 @@ class WorkingReferenceApplicationBridge:
                     or batch.stored_relative_path.startswith("reference:")
                 ):
                     raise ExcelWorkbookValidationError("Пакет не принадлежит выбранному отчёту")
-                source = self._excel._inbox_directory / batch.stored_relative_path
-                if source.resolve().parent != self._excel._inbox_directory.resolve():
-                    raise ExcelWorkbookValidationError("Некорректный путь сохранённого пакета")
+                source = source_resources.enter_context(
+                    self._excel.materialize_import_source(batch.id)
+                )
                 original_file_name = batch.source_file_name
             else:
                 if self._open_excel_file is None:
@@ -714,6 +715,8 @@ class WorkingReferenceApplicationBridge:
         except (ExcelReportError, ReportCellError, OSError, sqlite3.Error, ValueError) as error:
             code = error.code if isinstance(error, ExcelReportError) else "EXCEL_IMPORT_ERROR"
             return _failure(code, str(error), request_id)
+        finally:
+            source_resources.close()
 
     def commit_import(self, payload: object) -> dict[str, object]:
         request_id = uuid4().hex

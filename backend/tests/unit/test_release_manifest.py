@@ -162,3 +162,14 @@ def test_sqlcipher_runtime_requires_its_own_native_x64_extension(tmp_path: Path)
     executable[0x84:0x86] = struct.pack("<H", 0x8664)
     cipher.write_bytes(executable)
     verify_sqlcipher_runtime(tmp_path)
+
+
+def test_network_shared_data_and_site_override_are_not_executable_payload(tmp_path: Path) -> None:
+    (tmp_path / "VERSION").write_text("dev36", encoding="utf-8")
+    write_manifest(tmp_path, "dev36")
+    (tmp_path / "shared").mkdir()
+    (tmp_path / "shared" / "CURRENT").write_text("runtime pointer", encoding="utf-8")
+    (tmp_path / "network.local.json").write_text('{"shared_directory": "site-specific"}')
+    verify_manifest(tmp_path)
+    with pytest.raises(ReleaseVerificationError, match="routing configuration"):
+        verify_distribution_hygiene(tmp_path)

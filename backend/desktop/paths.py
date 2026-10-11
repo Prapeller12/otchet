@@ -50,16 +50,29 @@ class PortablePaths:
     """Canonical locations relative to an unpacked portable release."""
 
     root: Path
+    writable_root: Path | None = None
 
     @classmethod
-    def discover(cls, explicit_root: str | Path | None = None) -> PortablePaths:
+    def discover(
+        cls, explicit_root: str | Path | None = None, *, writable_root: Path | None = None
+    ) -> PortablePaths:
         if explicit_root is not None:
             root = Path(explicit_root)
         elif getattr(sys, "frozen", False):
             root = Path(sys.executable).resolve().parent
         else:
             root = _source_root()
-        return cls(root=root.resolve())
+        return cls(
+            root=root.resolve(), writable_root=writable_root.resolve() if writable_root else None
+        )
+
+    @property
+    def state_root(self) -> Path:
+        return self.writable_root or self.root
+
+    @property
+    def preferences_path(self) -> Path:
+        return self.state_root / "config" / "ui-preferences.json"
 
     @property
     def app(self) -> Path:
@@ -101,31 +114,37 @@ class PortablePaths:
 
     @property
     def data(self) -> Path:
-        return self.root / "data"
+        return self.state_root / "data"
 
     @property
     def backups(self) -> Path:
-        return self.root / "backups"
+        return self.state_root / "backups"
 
     @property
     def imports_inbox(self) -> Path:
-        return self.root / "imports" / "inbox"
+        return self.state_root / "imports" / "inbox"
 
     @property
     def exports(self) -> Path:
-        return self.root / "exports"
+        return self.state_root / "exports"
 
     @property
     def temp(self) -> Path:
-        return self.root / "temp"
+        return self.state_root / "temp"
 
     @property
     def database(self) -> Path:
         configured = self.settings().get("database", {}).get("path", "data/reporting.sqlite3")
         path = Path(str(configured))
+        if self.writable_root is not None and path.is_absolute():
+            raise PortableLayoutError(
+                "Network client database path must be relative to local state"
+            )
         if not path.is_absolute():
-            path = self.root / path
+            path = self.state_root / path
         resolved = path.resolve()
+        if self.writable_root is not None and not resolved.is_relative_to(self.state_root):
+            raise PortableLayoutError("Network client database must remain inside local state")
         if _windows_drive_is_remote(resolved.parent):
             raise PortableLayoutError(
                 "SQLite database cannot be stored on a network or UNC location"
@@ -171,6 +190,8 @@ class PortablePaths:
     def validate_release_layout(self, *, require_frontend: bool = True) -> None:
         if _windows_drive_is_remote(self.root):
             raise PortableLayoutError("Portable mode cannot run from a network or UNC location")
+        if _windows_drive_is_remote(self.state_root):
+            raise PortableLayoutError("Client state cannot be stored on a network or UNC location")
 
         required_files = [
             self.root / "VERSION",
@@ -202,7 +223,8 @@ class PortablePaths:
         directories = (
             self.data,
             self.database.parent,
-            self.root / "attachments",
+            self.state_root / "attachments",
+            self.preferences_path.parent,
             self.imports_inbox,
             self.exports,
             self.backups,

@@ -33,9 +33,12 @@ REQUIRED_DIRECTORIES = (
     "backups",
     "temp",
     "docs",
+    "shared",
 )
 REQUIRED_FILES = (
     "ReportingSystem.exe",
+    "ReportingSystemNetwork.exe",
+    "config/network.defaults.json",
     "start.cmd",
     "TESTING.txt",
     "VERSION",
@@ -46,7 +49,7 @@ REQUIRED_FILES = (
     "config/reporting_rules.yaml",
     "config/roles.yaml",
 )
-USER_DATA_DIRECTORIES = ("attachments", "backups", "data", "exports", "imports", "temp")
+USER_DATA_DIRECTORIES = ("attachments", "backups", "data", "exports", "imports", "temp", "shared")
 SECRET_FILE_SUFFIXES = {".key", ".p12", ".pfx", ".kdbx"}
 DATABASE_FILE_SUFFIXES = {".db", ".sqlite", ".sqlite3", ".sqlitedb", ".backup", ".bak", ".dump"}
 DATABASE_SIDECAR_SUFFIXES = tuple(
@@ -81,6 +84,8 @@ def verify_distribution_hygiene(root: Path) -> None:
     """Check a newly packaged distribution, before it has any user's working data."""
 
     local = root / "config" / "app.local.toml"
+    if (root / "network.local.json").exists():
+        raise ReleaseVerificationError("Private server routing configuration is packaged")
     if local.exists():
         try:
             configuration = tomllib.loads(local.read_text(encoding="utf-8-sig"))
@@ -221,6 +226,8 @@ def verify_release(root: Path, *, pristine: bool = False) -> None:
     verify_sqlcipher_runtime(root)
     if _pe_machine(root / "ReportingSystem.exe") != 0x8664:
         raise ReleaseVerificationError("ReportingSystem.exe is not Windows x64")
+    if _pe_machine(root / "ReportingSystemNetwork.exe") != 0x8664:
+        raise ReleaseVerificationError("ReportingSystemNetwork.exe is not Windows x64")
     if (
         runtime_mode == "fixed"
         and _pe_machine(root / "runtime" / "webview2" / "msedgewebview2.exe") != 0x8664

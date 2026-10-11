@@ -13,6 +13,14 @@ ImportBatchStatus = Literal["STAGED", "INVALID", "COMMITTED"]
 
 
 @dataclass(frozen=True, slots=True)
+class ImportWorkbookSource:
+    """Original bytes and their hash; never part of a frontend import DTO."""
+
+    sha256: str
+    content: bytes
+
+
+@dataclass(frozen=True, slots=True)
 class ImportRowDraft:
     source_cell: str
     coordinate_json: str
@@ -43,6 +51,7 @@ class ImportBatchDraft:
     issues: tuple[ImportIssueDraft, ...]
     metadata: Mapping[str, object] = field(default_factory=dict)
     skipped_count: int = 0
+    workbook_source: ImportWorkbookSource | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +82,10 @@ class ExcelImportRepository(Protocol):
 
     def get_batch(self, batch_id: str) -> ImportBatch | None: ...
 
+    def get_workbook_source(self, batch_id: str) -> ImportWorkbookSource | None: ...
+
+    def archive_workbook_source(self, batch_id: str, source: ImportWorkbookSource) -> None: ...
+
     def mark_committed(self, batch_id: str) -> ImportBatch: ...
 
     def commit_with_changes(
@@ -88,4 +101,5 @@ __all__ = [
     "ImportClassification",
     "ImportIssueDraft",
     "ImportRowDraft",
+    "ImportWorkbookSource",
 ]

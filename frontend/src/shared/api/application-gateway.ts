@@ -7,6 +7,23 @@ import type {
 
 export type FormStatus = "WORKING_REFERENCE" | "APPROVED";
 
+export type NetworkStatus = {
+  mode: "local" | "network";
+  state: "ready" | "stale" | "unavailable" | "outcome_unknown";
+  loaded_global_revision: string | null;
+  current_global_revision: string | null;
+  snapshot_changed: boolean;
+  can_write: boolean;
+  message: string | null;
+  pending_operation_id: string | null;
+};
+export type NetworkWriteContext = { base_global_revision?: string | null; operation_id?: string };
+export type NetworkPublication = { global_revision?: string | null; local_activation_warning?: string };
+export type NetworkDataRefresh = { has_unsaved_changes: boolean; has_unknown_outcome: boolean };
+export type NetworkOperationResult = { found: boolean; operation_id: string; data_state: "committed" | "not_committed" | "unknown"; result: { ok: boolean; data?: unknown; error?: ApplicationError } | null; global_revision: string | null; current_global_revision: string | null };
+/** Load a replacement before adopting it; failed refresh leaves the rendered report intact. */
+export type SnapshotReload = { prepare(): Promise<() => void> };
+
 export type Capability =
   | { enabled: true }
   | { enabled: false; reason: string };
@@ -93,6 +110,7 @@ export type ReportMatrixContract = {
   form_status: FormStatus;
   source_notice: string;
   matrix_revision: string;
+  global_revision?: string | null;
   left_columns: MatrixLeftColumn[];
   time_columns: MatrixTimeColumn[];
   rows: MatrixRowContract[];
@@ -115,7 +133,7 @@ export type CellChange = {
 export type ConfirmationContext = { year?: number; month: number; week_start?: string };
 export type SaveVerificationResult = { verification?: ReportVerification; verification_error?: { code: string; message: string } };
 
-export type SaveReportCellsRequest = {
+export type SaveReportCellsRequest = NetworkWriteContext & {
   confirmation?: ConfirmationContext;
   year?: number;
   report_type: ReportType;
@@ -126,6 +144,9 @@ export type SaveReportCellsRequest = {
 };
 
 export type SaveReportCellsResponse = SaveVerificationResult & {
+  global_revision?: string | null;
+  operation_id?: string;
+  local_activation_warning?: string;
   matrix_revision: string;
   cells: ReportCellContract[];
 };
@@ -137,7 +158,7 @@ export type ReportDraftPresentation = Pick<ReportPresentation, "title" | "widths
   confirm_production_totals?: boolean;
 };
 export type SaveReportDraftRequest = SaveReportCellsRequest & { presentation?: ReportDraftPresentation };
-export type ReportDraftResultQuery = Pick<SaveReportDraftRequest, "report_type" | "organization_id" | "year" | "confirmation" | "idempotency_key">;
+export type ReportDraftResultQuery = Pick<SaveReportDraftRequest, "report_type" | "organization_id" | "year" | "confirmation" | "idempotency_key" | "operation_id" | "base_global_revision">;
 export type SaveReportDraftResponse = SaveReportCellsResponse & {
   data_state: "committed";
   operation_revision: string;
@@ -149,10 +170,10 @@ export type SaveReportDraftResponse = SaveReportCellsResponse & {
   backup_complete?: boolean;
   backup_warning?: string;
 };
-export type ReportDraftResult = SaveReportDraftResponse | { data_state: "unknown" };
+export type ReportDraftResult = SaveReportDraftResponse | { data_state: "unknown" } | { data_state: "not_committed"; error: ApplicationError; global_revision: string; operation_id: string };
 export type DraftNavigation = { request(action: () => void): void };
 
-export type ImportRequest = {
+export type ImportRequest = NetworkWriteContext & {
   batch_id?: string;
   sheet_decisions?: Record<string, { include: boolean; reason: string }>;
   mode?: ImportMode;
@@ -172,7 +193,7 @@ export type CanonicalSheetReview = { name: string; state: string; known?: boolea
 export type ImportValueChange = { source_cell: string; target: string; period: string; before: ReportCellValue | null; after: ReportCellValue | null; classification: string };
 export type ImportRequisiteChange = { source_cell: string; before: unknown; after: unknown; label?: string };
 export type ImportReconciliation = { source_cell: string; sheet: string; address: string; source_value: string | null; program_value: string | null; unit: string; period: string | { start: string; end: string; calendar?: string } | null; status: "MATCH" | "MISMATCH" | "UNVERIFIED"; reason: string; rounding: string };
-export type ImportPreview = {
+export type ImportPreview = NetworkPublication & {
   reconciliation?: ImportReconciliation[];
   value_changes?: ImportValueChange[];
   metadata?: { structural_changes?: ImportRequisiteChange[]; sheets?: CanonicalSheetReview[]; review_sheets?: CanonicalSheetReview[]; [key: string]: unknown };
@@ -204,12 +225,12 @@ export type ImportPreview = {
   issues?: ImportIssue[];
 };
 
-export type CommitImportRequest = {
+export type CommitImportRequest = NetworkWriteContext & {
   year?: number;
   batch_id: string;
 };
 
-export type CommitImportResult = {
+export type CommitImportResult = NetworkPublication & {
   reference_workbook_id?: string;
   batch_id: string;
   status: "COMMITTED";
@@ -227,7 +248,8 @@ export type ExportRequest = {
   organization_id: string;
 };
 
-export type ExportResult = {
+export type ExportResult = NetworkPublication & {
+  export_state?: string;
   cancelled: boolean;
   file_name?: string;
   file_path?: string;
@@ -283,7 +305,7 @@ export type ReportLayoutRow = {
   configuration?: FieldConfiguration;
 };
 
-export type ReportLayoutContract = {
+export type ReportLayoutContract = NetworkPublication & {
   report_type: ReportType;
   organization_id: string;
   templates: ReportLayoutTemplate[];
@@ -296,20 +318,20 @@ export type ReportLayoutQuery = {
   organization_id: string;
 };
 
-export type SaveReportLayoutRequest = ReportLayoutQuery & {
+export type SaveReportLayoutRequest = NetworkWriteContext & ReportLayoutQuery & {
   rows: ReportLayoutRow[];
 };
 
 export type ReportHeaderFields = { product_designation: string; product_name: string; factory_name: string; product_image: string };
 export type ProductionCode = { id: string; label: string; plans: Record<string, string>; actuals: Record<string, string> };
-export type ReportPresentation = SaveVerificationResult & {
+export type ReportPresentation = NetworkPublication & SaveVerificationResult & {
   title?: string; widths?: Record<string, number>; plans?: Record<string, string>;
   actuals?: Record<string, string>; completion?: Record<string, string>;
   header?: ReportHeaderFields; production_codes?: ProductionCode[];
   production_code_annual?: Record<string, string>;
   annual?: { plan: string; actual: string; completion: string; plan_months: number; actual_months: number };
 };
-export type SaveReportPresentationRequest = ReportLayoutQuery & ReportPresentation & { confirmation?: ConfirmationContext; expected_revision?: string; confirm_production_totals?: boolean; production_code_actuals?: Record<string, Record<string, string>> };
+export type SaveReportPresentationRequest = NetworkWriteContext & ReportLayoutQuery & ReportPresentation & { confirmation?: ConfirmationContext; expected_revision?: string; confirm_production_totals?: boolean; production_code_actuals?: Record<string, Record<string, string>> };
 
 export type ApplicationError = {
   code: string;
@@ -325,6 +347,15 @@ export type ApplicationError = {
 export type UiPreferences = { field_hints_enabled: boolean };
 
 export interface ApplicationGateway {
+  getNetworkStatus?(): Promise<NetworkStatus>;
+  refreshNetworkData?(request: NetworkDataRefresh): Promise<NetworkStatus>;
+  getNetworkOperationResult?(operationId: string): Promise<NetworkOperationResult>;
+  getNetworkRecoveryUsers?(): Promise<{ users: AccessUser[] }>;
+  canRetryNetworkOperation?(operationId: string): boolean;
+  retryNetworkOperation?(operationId: string): Promise<unknown>;
+  importLocalStore?(pin: string): Promise<AccessStatus | { cancelled: true }>;
+  recoverNetworkSetupOperation?(operationId: string, pin: string, signerId?: string): Promise<NetworkOperationResult>;
+  unlockNetworkRecovery?(authorization: WriteAuthorization): Promise<{ unlocked: true }>;
   listBlankReportProfiles?(): Promise<BlankReportProfiles>;
   createBlankReportProfiles?(request: { profile_set_id: string }): Promise<BlankReportProfilesResult>;
   saveReportDraft?(request: SaveReportDraftRequest): Promise<SaveReportDraftResponse>;
@@ -365,7 +396,7 @@ export interface ApplicationGateway {
   saveReportLayout(request: SaveReportLayoutRequest): Promise<ReportLayoutContract>;
 }
 
-export type MonthlyReportQuery = ExportRequest & { month: number; week_start?: string; expected_revision?: string };
+export type MonthlyReportQuery = NetworkWriteContext & ExportRequest & { month: number; week_start?: string; expected_revision?: string };
 export type ReportVerification = {
   status: "UNVERIFIED" | "VERIFIED" | "STALE" | "LEGACY" | "INVALID";
   snapshot_sha256: string; verified_sha256?: string;
@@ -398,7 +429,7 @@ export type CreateReportSignerRequest = { display_name: string; pin: string; rol
 
 export type AccessRole = "admin" | "reviewer" | "project_manager";
 export type AccessUser = { revoked?: boolean; can_unlock?: boolean; id: string; display_name: string; role: AccessRole };
-export type AccessStatus = { state: "setup" | "legacy" | "locked" | "ready"; users: AccessUser[]; current_user?: AccessUser | null; automatic_open_available?: boolean; automatic_open_error?: string };
+export type AccessStatus = { state: "setup" | "legacy" | "locked" | "ready"; users: AccessUser[]; current_user?: AccessUser | null; automatic_open_available?: boolean; automatic_open_error?: string; local_activation_warning?: string };
 export type WriteAuthorization = { signer_id: string; pin: string };
 export type AuthorizationPrompt = { title: string; adminOnly: boolean; confirmLabel?: string };
 export type AuthorizationHandler = (prompt: AuthorizationPrompt, execute: (authorization: WriteAuthorization) => Promise<unknown>) => Promise<unknown>;

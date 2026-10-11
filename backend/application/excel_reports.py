@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, cast
@@ -25,6 +27,7 @@ from backend.repositories.excel_imports import (
     ImportClassification,
     ImportIssueDraft,
     ImportRowDraft,
+    ImportWorkbookSource,
 )
 from backend.repositories.report_facts import ReportCellUnitOfWork
 
@@ -37,6 +40,14 @@ class ExcelReportError(ValueError):
 
 class ExcelWorkbookValidationError(ExcelReportError):
     code = "EXCEL_VALIDATION_ERROR"
+
+
+class ExcelSourceReselectRequiredError(ExcelWorkbookValidationError):
+    code = "EXCEL_SOURCE_RESELECT_REQUIRED"
+
+
+class ExcelSourceIntegrityError(ExcelWorkbookValidationError):
+    code = "EXCEL_SOURCE_INTEGRITY_ERROR"
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,10 +163,7 @@ class ExcelReportService:
         batch_id = uuid4().hex
         self._inbox_directory.mkdir(parents=True, exist_ok=True)
         staged_path = self._inbox_directory / f"{batch_id}.xlsx"
-        shutil.copyfile(source, staged_path)
-        if _sha256(staged_path) != original_sha256:
-            staged_path.unlink(missing_ok=True)
-            raise ExcelReportError("Контрольная сумма копии Excel не совпала с исходным файлом")
+        _copy_workbook_source(source, staged_path, original_sha256)
 
         try:
             parsed = self._workbooks.parse(
@@ -164,9 +172,15 @@ class ExcelReportService:
                 organization_id=organization_id,
                 matrix=matrix,
             )
-        except BaseException:
+            workbook_content = staged_path.read_bytes()
+            if hashlib.sha256(workbook_content).hexdigest() != original_sha256:
+                raise ExcelSourceIntegrityError(
+                    "Исходная книга изменилась во время проверки. Выберите её заново."
+                )
+        finally:
+            # Durable evidence is inserted with the batch in encrypted database pages.
+            # Plaintext inbox copies are local parsing resources, never snapshot files.
             staged_path.unlink(missing_ok=True)
-            raise
         context = {
             "report_type": report_type,
             "organization_id": organization_id,
@@ -182,7 +196,6 @@ class ExcelReportService:
             source_sha256=source_sha256,
         )
         if committed is not None:
-            staged_path.unlink(missing_ok=True)
             return _preview(committed, already_imported=True)
         skipped_count = parsed.skipped_count
         mode_issues: list[ImportIssueDraft] = []
@@ -245,9 +258,65 @@ class ExcelReportService:
                     "import_context": context,
                 },
                 skipped_count=skipped_count,
+                workbook_source=ImportWorkbookSource(original_sha256, workbook_content),
             )
         )
         return _preview(batch)
+
+    @contextmanager
+    def materialize_import_source(self, batch_id: str) -> Iterator[Path]:
+        """Restore authenticated workbook bytes into an owned local parsing resource.
+
+        Original/display names and stored client paths never select a destination.
+        Legacy sources are adopted only when the exact saved checksum matches.
+        The caller's command coordinator governs legacy archival as any other write.
+        """
+        if re.fullmatch(r"[0-9a-f]{32}", batch_id) is None:
+            raise ExcelWorkbookValidationError("Некорректный идентификатор пакета импорта")
+        batch = self._imports.get_batch(batch_id)
+        if batch is None:
+            raise ExcelWorkbookValidationError("Пакет импорта не найден")
+        expected_sha256 = str(batch.metadata.get("original_source_sha256", batch.source_sha256))
+        source = self._imports.get_workbook_source(batch_id)
+        if source is None:
+            # Legacy filenames were generated from the batch UUID by stage_import.
+            # A stored absolute path, separator or arbitrary filename is not followed.
+            if re.fullmatch(r"[0-9a-f]{32}\.xlsx", batch.stored_relative_path) is None:
+                raise ExcelSourceReselectRequiredError(
+                    "В пакете нет доступной исходной книги. Выберите файл Excel заново "
+                    "и повторите проверку."
+                )
+            legacy_path = self._inbox_directory / batch.stored_relative_path
+            if (
+                legacy_path.is_symlink()
+                or legacy_path.resolve().parent != self._inbox_directory.resolve()
+            ):
+                raise ExcelSourceIntegrityError("Некорректный путь исходной книги пакета")
+            if not legacy_path.is_file():
+                raise ExcelSourceReselectRequiredError(
+                    "Исходная книга старого пакета недоступна на этом компьютере. "
+                    "Выберите исходный файл Excel заново и повторите проверку."
+                )
+            _validate_source_file(legacy_path)
+            source = ImportWorkbookSource(expected_sha256, legacy_path.read_bytes())
+            _validate_workbook_source(source, expected_sha256)
+            self._imports.archive_workbook_source(batch_id, source)
+        _validate_workbook_source(source, expected_sha256)
+        self._inbox_directory.mkdir(parents=True, exist_ok=True)
+        destination = self._inbox_directory / f"{batch_id}-{uuid4().hex}.xlsx"
+        created = False
+        try:
+            with destination.open("xb") as stream:
+                created = True
+                stream.write(source.content)
+            if _sha256(destination) != expected_sha256:
+                raise ExcelSourceIntegrityError(
+                    "Контрольная сумма локальной копии исходной книги не совпала"
+                )
+            yield destination
+        finally:
+            if created:
+                destination.unlink(missing_ok=True)
 
     def stage_transfer(
         self,
@@ -467,6 +536,38 @@ def _validate_source_file(path: Path) -> None:
         raise ExcelWorkbookValidationError("Размер Excel-файла должен быть от 1 байта до 50 МБ")
 
 
+def _validate_workbook_source(source: ImportWorkbookSource, expected_sha256: str) -> None:
+    if not 0 < len(source.content) <= _MAX_WORKBOOK_SIZE:
+        raise ExcelSourceIntegrityError("Недопустимый размер сохранённой исходной книги")
+    if (
+        re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None
+        or source.sha256 != expected_sha256
+        or hashlib.sha256(source.content).hexdigest() != expected_sha256
+    ):
+        raise ExcelSourceIntegrityError(
+            "Контрольная сумма сохранённой исходной книги не совпала. "
+            "Повторная проверка остановлена; выберите первоначальную книгу заново."
+        )
+
+
+def _copy_workbook_source(source: Path, destination: Path, expected_sha256: str) -> None:
+    created = False
+    try:
+        with destination.open("xb") as output_stream:
+            created = True
+            with source.open("rb") as source_stream:
+                shutil.copyfileobj(source_stream, output_stream)
+        _validate_source_file(destination)
+        if _sha256(destination) != expected_sha256:
+            raise ExcelSourceIntegrityError(
+                "Контрольная сумма копии Excel не совпала с исходным файлом"
+            )
+    except BaseException:
+        if created:
+            destination.unlink(missing_ok=True)
+        raise
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -540,6 +641,8 @@ __all__ = [
     "ExcelReportService",
     "ExcelWorkbookAdapter",
     "ExcelWorkbookValidationError",
+    "ExcelSourceIntegrityError",
+    "ExcelSourceReselectRequiredError",
     "ImportPreview",
     "ParsedExcelCell",
     "ParsedWorkbook",
