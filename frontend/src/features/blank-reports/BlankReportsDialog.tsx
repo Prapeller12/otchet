@@ -9,7 +9,7 @@ export function BlankReportsDialog({ onClose, onCompleted }: {
 }) {
   const ref = useDialogFocus();
   const [busy, setBusy] = useState(false);
-  return <div className="settings-backdrop"><section ref={node => { ref.current = node; }} className="settings-dialog" role="dialog" aria-modal="true" aria-label="Заготовки отчётов с сентября 2027 года" onKeyDown={event => { if (event.key === "Escape" && !busy) { event.preventDefault(); onClose(); } }}>
+  return <div className="settings-backdrop"><section ref={node => { ref.current = node; }} className="settings-dialog blank-reports-dialog" role="dialog" aria-modal="true" aria-label="Заготовки отчётов с сентября 2027 года" onKeyDown={event => { if (event.key === "Escape" && !busy) { event.preventDefault(); onClose(); } }}>
     <button autoFocus type="button" className="button secondary" disabled={busy} onClick={onClose}>Закрыть заготовки</button>
     <BlankReportsSetup onBusyChange={setBusy} onCompleted={onCompleted} />
   </section></div>;

@@ -171,7 +171,6 @@ export function ReportMatrix({
   const [verificationRefresh, setVerificationRefresh] = useState(0);
   const [moreOpen, setMoreOpen] = useState(adminMode);
   const controlsSave = useRef<(() => Promise<void>) | null>(null);
-  const [active, setActive] = useState<MatrixPosition>({ row: 0, column: 0 });
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const [pastePreview, setPastePreview] = useState<PasteCell[] | null>(null);
   const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(() => new Set());
@@ -214,6 +213,10 @@ export function ReportMatrix({
     ...summaryIndices.filter(index => matrix.time_columns[index]?.kind !== "RECEIVED"),
   ] : temporalIndices;
   const visibleSet = new Set(visibleIndices);
+  const [active, setActive] = useState<MatrixPosition>(() => {
+    const firstInput = matrix.subsidiary ? matrix.time_columns.findIndex(column => column.group_label === subsidiaryMonth && (matrix.head_site ? column.kind === "FACT" : ["SUPPLIED", "RECEIVED"].includes(column.kind ?? ""))) : -1;
+    return { row: 0, column: firstInput >= 0 ? firstInput : visibleIndices[0] ?? 0 };
+  });
   const leftColumns = matrix.left_columns.map((column) => ({ ...column, width: widths[column.id] ?? column.width }));
   const timeColumns = matrix.time_columns.map((column) => ({ ...column, width: Math.max(matrix.subsidiary && !["SUPPLIED", "USED"].includes(column.kind ?? "") ? 110 : 64, widths[column.id] ?? (matrix.subsidiary && !["SUPPLIED", "USED"].includes(column.kind ?? "") ? 110 : 64)) }));
   const visibleMatrix = { ...matrix, left_columns: leftColumns, time_columns: visibleIndices.map(index => timeColumns[index]!), rows: matrix.rows.map((row) => ({ ...row, cells: visibleIndices.map(index => row.cells[index]!) })) };
@@ -785,6 +788,7 @@ export function ReportMatrix({
           <button type="button" className="button secondary" aria-expanded={moreOpen} aria-controls="report-more-actions" onClick={() => setMoreOpen(open => !open)}>Ещё<UiIcon name={moreOpen ? "chevron-up" : "chevron-down"} /></button>
         </div>
       </div>
+      <div className="report-context" tabIndex={0} role="region" aria-label="Контекст и параметры отчёта">
       <div id="report-more-actions" className="report-more-actions" hidden={!moreOpen}>
         <div className="toolbar-actions">
           <label>Режим импорта Excel <select aria-label="Режим импорта Excel" value={importMode} disabled={navigationBlocked} onChange={event => setImportMode(event.target.value as ImportMode)}>
@@ -857,12 +861,14 @@ export function ReportMatrix({
       {excelMessage !== null && (
         <div className="excel-success" role="status">{excelMessage}</div>
       )}
+      </div>
 
+      <div className="report-table-region">
       {matrix.subsidiary ? <SourceMatrixTable matrix={{ ...matrix, time_columns: timeColumns }} summaryMonth={subsidiaryMonth} stockWeek={stockWeeks[subsidiaryMonth] ?? matrix.time_columns.filter(column => column.group_label === subsidiaryMonth && column.kind === "USED").at(-1)?.id ?? ""}
         matchingRows={matchingSet} visibleIndices={visibleIndices} renderValueCell={renderValueCell} onPaste={previewPaste} leftWidths={widths} renderResizeHandle={resizeHandle}
         blocked={busy || unknownSave !== null} removeBlocked={navigationBlocked || previewBusy} {...(adminMode ? { onRemoveSupplier: (workspaceId: string, supplierId: string) => void removeSupplier(workspaceId, supplierId) } : {})}
         onSelectStockWeek={week => { const month = week.slice(0, 7); requestNavigation(() => { setSubsidiaryMonth(month); setStockWeeks(current => ({ ...current, [month]: week })); }); }} /> : (
-      <div className="matrix-scroll" data-testid="matrix-scroll">
+      <div className="matrix-scroll" data-testid="matrix-scroll" tabIndex={0} role="region" aria-label="Таблица отчёта">
         <table
           onPaste={previewPaste}
           className={matrix.subsidiary ? "report-matrix subsidiary-matrix" : "report-matrix"}
@@ -958,8 +964,9 @@ export function ReportMatrix({
             ))}
           </tbody>
         </table>
+        <DailyMonthlySummary summary={matrix.daily_summary} />
       </div>)}
-      {!matrix.subsidiary && <DailyMonthlySummary summary={matrix.daily_summary} />}
+      </div>
 
       {pastePreview !== null && (
         <div className="excel-dialog-backdrop" role="presentation">

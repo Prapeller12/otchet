@@ -11,7 +11,7 @@
 .source-calculation-fields { border-top: 1px solid var(--pk-border); padding: 16px; }
 .source-calculation-fields h3 { margin: 0 0 8px; font-size: 16px; }
 .source-calculation-fields p { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
-.source-auxiliary-scroll { min-height: 0; max-height: 45vh; }
+.source-auxiliary-scroll { min-width: 0; min-height: 0; overflow: visible; }
 .source-auxiliary-matrix { width: 100%; min-width: 560px; }
 .source-auxiliary-matrix thead th { top: 0; }
 .source-auxiliary-matrix tbody th { padding: 8px; font-weight: 600; }

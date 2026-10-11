@@ -45,7 +45,7 @@ export function BlankReportsSetup({onCompleted, onBusyChange}: Props) {
     <p>В программе появятся технические подписи «Позиция … · заполните» и «Производитель … · заполните».
       Строки без производителя сохранятся. Категории и связи изделий с комплектующими задайте в настройках.</p>
     <p>Создание добавляет отдельные отчёты. Повторное нажатие открывает созданный набор и сохраняет внесённые данные.</p>
-    <button type="button" disabled={!profiles || busy || !gateway.createBlankReportProfiles} onClick={() => void create()}>
+    <button className="button primary" type="button" disabled={!profiles || busy || !gateway.createBlankReportProfiles} onClick={() => void create()}>
       {busy ? "Создание заготовок…" : "Создать или открыть пять заготовок"}
     </button>
   </section>;

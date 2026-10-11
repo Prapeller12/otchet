@@ -1,5 +1,6 @@
 import ctypes
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -56,6 +57,7 @@ def test_native_confirmation_stops_if_secret_is_left_in_input(
     monkeypatch.setattr(window_health, "_click_button", Mock())
     monkeypatch.setattr(window_health, "_wait_for_script", Mock())
     monkeypatch.setattr(window_health, "_fill_form_input", Mock())
+    monkeypatch.setattr(window_health, "_check_dialog_bounds", Mock())
     with pytest.raises(RuntimeError, match="Код не очищен"):
         window_health._confirm_write(window, reject_wrong_code=True)
 
@@ -239,3 +241,43 @@ def test_hint_exercise_parks_native_pointer_before_synthetic_events(
     with pytest.raises(RuntimeError, match="отсутствует пояснение"):
         window_health._exercise_readonly_hints(window, PortablePaths(tmp_path), 0)
     assert events == ["park", "evaluate"]
+
+
+@pytest.mark.parametrize(
+    "check, failure",
+    [
+        (window_health._check_work_area_bounds, "таблица перекрыта строкой состояния"),
+        (window_health._check_work_area_bounds, "страница шире рабочей области"),
+        (window_health._check_dialog_bounds, "диалог выходит за рабочую область"),
+        (window_health._check_dialog_bounds, "действия диалога обрезаны"),
+    ],
+)
+def test_native_geometry_failure_is_reported(check: Callable[[Mock], None], failure: str) -> None:
+    window = Mock()
+    window.evaluate_js.return_value = [failure]
+    with pytest.raises(RuntimeError, match=failure):
+        check(window)
+
+
+def test_native_geometry_accepts_an_empty_violation_list() -> None:
+    window = Mock()
+    window.evaluate_js.return_value = []
+    window_health._check_work_area_bounds(window)
+    window_health._check_dialog_bounds(window)
+
+
+def test_last_cell_failure_restores_original_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+    window = Mock()
+    window.evaluate_js.side_effect = [{"row": "0", "column": "2"}, True, None, False, None]
+    monkeypatch.setattr(window_health, "_settle_window_paint", Mock())
+    with pytest.raises(RuntimeError, match="Последняя числовая ячейка недоступна"):
+        window_health._check_last_report_cells(window)
+    assert "position.row" in window.evaluate_js.call_args.args[0]
+
+
+def test_last_cell_checks_skip_absent_auxiliary_grid(monkeypatch: pytest.MonkeyPatch) -> None:
+    window = Mock()
+    window.evaluate_js.side_effect = [None, True, None, True, False]
+    monkeypatch.setattr(window_health, "_settle_window_paint", Mock())
+    window_health._check_last_report_cells(window)
+    assert window.evaluate_js.call_count == 5
