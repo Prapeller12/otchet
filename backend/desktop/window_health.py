@@ -716,20 +716,39 @@ def _exercise_daily_columns_and_navigation(window: Any) -> None:
           '.report-matrix tbody tr:first-child .daily-summary-value').length === 1;
     })()"""):
         raise RuntimeError("В ежедневном отчёте должен быть один накопительный итог")
-    window.evaluate_js("window.scrollTo(0, document.documentElement.scrollHeight)")
+    original_scroll = window.evaluate_js("""(() => {
+      const viewport = document.querySelector('.report-table-region > .matrix-scroll');
+      if (!viewport) throw new Error('Нет прокрутки таблицы');
+      const original = {top: viewport.scrollTop, left: viewport.scrollLeft};
+      viewport.scrollTop = viewport.scrollHeight;
+      return original;
+    })()""")
+    _settle_window_paint(window)
     _wait_for_script(
         window,
         """(() => {
       const nav = document.querySelector('.workspace-navigation');
       const box = nav?.getBoundingClientRect();
-      return window.scrollY > 0 && box && box.top >= -1 && box.top <= 1 &&
-        box.bottom < innerHeight && [...nav.querySelectorAll('.report-tab')]
-          .every(button => button.getBoundingClientRect().top >= 0);
+      const viewport = document.querySelector('.report-table-region > .matrix-scroll');
+      return window.scrollY === 0 && viewport?.scrollTop > 0 && box && box.top >= 0 &&
+        box.bottom <= document.documentElement.clientHeight &&
+        [...nav.querySelectorAll('.report-tab')].every(button => {
+          const rect = button.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            (rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2);
+          return rect.top >= 0 && rect.bottom <= box.bottom &&
+            !!hit && button.contains(hit);
+        });
     })()""",
-        "Переключатель отчётов уходит за верхнюю границу при прокрутке",
+        "Переключатель отчётов недоступен при прокрутке таблицы",
     )
-    window.evaluate_js("window.scrollTo(0, 0)")
-    _wait_for_script(window, "window.scrollY === 0", "Не восстановлено начало отчёта")
+    window.evaluate_js(f"""(() => {{
+      const original = {json.dumps(original_scroll)};
+      const viewport = document.querySelector('.report-table-region > .matrix-scroll');
+      viewport.scrollTop = original.top;
+      viewport.scrollLeft = original.left;
+    }})()""")
+    _settle_window_paint(window)
 
 
 def _exercise_project_header(window: Any) -> None:
