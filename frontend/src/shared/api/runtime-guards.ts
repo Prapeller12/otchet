@@ -4,6 +4,8 @@ import type {
   ReportMatrixContract,
   SaveReportCellsResponse,
   SaveReportDraftResponse,
+  NetworkStatus,
+  NetworkOperationResult,
 } from "./application-gateway";
 import type { ReportCellContract } from "./report-cell-contract";
 
@@ -11,6 +13,29 @@ type JsonRecord = Record<string, unknown>;
 
 export function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function parseNetworkStatus(value: unknown): NetworkStatus {
+  if (!isRecord(value) || !["local", "network"].includes(String(value.mode))
+    || !["ready", "stale", "unavailable", "outcome_unknown"].includes(String(value.state))
+    || typeof value.snapshot_changed !== "boolean" || typeof value.can_write !== "boolean"
+    || !["loaded_global_revision", "current_global_revision", "message", "pending_operation_id"].every(key => value[key] === null || typeof value[key] === "string")) {
+    throw new Error("Не удалось распознать состояние общего хранилища.");
+  }
+  return value as NetworkStatus;
+}
+
+export function parseNetworkOperationResult(value: unknown, operationId: string): NetworkOperationResult {
+  if (!isRecord(value) || typeof value.found !== "boolean" || value.operation_id !== operationId
+    || !["committed", "not_committed", "unknown"].includes(String(value.data_state))
+    || !["global_revision", "current_global_revision"].every(key => value[key] === null || typeof value[key] === "string")
+    || (!value.found && (value.data_state !== "unknown" || value.result !== null))
+    || (value.found && (!isRecord(value.result) || typeof value.result.ok !== "boolean" || value.data_state === "unknown"
+      || (value.data_state === "committed" && (value.result.ok !== true || !("data" in value.result)))
+      || (value.data_state === "not_committed" && (value.result.ok !== false || !isRecord(value.result.error) || typeof value.result.error.code !== "string" || typeof value.result.error.message !== "string"))))) {
+    throw new Error("Не удалось распознать результат общей записи. Её исход остаётся неизвестным.");
+  }
+  return value as NetworkOperationResult;
 }
 
 function hasString(value: JsonRecord, key: string): boolean {
@@ -67,6 +92,7 @@ export function parseReportMatrix(value: unknown): ReportMatrixContract {
   ) {
     throw new Error("Bridge returned an incomplete report matrix");
   }
+  if ("global_revision" in value && value.global_revision !== null && typeof value.global_revision !== "string") throw new Error("Bridge returned an invalid global revision");
   for (const row of value.rows) {
     if (!isRecord(row) || !Array.isArray(row.cells)) {
       throw new Error("Bridge returned an invalid matrix row");

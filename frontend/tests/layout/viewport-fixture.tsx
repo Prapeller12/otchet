@@ -65,5 +65,11 @@ if (accessFixture) Object.assign(gateway, {
     : { state: "ready", users: [], automatic_open_error: "Синтетическая проверка уведомления открытия: повторите код при следующем запуске." },
   listRecoveryBackups: async () => ({ backups: [] }),
 });
+if (new URLSearchParams(location.search).has("network")) Object.assign(gateway, {
+  getAccessStatus: async () => ({ state: "ready", users: [] }),
+  getNetworkStatus: async () => ({ mode: "network", state: "ready", loaded_global_revision: "synthetic:g1", current_global_revision: "synthetic:g1", snapshot_changed: false, can_write: true, message: null, pending_operation_id: null }),
+  refreshNetworkData: async () => { throw new Error("Синтетическая проверка сетевой ошибки: общая папка временно недоступна; открытая таблица и введённые значения сохраняются. ".repeat(8)); },
+  getNetworkOperationResult: async (operationId: string) => ({ found: false, operation_id: operationId, data_state: "unknown", result: null, global_revision: null, current_global_revision: "synthetic:g1" }),
+});
 localStorage.setItem("reporting-onboarding-v1", "done");
 createRoot(document.getElementById("root")!).render(<StrictMode><ApplicationGatewayProvider gateway={gateway}><App /></ApplicationGatewayProvider></StrictMode>);

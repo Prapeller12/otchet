@@ -73,3 +73,17 @@
 | Порядок строк и периодов сохраняется | AGENTS.md 4.2, 5 | прежние определения форм; frontend-регрессия и сравнение строк |
 | Закрепления не закрывают числа | сообщение владельца; AGENTS.md 5.4 | доступный префикс идентификаторов по ширине; проверка последних main/aux ячеек и сохранённых ширин |
 | Windows 10/11 при фактическом DPI | AGENTS.md 18 | alpha-dev35; отдельная проверка, результат не подменяется CI |
+
+## Дополнение dev.36 — серверная схема указанной беседы
+
+| Требование | Источник | Реализация и доказательство |
+|---|---|---|
+| EXE из общей папки, клиент локально | прямое указание 11.10.2026; ADR-0025 | native bootstrap; Windows UNC/mapped/profile smoke |
+| SQLite никогда не открывается через SMB | AGENTS.md 4.1; ADR-0025 | локальный SQLCipher + immutable encrypted generations |
+| CAS до аудита, полный откат, UNKNOWN | единый черновик dev34; ADR-0025 | SnapshotCoordinator; двухклиентные fault/replay тесты |
+| Общая версия стабильна до явного обновления | ADR-0025 | matrix.global_revision, draft baseline, refresh guards |
+| Источник импорта доступен другому клиенту | ADR-0025; AGENTS.md 13 | migration0018 encrypted BLOB + typed repository, hash checks |
+| Receipt атомарен с эффектом | ADR-0025 | migration0019, durable owner/request identity без PIN digest |
+| Прежние роли, подписи и формы | AGENTS.md 4.2/15 | актуальная авторизация перед записью, полная регрессия |
+| Доказательства конкретной сборки | AGENTS.md 19/20 | manifest commit, CI per OS, ZIP checksums |
+| Целевая эксплуатация | AGENTS.md 18 | физические Windows10/11/SMB/DPAPI/10 users NOT_RUN |

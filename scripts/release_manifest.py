@@ -18,6 +18,7 @@ MUTABLE_PREFIXES = (
     "exports/",
     "imports/",
     "temp/",
+    "shared/",
 )
 
 
@@ -34,7 +35,9 @@ def _sha256(path: Path) -> str:
 
 
 def _is_mutable(relative_path: str) -> bool:
-    return any(relative_path.startswith(prefix) for prefix in MUTABLE_PREFIXES)
+    return relative_path == "network.local.json" or any(
+        relative_path.startswith(prefix) for prefix in MUTABLE_PREFIXES
+    )
 
 
 def _immutable_files(root: Path) -> dict[str, Path]:

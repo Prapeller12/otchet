@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from collections.abc import Callable
@@ -17,6 +18,7 @@ from backend.repositories.excel_imports import (
     ImportClassification,
     ImportIssueDraft,
     ImportRowDraft,
+    ImportWorkbookSource,
 )
 from backend.repositories.report_facts import ReportCellUnitOfWork
 
@@ -105,6 +107,8 @@ class SqliteExcelImportRepository:
                     for issue in draft.issues
                 ],
             )
+            if draft.workbook_source is not None:
+                _archive_workbook_source(connection, draft.id, draft.workbook_source)
             _audit(
                 connection,
                 draft.id,
@@ -136,6 +140,42 @@ class SqliteExcelImportRepository:
         connection = connect_sqlite(self._database_path)
         try:
             return _read_batch(connection, batch_id)
+        finally:
+            connection.close()
+
+    def get_workbook_source(self, batch_id: str) -> ImportWorkbookSource | None:
+        connection = connect_sqlite(self._database_path)
+        try:
+            row = connection.execute(
+                """
+                SELECT source.source_sha256, source.workbook_bytes
+                FROM import_batch_sources AS binding
+                JOIN import_workbook_sources AS source
+                    ON source.source_sha256 = binding.source_sha256
+                WHERE binding.batch_id = ?
+                """,
+                (batch_id,),
+            ).fetchone()
+            return None if row is None else ImportWorkbookSource(str(row[0]), bytes(row[1]))
+        finally:
+            connection.close()
+
+    def archive_workbook_source(self, batch_id: str, source: ImportWorkbookSource) -> None:
+        """Backfill a legacy local source only after application hash verification."""
+        connection = connect_sqlite(self._database_path)
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            if _archive_workbook_source(connection, batch_id, source):
+                _audit(
+                    connection,
+                    batch_id,
+                    "ARCHIVE_EXCEL_SOURCE",
+                    {"original_source_sha256": source.sha256, "byte_count": len(source.content)},
+                )
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
         finally:
             connection.close()
 
@@ -175,6 +215,50 @@ class SqliteExcelImportRepository:
             if batch is None:
                 raise sqlite3.DatabaseError("committed import batch could not be read")
             return batch
+
+
+def _archive_workbook_source(
+    connection: sqlite3.Connection, batch_id: str, source: ImportWorkbookSource
+) -> bool:
+    if not isinstance(source.content, bytes) or not 0 < len(source.content) <= 50 * 1024 * 1024:
+        raise ValueError("Размер исходной книги должен быть от 1 байта до 50 МБ")
+    if hashlib.sha256(source.content).hexdigest() != source.sha256:
+        raise ValueError("Контрольная сумма исходной книги не совпала")
+    batch = _read_batch(connection, batch_id)
+    if batch is None:
+        raise ValueError("Пакет импорта не найден")
+    expected = str(batch.metadata.get("original_source_sha256", batch.source_sha256))
+    if source.sha256 != expected:
+        raise ValueError("Исходная книга не соответствует сохранённому пакету")
+    existing = connection.execute(
+        "SELECT source_sha256 FROM import_batch_sources WHERE batch_id = ?", (batch_id,)
+    ).fetchone()
+    if existing is not None:
+        if str(existing[0]) != source.sha256:
+            raise ValueError("Источник сохранённого пакета нельзя заменить")
+    stored = connection.execute(
+        "SELECT workbook_bytes FROM import_workbook_sources WHERE source_sha256 = ?",
+        (source.sha256,),
+    ).fetchone()
+    if stored is None:
+        if existing is not None:
+            raise ValueError("Сохранённый источник пакета отсутствует")
+        connection.execute(
+            """
+            INSERT INTO import_workbook_sources (source_sha256, workbook_bytes, byte_count)
+            VALUES (?, ?, ?)
+            """,
+            (source.sha256, source.content, len(source.content)),
+        )
+    elif bytes(stored[0]) != source.content:
+        raise ValueError("Сохранённый источник с этой контрольной суммой повреждён")
+    if existing is not None:
+        return False
+    connection.execute(
+        "INSERT INTO import_batch_sources (batch_id, source_sha256) VALUES (?, ?)",
+        (batch_id, source.sha256),
+    )
+    return True
 
 
 def _read_batch(connection: sqlite3.Connection, batch_id: str) -> ImportBatch | None:

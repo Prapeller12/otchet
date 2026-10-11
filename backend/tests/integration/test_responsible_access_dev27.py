@@ -109,7 +109,7 @@ def test_encrypted_dev26_upgrade_preserves_audit_and_backs_up_vault(tmp_path: Pa
             == previous
         )
         assert connection.execute("SELECT max(version) FROM schema_migrations").fetchone() == (
-            "0017",
+            "0019",
         )
         with pytest.raises(sqlite3.IntegrityError):
             connection.execute("DELETE FROM report_access_events")

@@ -6,6 +6,7 @@ import argparse
 import ctypes
 import faulthandler
 import importlib
+import json
 import logging
 import mimetypes
 import os
@@ -112,7 +113,13 @@ def _initial_window_geometry() -> dict[str, Any]:
 
 
 def _run_window(
-    paths: PortablePaths, *, ui_self_test: bool = False, ui_reopen_test: bool = False
+    paths: PortablePaths,
+    *,
+    ui_self_test: bool = False,
+    ui_reopen_test: bool = False,
+    snapshot_coordinator: Any = None,
+    ready_file: Path | None = None,
+    ready_token: str | None = None,
 ) -> None:
     # Windows registry MIME associations must not turn JS modules into text/plain.
     mimetypes.init()
@@ -128,7 +135,8 @@ def _run_window(
             inbox_directory=paths.imports_inbox,
             backups_directory=paths.backups,
             application_version=_version(paths),
-            preferences_path=paths.config / "ui-preferences.json",
+            preferences_path=paths.preferences_path,
+            snapshot_coordinator=snapshot_coordinator,
         )
 
     bridge = new_bridge()
@@ -175,6 +183,18 @@ def _run_window(
             return Path(selected)
         return Path(selected[0]) if selected else None
 
+    def open_local_database_file() -> Path | None:
+        selected = window.create_file_dialog(
+            webview.FileDialog.OPEN,
+            allow_multiple=False,
+            file_types=("Локальная база отчётности (*.sqlite3;*.db)",),
+        )
+        if selected is None:
+            return None
+        if isinstance(selected, (str, Path)):
+            return Path(selected)
+        return Path(selected[0]) if selected else None
+
     def save_excel_file(suggested_name: str) -> Path | None:
         selected = window.create_file_dialog(
             webview.FileDialog.SAVE,
@@ -212,6 +232,7 @@ def _run_window(
         return Path(selected) if isinstance(selected, (str, Path)) else Path(selected[0])
 
     bridge._configure_recovery_dialog(select_recovery_parent)
+    bridge._configure_local_store_dialog(open_local_database_file)
     bridge._configure_pdf_dialog(save_pdf_file)
     bridge._configure_excel_dialogs(
         open_file=open_excel_file,
@@ -220,6 +241,34 @@ def _run_window(
     failures: list[str] = []
 
     def check_window() -> None:
+        if ready_file is not None:
+            # Wait for a rendered React root, rather than merely starting Python.
+            import time
+
+            for _ in range(900):
+                try:
+                    if window.evaluate_js(
+                        "Boolean(window.pywebview?.api && (document.querySelector('.access-page')"
+                        " || document.querySelector('.report-matrix')))"
+                    ):
+                        network = bridge.get_network_status()
+                        network_data = network.get("data", {})
+                        recovering = (
+                            network.get("ok")
+                            and network_data.get("state") == "outcome_unknown"
+                            and bool(network_data.get("pending_operation_id"))
+                        )
+                        if not recovering and not bridge.get_access_status().get("ok"):
+                            raise RuntimeError("Не удалось открыть общие данные")
+                        ready_file.write_text(ready_token or "", encoding="utf-8")
+                        break
+                except Exception:
+                    pass
+                time.sleep(0.1)
+            else:
+                failures.append("Не открылся интерфейс локального сетевого клиента")
+                window.destroy()
+                return
         monitor_window(
             window,
             paths,
@@ -258,14 +307,56 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--self-test-report", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--root", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--network-share-root", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--network-client-data", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--network-lock-timeout", type=int, default=15, help=argparse.SUPPRESS)
+    parser.add_argument("--network-ready-file", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--network-ready-token", help=argparse.SUPPRESS)
+    parser.add_argument("--network-self-test", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--network-lock-probe", type=Path, help=argparse.SUPPRESS)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     _disable_technical_logging()
     arguments = _build_parser().parse_args(argv)
-    paths = PortablePaths.discover(arguments.root)
+    paths = PortablePaths.discover(arguments.root, writable_root=arguments.network_client_data)
     try:
+        if arguments.network_lock_probe is not None:
+            if arguments.self_test_report is None:
+                raise PortableLayoutError("Network lock probe requires a report")
+            from backend.desktop.network_self_test import run_network_lock_probe
+
+            run_network_lock_probe(arguments.network_lock_probe, arguments.self_test_report)
+            return 0
+        if bool(arguments.network_share_root) != bool(arguments.network_client_data):
+            raise PortableLayoutError(
+                "Network mode requires a shared source and local client state"
+            )
+        if arguments.network_share_root and (arguments.ui_self_test or arguments.ui_reopen_test):
+            raise PortableLayoutError("Local UI test fixtures cannot run against a shared store")
+        if arguments.network_ready_file is not None and (
+            not arguments.network_ready_token
+            or not arguments.network_share_root
+            or not arguments.network_ready_file.resolve().is_relative_to(paths.state_root)
+        ):
+            raise PortableLayoutError("Invalid network readiness marker")
+        if arguments.network_self_test:
+            if arguments.network_share_root is None or arguments.self_test_report is None:
+                raise PortableLayoutError(
+                    "Network self-test requires a disposable shared directory and report"
+                )
+            from backend.desktop.network_self_test import run_network_self_test
+
+            paths.validate_release_layout()
+            paths.prepare_writable_directories()
+            run_network_self_test(
+                paths,
+                arguments.network_share_root,
+                arguments.self_test_report,
+                lock_timeout_seconds=arguments.network_lock_timeout,
+            )
+            return 0
         if arguments.self_test:
             _self_test(paths)
             if arguments.self_test_report is not None:
@@ -273,10 +364,31 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
         paths.validate_release_layout(require_frontend=True)
         paths.prepare_writable_directories()
-        lock = SingleInstanceLock(paths.root, paths.lock_file)
+        lock = SingleInstanceLock(paths.state_root, paths.lock_file)
         with lock:
+            coordinator = None
+            if arguments.network_share_root:
+                from backend.infrastructure.network_snapshots import (
+                    NetworkSnapshotError,
+                    SnapshotCoordinator,
+                )
+
+                coordinator = SnapshotCoordinator(
+                    arguments.network_share_root,
+                    paths.database,
+                    lock_timeout_seconds=arguments.network_lock_timeout,
+                )
+                try:
+                    coordinator.prepare()
+                except NetworkSnapshotError as error:
+                    raise PortableLayoutError(str(error)) from error
             _run_window(
-                paths, ui_self_test=arguments.ui_self_test, ui_reopen_test=arguments.ui_reopen_test
+                paths,
+                ui_self_test=arguments.ui_self_test,
+                ui_reopen_test=arguments.ui_reopen_test,
+                snapshot_coordinator=coordinator,
+                ready_file=arguments.network_ready_file,
+                ready_token=arguments.network_ready_token,
             )
         if (
             arguments.ui_self_test or arguments.ui_reopen_test
@@ -289,10 +401,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (ImportError, OSError, PortableLayoutError, RuntimeError, sqlite3.Error) as exc:
         if arguments.self_test_report is not None:
             arguments.self_test_report.parent.mkdir(parents=True, exist_ok=True)
-            arguments.self_test_report.write_text(
-                f"{type(exc).__name__}: {exc}\n", encoding="utf-8"
-            )
-        if not (arguments.ui_self_test or arguments.ui_reopen_test):
+            if arguments.network_self_test or arguments.network_lock_probe is not None:
+                try:
+                    existing = json.loads(arguments.self_test_report.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    existing = None
+                if not isinstance(existing, dict) or existing.get("ok") is not False:
+                    arguments.self_test_report.write_text(
+                        json.dumps(
+                            {
+                                "ok": False,
+                                "error": {"type": type(exc).__name__, "message": str(exc)},
+                            },
+                            ensure_ascii=False,
+                        ),
+                        encoding="utf-8",
+                    )
+            else:
+                arguments.self_test_report.write_text(
+                    f"{type(exc).__name__}: {exc}\n", encoding="utf-8"
+                )
+        if not (
+            arguments.ui_self_test
+            or arguments.ui_reopen_test
+            or arguments.network_self_test
+            or arguments.network_lock_probe is not None
+        ):
             _show_error(f"Программа не может быть запущена:\n{exc}")
         return 1
 

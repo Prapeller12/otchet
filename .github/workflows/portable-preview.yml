@@ -15,6 +15,7 @@ on:
       - codex/dev33-recovery-excel-integration
       - codex/ui-drafts-blank-2027-dev34
       - codex/dev35-viewport-layout
+      - codex/dev36-network-share
   workflow_dispatch:
 
 permissions:
@@ -22,8 +23,12 @@ permissions:
 
 jobs:
   build-preview:
-    runs-on: windows-latest
-    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -64,6 +69,12 @@ jobs:
           ./scripts/build_windows.ps1
           -WebView2RuntimePath $env:REPORTING_WEBVIEW2
           -OutputPath ./dist/portable
+
+      - name: Run frontend contracts and tests before release checks
+        run: |
+          npm run typecheck
+          node frontend/tests/contracts/report-cell-contract.test.mjs
+          npm run test:frontend
 
       - name: Run packaged self-test
         shell: pwsh
@@ -128,40 +139,64 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: window-evidence
+          name: window-evidence-${{ matrix.os }}
           path: dist/portable/window-*.png
+          if-no-files-found: ignore
+
+      - name: Test native network bootstrap and encrypted snapshots over SMB
+        shell: pwsh
+        run: |
+          $networkRoot = Join-Path $env:RUNNER_TEMP "Сетевой тест отчётности"
+          $zip = Get-ChildItem ./dist/portable/*.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath $networkRoot
+          ./scripts/test_network_portable.ps1 `
+            -ReleaseDirectory (Join-Path $networkRoot "ReportingSystem") `
+            -EvidenceDirectory ./dist/network-evidence
+
+      - name: Upload network evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: network-evidence-${{ matrix.os }}
+          path: dist/network-evidence/*
           if-no-files-found: ignore
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ReportingSystem-${{ github.sha }}-windows-x64-test
+          name: ReportingSystem-${{ github.sha }}-${{ matrix.os }}-test
           path: |
             dist/portable/*.zip
             dist/portable/*.sha256
           if-no-files-found: error
           retention-days: 14
 
+  publish-preview:
+    needs: build-preview
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Download verified Windows Server 2025 package
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ReportingSystem-${{ github.sha }}-windows-latest-test
+          path: dist/portable
+
       - name: Publish GitHub prerelease
-        shell: pwsh
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $version = (Get-Content ./VERSION -Raw).Trim()
-          $tag = "test-v$version-$($env:GITHUB_SHA.Substring(0, 12))"
-          $assetPaths = @(
-            Get-ChildItem ./dist/portable -File |
-              Where-Object { $_.Extension -in ".zip", ".sha256" } |
-              ForEach-Object { $_.FullName }
-          )
-          if ($assetPaths.Count -ne 2) { throw "Expected the ZIP and its SHA-256 file." }
-          gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            throw "Immutable release $tag already exists; assets cannot be replaced."
-          } else {
-            gh release create $tag @assetPaths `
-              --target $env:GITHUB_SHA `
-              --prerelease `
-              --title "Reporting System $version test build" `
-              --notes-file docs/release/notes-dev35.md
-          }
+          version=$(tr -d '\r\n' < VERSION)
+          tag="test-v${version}-${GITHUB_SHA:0:12}"
+          assets=(dist/portable/*.zip dist/portable/*.sha256)
+          test "${#assets[@]}" -eq 2
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Immutable release already exists; cannot replace assets."
+            exit 1
+          fi
+          gh release create "$tag" "${assets[@]}" --target "$GITHUB_SHA" --prerelease \
+            --title "Reporting System $version test build" --notes-file docs/release/notes-dev36.md

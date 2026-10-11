@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+import shutil
 import sqlite3
+import tempfile
 import threading
+from collections.abc import Callable
 from contextlib import closing
 from datetime import UTC, datetime
+from functools import wraps
 from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
@@ -27,12 +34,20 @@ from backend.desktop.database_bootstrap import (
     verify_backup,
 )
 from backend.infrastructure.access_vault import AccessVault
+from backend.infrastructure.database.encrypted_sqlite import (
+    configure_database_key,
+    forget_database_key,
+    has_database_key,
+    is_encrypted_database,
+)
 from backend.infrastructure.database.migrator import MigrationError, connect_sqlite
 from backend.infrastructure.database.sqlite_report_signers import (
     SqliteReportSignersRepository,
+    access_role,
     load_signer,
 )
-from backend.infrastructure.report_crypto import unlock_key
+from backend.infrastructure.network_snapshots import NetworkSnapshotError, SnapshotCoordinator
+from backend.infrastructure.report_crypto import decode, unlock_key
 from backend.infrastructure.ui_preferences import UiPreferences
 from backend.infrastructure.windows_data_protection import DeviceProtector
 
@@ -58,6 +73,18 @@ def _text(payload: dict[str, Any], key: str) -> str:
     return value
 
 
+def _network_boundary(function: Callable[..., dict[str, Any]]) -> Callable[..., dict[str, Any]]:
+    @wraps(function)
+    def wrapped(self: SecureDesktopBridge, payload: object = None) -> dict[str, Any]:
+        if self._snapshot_coordinator is None or self._network_running:
+            return function(self, payload)
+        return self._network_execute(
+            function.__name__, payload, lambda request: function(self, request)
+        )
+
+    return wrapped
+
+
 class SecureDesktopBridge:
     def __init__(
         self,
@@ -70,6 +97,7 @@ class SecureDesktopBridge:
         application_version: str = "development",
         preferences_path: str | Path | None = None,
         device_protector: DeviceProtector | Literal["windows"] | None = "windows",
+        snapshot_coordinator: SnapshotCoordinator | None = None,
     ) -> None:
         self._ui_preferences = UiPreferences(preferences_path)
         self._database = Path(database_path)
@@ -89,6 +117,507 @@ class SecureDesktopBridge:
         self._dialogs: dict[str, Any] = {}
         self._automatic_open_attempted = False
         self._automatic_open_error: str | None = None
+        self._snapshot_coordinator = snapshot_coordinator
+        self._network_running = False
+        self._network_recovery_key: bytes | None = None
+        if snapshot_coordinator is not None:
+            if snapshot_coordinator.database_path.resolve() != self._database.resolve():
+                raise ValueError("Координатор относится к другой локальной базе")
+            if not snapshot_coordinator.prepared:
+                snapshot_coordinator.prepare()
+
+    def _network_envelope(self, result: dict[str, Any], method: str = "") -> dict[str, Any]:
+        coordinator = self._snapshot_coordinator
+        if coordinator is not None:
+            result["network"] = coordinator.status()
+            if method == "get_report_matrix" and result.get("ok"):
+                result["data"]["global_revision"] = coordinator.loaded_global_revision
+        return result
+
+    def _network_authorize(self, database: Path, method: str, request: dict[str, Any]) -> str:
+        if method == "get_access_status":
+            return str(request.get("signer_id", "system"))
+        if method == "unlock_access" and database == self._database:
+            # Lifecycle recovery belongs inside the checkpointed operation. Only
+            # read-only authoritative receipt replay is pre-authenticated here.
+            return _text(request, "signer_id")
+        if method == "import_local_store":
+            auth = _request(request.get("authorization"))
+            pin = _text(auth, "pin")
+            if not database.exists():
+                return str(auth.get("signer_id", "import-admin"))
+            vault = AccessVault(database, self._vault.backups, device_protector=None)
+            admins = [p for p in vault.users() if p["role"] == "admin"]
+            if len(admins) != 1 or (auth.get("signer_id") and auth["signer_id"] != admins[0]["id"]):
+                raise ValueError("Нужен действующий администратор")
+            import_admin_id = str(admins[0]["id"])
+            if not has_database_key(database):
+                vault.unlock(import_admin_id, pin)
+            self._check_network_schema(database, allow_pending=True)
+            return str(
+                SqliteReportSignersRepository(str(database)).authorize(
+                    import_admin_id, pin, admin_only=True
+                )["id"]
+            )
+        if method == "setup_access":
+            if not database.exists():
+                return "setup-admin"
+            vault = AccessVault(database, self._vault.backups, device_protector=None)
+            if vault.pending_setup():
+                return str(request.get("signer_id", "setup-admin"))
+        if method == "create_report_signer":
+            if self._administrator is None:
+                raise ValueError("Сначала откройте раздел администратора своим кодом")
+            self._check_network_schema(database)
+            with closing(connect_sqlite(database)) as connection:
+                if access_role(connection, self._administrator["id"]) != "admin":
+                    raise ValueError("Нужен действующий администратор")
+            return str(self._administrator["id"])
+        auth = (
+            request
+            if method in {"setup_access", "authenticate_access", "unlock_access"}
+            else _request(request.get("authorization"))
+        )
+        signer_id = auth.get("signer_id")
+        coordinator = self._snapshot_coordinator
+        if (
+            method == "get_network_operation_result"
+            and not signer_id
+            and coordinator is not None
+            and coordinator.pending_operation_id == request.get("operation_id")
+            and coordinator.pending_command in {"setup_access", "import_local_store"}
+        ):
+            admins = [
+                p
+                for p in AccessVault(database, self._vault.backups, device_protector=None).users()
+                if p["role"] == "admin"
+            ]
+            if len(admins) != 1:
+                raise ValueError("Не удалось определить действующего администратора")
+            signer_id = admins[0]["id"]
+        if method == "setup_access" and not signer_id:
+            # The first setup request predates its permanent signing identity.
+            users = AccessVault(database, self._vault.backups, device_protector=None).users()
+            signer_id = next((p["id"] for p in users if p["role"] == "admin"), "setup-admin")
+        pin = _text(auth, "pin")
+        if not has_database_key(database):
+            temporary_vault = AccessVault(database, self._vault.backups, device_protector=None)
+            if method == "get_network_operation_result" and not any(
+                p["id"] == signer_id for p in temporary_vault.users()
+            ):
+                raise NetworkSnapshotError(
+                    "NETWORK_RECOVERY_UNLOCK_REQUIRED",
+                    "Сначала откройте проверенную копию кодом администратора или проверяющего, "
+                    "затем проверьте результат кодом автора.",
+                )
+            temporary_vault.unlock(str(signer_id), pin)
+        self._check_network_schema(
+            database,
+            allow_pending=method
+            in {"setup_access", "unlock_access", "get_network_operation_result"},
+        )
+        repository = SqliteReportSignersRepository(str(database))
+        if method in {"setup_access", "authenticate_access", "unlock_access"}:
+            profile = repository.authenticate(str(signer_id), pin)
+        else:
+            admin_only = method in {"enroll_access", "manage_report_signer"}
+            if method not in {"get_network_operation_result", "get_report_draft_save_result"}:
+                admin_only = admin_only or classify_permission(method, request) == "admin"
+            profile = repository.authorize(str(signer_id), pin, admin_only=admin_only)
+        return str(profile["id"])
+
+    def _check_network_schema(self, database: Path, *, allow_pending: bool = False) -> None:
+        migrations = {
+            p.name[:4]: hashlib.sha256(p.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+            for p in sorted(Path(self._kwargs["migrations_directory"]).glob("*.sql"))
+        }
+        with closing(connect_sqlite(database)) as connection:
+            rows = connection.execute(
+                "SELECT version,checksum FROM schema_migrations ORDER BY version"
+            ).fetchall()
+        expected = list(migrations)
+        if (
+            [r[0] for r in rows] != expected[: len(rows)]
+            or any(migrations.get(version) != checksum for version, checksum in rows)
+            or (not allow_pending and len(rows) != len(migrations))
+        ):
+            raise NetworkSnapshotError(
+                "NETWORK_CLIENT_UPGRADE_REQUIRED",
+                "Версия клиента несовместима с общими данными. Откройте актуальную сборку.",
+            )
+
+    def _network_read_key(self) -> bytes | None:
+        key = self._vault._key or self._network_recovery_key
+        if key is not None:
+            return key
+        path, protector = self._vault.device_path, self._vault._device_protector
+        if protector is None or not path.exists():
+            return None
+        if path.is_symlink() or path.stat().st_size > 131072:
+            raise ValueError("Повреждён файл автоматического открытия")
+        document = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(document, dict)
+            or document.get("version") != 1
+            or document.get("protection") != "windows-dpapi-current-user"
+            or not isinstance(document.get("key"), str)
+        ):
+            raise ValueError("Повреждён файл автоматического открытия")
+        key = protector.unprotect(decode(document["key"]))
+        if len(key) != 32:
+            raise ValueError("Некорректный ключ автоматического открытия")
+        return key
+
+    def get_network_recovery_users(self, payload: object = None) -> dict[str, Any]:
+        coordinator = self._snapshot_coordinator
+        if coordinator is None:
+            return _success({"users": []})
+        with self._mutex:
+            try:
+                if payload not in (None, {}):
+                    raise ValueError("Некорректный запрос")
+                return self._network_envelope(_success({"users": coordinator.recovery_users()}))
+            except NetworkSnapshotError as error:
+                return self._network_envelope(
+                    {"ok": False, "error": {"code": error.code, "message": str(error)}}
+                )
+            except (OSError, ValueError, KeyError) as error:
+                return self._network_envelope(_failure(error))
+
+    def unlock_network_recovery(self, payload: object) -> dict[str, Any]:
+        coordinator = self._snapshot_coordinator
+        if coordinator is None:
+            return _failure(ValueError("Сетевое восстановление недоступно"))
+        with self._mutex:
+            try:
+                request = _request(payload)
+                auth = _request(request.get("authorization"))
+                signer_id, pin = _text(auth, "signer_id"), _text(auth, "pin")
+
+                def open_copy(database: Path) -> bytes:
+                    vault = AccessVault(database, self._vault.backups, device_protector=None)
+                    vault.unlock(signer_id, pin)
+                    profile = SqliteReportSignersRepository(str(database)).authenticate(
+                        signer_id, pin
+                    )
+                    if profile["role"] not in {"admin", "reviewer"}:
+                        raise ValueError("Базу открывает проверяющий или администратор")
+                    self._check_network_schema(database, allow_pending=True)
+                    assert vault._key is not None
+                    return vault._key
+
+                self._network_recovery_key = coordinator.read_current(open_copy)
+                return self._network_envelope(_success({"unlocked": True}))
+            except NetworkSnapshotError as error:
+                return self._network_envelope(
+                    {"ok": False, "error": {"code": error.code, "message": str(error)}}
+                )
+            except (OSError, ValueError, KeyError, sqlite3.Error) as error:
+                return self._network_envelope(_failure(error))
+
+    def _network_execute(
+        self,
+        method: str,
+        payload: object,
+        function: Callable[[dict[str, Any]], dict[str, Any]],
+    ) -> dict[str, Any]:
+        coordinator = self._snapshot_coordinator
+        assert coordinator is not None
+        with self._mutex:
+            artifact_directory: tempfile.TemporaryDirectory[str] | None = None
+            artifact_destination: Path | None = None
+            artifact_staged: Path | None = None
+            dialog_application = self._application
+            original_pdf_dialog = None
+            original_excel_dialog = None
+            try:
+                request = _request(payload) if payload is not None else {}
+                if method == "import_local_store" and not request.get("source_database_path"):
+                    if (
+                        coordinator.pending_operation_id == request.get("operation_id")
+                        and coordinator.pending_source_database_path
+                    ):
+                        request["source_database_path"] = coordinator.pending_source_database_path
+                    else:
+                        dialog = self._dialogs.get("local_store")
+                        if dialog is None:
+                            raise ValueError("Выбор исходной базы доступен в desktop-версии")
+                        source = dialog()
+                        if source is None:
+                            return self._network_envelope(_success({"cancelled": True}), method)
+                        request["source_database_path"] = str(source)
+                maintenance = method in {"setup_access", "unlock_access", "get_access_status"}
+                shared_write = maintenance or method in {
+                    "enroll_access",
+                    "create_report_signer",
+                    "manage_report_signer",
+                    "import_local_store",
+                }
+                if not shared_write and method not in {"authenticate_access", "end_administration"}:
+                    shared_write = classify_permission(method, request) is not None
+                if method == "get_access_status" and (
+                    self._automatic_open_attempted or coordinator.pending_operation_id is not None
+                ):
+                    shared_write = False
+                if not shared_write and method != "authenticate_access":
+                    clean = {
+                        k: v
+                        for k, v in request.items()
+                        if k not in {"base_global_revision", "operation_id"}
+                    }
+                    self._network_running = True
+                    try:
+                        return self._network_envelope(function(clean), method)
+                    finally:
+                        self._network_running = False
+                # Native interaction does not hold the shared writer lock. PDF bytes
+                # remain local staging until the authoritative publication is ACKed.
+                if dialog_application is not None and method == "export_pdf":
+                    self._network_authorize(self._database, method, request)
+                    original_pdf_dialog = dialog_application._save_pdf_file
+                    if original_pdf_dialog is None:
+                        raise ValueError("Сохранение PDF доступно в desktop-версии")
+                    snapshot = dialog_application._monthly_snapshot(request)
+                    artifact_destination = original_pdf_dialog(
+                        f"{snapshot['report_type'].lower()}-{snapshot['period']}.pdf"
+                    )
+                    if artifact_destination is not None:
+                        if artifact_destination.suffix.lower() != ".pdf":
+                            raise ValueError("Выберите файл с расширением .pdf")
+                        artifact_directory = tempfile.TemporaryDirectory(
+                            prefix="network-pdf-",
+                            dir=self._database.parent,
+                            ignore_cleanup_errors=True,
+                        )
+                        artifact_staged = Path(artifact_directory.name) / "report.pdf"
+                    dialog_application._save_pdf_file = lambda _name: artifact_staged
+                if (
+                    dialog_application is not None
+                    and method == "validate_import"
+                    and not request.get("batch_id")
+                ):
+                    self._network_authorize(self._database, method, request)
+                    original_excel_dialog = dialog_application._open_excel_file
+                    if original_excel_dialog is not None:
+                        selected = original_excel_dialog()
+                        dialog_application._open_excel_file = lambda: selected
+                memory = (
+                    self._application,
+                    self._current_user,
+                    self._administrator,
+                    self._vault._key,
+                    self._automatic_open_attempted,
+                    self._automatic_open_error,
+                )
+
+                def restore_memory() -> None:
+                    (
+                        self._application,
+                        self._current_user,
+                        self._administrator,
+                        old_key,
+                        self._automatic_open_attempted,
+                        self._automatic_open_error,
+                    ) = memory
+                    self._vault._key = old_key
+                    if old_key is None:
+                        forget_database_key(self._database)
+                    else:
+                        configure_database_key(self._database, old_key)
+
+                def execute(clean: dict[str, Any]) -> dict[str, Any]:
+                    self._network_running = True
+                    try:
+                        result = function(clean)
+                        if method == "export_pdf" and result.get("ok") and artifact_destination:
+                            result["data"].update(
+                                file_path=str(artifact_destination),
+                                file_name=artifact_destination.name,
+                                export_state="pending",
+                            )
+                        return result
+                    finally:
+                        self._network_running = False
+
+                result = coordinator.execute(
+                    method,
+                    request,
+                    execute,
+                    key=lambda: self._vault._key,
+                    restore_memory=restore_memory,
+                    authorize=lambda db: self._network_authorize(db, method, request),
+                    maintenance=maintenance or method == "authenticate_access",
+                )
+                if method == "export_pdf" and result.get("ok") and artifact_destination:
+                    if artifact_staged is not None and artifact_staged.exists():
+                        pending_artifact = artifact_destination.with_name(
+                            "." + uuid4().hex + ".pdf.pending"
+                        )
+                        try:
+                            shutil.copyfile(artifact_staged, pending_artifact)
+                            with pending_artifact.open("r+b") as stream:
+                                os.fsync(stream.fileno())
+                            os.replace(pending_artifact, artifact_destination)
+                            result["data"]["export_state"] = "complete"
+                        except OSError:
+                            result["data"]["export_state"] = "warning"
+                            result["data"]["export_warning"] = (
+                                "Отчёт подтверждён на сервере, но файл PDF не сохранён."
+                            )
+                        finally:
+                            # Cleanup cannot turn an acknowledged server commit
+                            # into an unqualified command failure.
+                            try:
+                                pending_artifact.unlink(missing_ok=True)
+                            except OSError:
+                                pass
+                    else:
+                        result["data"]["export_state"] = "warning"
+                        result["data"]["export_warning"] = (
+                            "Подтверждение найдено; копию PDF необходимо сохранить отдельно."
+                        )
+                return self._network_envelope(result, method)
+            except NetworkSnapshotError as error:
+                result = {"ok": False, "error": {"code": error.code, "message": str(error)}}
+                if error.operation_id:
+                    result["error"]["operation_id"] = error.operation_id
+                return self._network_envelope(result, method)
+            except (OSError, ValueError, KeyError, sqlite3.Error, MigrationError) as error:
+                return self._network_envelope(_failure(error), method)
+            finally:
+                if dialog_application is not None:
+                    if original_pdf_dialog is not None:
+                        dialog_application._save_pdf_file = original_pdf_dialog
+                    if original_excel_dialog is not None:
+                        dialog_application._open_excel_file = original_excel_dialog
+                if artifact_directory is not None:
+                    artifact_directory.cleanup()
+
+    def get_network_status(self, payload: object = None) -> dict[str, Any]:
+        if self._snapshot_coordinator is None:
+            return _success(
+                {
+                    "mode": "local",
+                    "state": "ready",
+                    "loaded_global_revision": None,
+                    "current_global_revision": None,
+                    "snapshot_changed": False,
+                    "can_write": True,
+                    "message": None,
+                    "pending_operation_id": None,
+                }
+            )
+        return self._network_envelope(_success(self._snapshot_coordinator.status()))
+
+    def refresh_network_data(self, payload: object) -> dict[str, Any]:
+        coordinator = self._snapshot_coordinator
+        if coordinator is None:
+            return self.get_network_status()
+        with self._mutex:
+            try:
+                request = _request(payload)
+                if set(request) != {"has_unsaved_changes", "has_unknown_outcome"} or any(
+                    type(v) is not bool for v in request.values()
+                ):
+                    raise ValueError("Укажите состояние черновика перед обновлением")
+                old_key = self._vault._key
+                was_open = self._application is not None
+                coordinator.refresh(**request)
+                self._administrator = None
+                self._current_user = None
+                if was_open and old_key is not None:
+                    configure_database_key(self._database, old_key)
+                    self._vault._key = old_key
+                    self._open(initialize=False)
+                return self.get_network_status()
+            except NetworkSnapshotError as error:
+                return self._network_envelope(
+                    {"ok": False, "error": {"code": error.code, "message": str(error)}}
+                )
+            except (OSError, ValueError, sqlite3.Error) as error:
+                return self._network_envelope(_failure(error))
+
+    def get_network_operation_result(self, payload: object) -> dict[str, Any]:
+        coordinator = self._snapshot_coordinator
+        if coordinator is None:
+            return _failure(ValueError("Проверка сетевой операции доступна в сетевом режиме"))
+        with self._mutex:
+            try:
+                request = _request(payload)
+                result = coordinator.recover(
+                    _text(request, "operation_id"),
+                    self._network_read_key(),
+                    lambda db: self._network_authorize(db, "get_network_operation_result", request),
+                )
+                if result.get("proof") == "verified_unpublished_local_journal":
+                    # A failed restoration may have left tentative in-memory access
+                    # state. Verified repair restores bytes, never that session.
+                    self._application = None
+                    self._current_user = None
+                    self._administrator = None
+                    self._vault.lock()
+                    self._automatic_open_attempted = False
+                return self._network_envelope(_success(result))
+            except NetworkSnapshotError as error:
+                return self._network_envelope(
+                    {"ok": False, "error": {"code": error.code, "message": str(error)}}
+                )
+            except (OSError, ValueError, KeyError, sqlite3.Error) as error:
+                return self._network_envelope(_failure(error))
+
+    @_network_boundary
+    def import_local_store(self, payload: object) -> dict[str, Any]:
+        if self._snapshot_coordinator is None:
+            return _failure(ValueError("Перенос доступен только в новое сетевое хранилище"))
+        try:
+            if self._snapshot_coordinator.loaded_global_revision is not None:
+                raise ValueError("Общее хранилище уже настроено")
+            request = _request(payload)
+            source = Path(_text(request, "source_database_path"))
+            if source.resolve() == self._database.resolve():
+                raise ValueError("Выберите отдельную исходную папку; она будет сохранена")
+            if source.is_symlink() or not source.is_file():
+                raise ValueError("Исходная база не найдена")
+            if any(
+                Path(str(source) + suffix).exists()
+                and Path(str(source) + suffix).stat().st_size > 0
+                for suffix in ("-wal", "-journal")
+            ):
+                raise ValueError("Закройте исходную программу или выберите проверенную копию")
+            for suffix in ("", ".keys.json", ".lifecycle.json"):
+                origin = Path(str(source) + suffix)
+                target = Path(str(self._database) + suffix)
+                if origin.exists():
+                    if origin.is_symlink():
+                        raise ValueError("Некорректный исходный комплект")
+                    shutil.copyfile(origin, target)
+                else:
+                    target.unlink(missing_ok=True)
+            if not is_encrypted_database(self._database):
+                raise ValueError("Сначала настройте защиту исходной локальной базы")
+            auth = _request(request.get("authorization"))
+            admins = [p for p in self._vault.users() if p["role"] == "admin"]
+            if len(admins) != 1 or (auth.get("signer_id") and auth["signer_id"] != admins[0]["id"]):
+                raise ValueError("Нужен код единственного действующего администратора источника")
+            signer_id = str(admins[0]["id"])
+            self._vault.unlock(signer_id, _text(auth, "pin"))
+            profile = SqliteReportSignersRepository(str(self._database)).authorize(
+                signer_id,
+                auth["pin"],
+                admin_only=True,
+            )
+            self._backup_before_write()
+            self._migrate_after_unlock()
+            self._open(initialize=False)
+            self._current_user = profile
+            self._administrator = None
+            self._remember_device()
+            return self._backup_after_write(_success(self._status_with_device()))
+        except (OSError, ValueError, KeyError, sqlite3.Error, MigrationError) as error:
+            return _failure(error)
+
+    def _configure_local_store_dialog(self, open_database_file: Callable[[], Path | None]) -> None:
+        self._dialogs["local_store"] = open_database_file
 
     def _backup_before_write(self) -> None:
         """Do not start a persisted business change without a complete recovery point."""
@@ -194,9 +723,15 @@ class SecureDesktopBridge:
             "users": self._legacy_users(),
         }
 
+    @_network_boundary
     def get_access_status(self, payload: object = None) -> dict[str, Any]:
         with self._mutex:
             try:
+                if (
+                    self._snapshot_coordinator is not None
+                    and self._snapshot_coordinator.pending_operation_id is not None
+                ):
+                    return _success(self._status_with_device())
                 if not self._automatic_open_attempted:
                     self._automatic_open_attempted = True
                     if self._application is None:
@@ -265,6 +800,7 @@ class SecureDesktopBridge:
         if "excel" in self._dialogs:
             self._application.configure_excel_dialogs(**self._dialogs["excel"])
 
+    @_network_boundary
     def setup_access(self, payload: object) -> dict[str, Any]:
         with self._mutex:
             if self._application is not None:
@@ -317,6 +853,7 @@ class SecureDesktopBridge:
                 self._vault.lock()
                 return _failure(error)
 
+    @_network_boundary
     def unlock_access(self, payload: object) -> dict[str, Any]:
         with self._mutex:
             if self._application is not None:
@@ -366,6 +903,7 @@ class SecureDesktopBridge:
                 self._kwargs["application_version"],
             )
 
+    @_network_boundary
     def authenticate_access(self, payload: object) -> dict[str, Any]:
         with self._mutex:
             self._administrator = None
@@ -389,6 +927,7 @@ class SecureDesktopBridge:
             ) as error:
                 return _failure(error)
 
+    @_network_boundary
     def end_administration(self, payload: object = None) -> dict[str, Any]:
         with self._mutex:
             self._administrator = None
@@ -402,6 +941,7 @@ class SecureDesktopBridge:
             self._administrator = None
             self._vault.lock()
 
+    @_network_boundary
     def enroll_access(self, payload: object) -> dict[str, Any]:
         with self._mutex:
             try:
@@ -433,6 +973,35 @@ class SecureDesktopBridge:
                 return _failure(error)
 
     def _call(self, method: str, payload: object = None) -> dict[str, Any]:
+        if self._snapshot_coordinator is not None and not self._network_running:
+            if method == "get_report_draft_save_result":
+                request = _request(payload)
+                operation_id = request.get("operation_id") or request.get("idempotency_key")
+                result = self.get_network_operation_result(
+                    {"operation_id": operation_id, "authorization": request.get("authorization")}
+                )
+                if result.get("ok"):
+                    outcome = result["data"]
+                    if outcome["found"]:
+                        if outcome["result"].get("ok"):
+                            result["data"] = outcome["result"]["data"]
+                        else:
+                            result["data"] = {
+                                "data_state": "not_committed",
+                                "error": outcome["result"]["error"],
+                                "global_revision": outcome["global_revision"],
+                                "operation_id": outcome["operation_id"],
+                            }
+                    else:
+                        result["data"] = {
+                            "found": False,
+                            "data_state": "unknown",
+                            "outcome_unknown": True,
+                        }
+                return result
+            return self._network_execute(
+                method, payload, lambda request: self._call(method, request)
+            )
         with self._mutex:
             try:
                 if self._application is None:
@@ -462,7 +1031,7 @@ class SecureDesktopBridge:
                 function = getattr(self._application, method)
                 if method in {"save_report_draft", "get_report_draft_save_result"}:
                     assert approver is not None
-                    result: dict[str, Any] = function(request, actor_ref=approver["id"])
+                    result = function(request, actor_ref=approver["id"])
                 else:
                     result = function() if method in {"health", "bootstrap"} else function(request)
                 if method in {"save_report_cells", "save_report_presentation", "save_report_draft"}:
@@ -664,6 +1233,7 @@ class SecureDesktopBridge:
     def list_report_signers(self, payload: object) -> dict[str, Any]:
         return self._call("list_report_signers", payload)
 
+    @_network_boundary
     def create_report_signer(self, payload: object) -> dict[str, Any]:
         with self._mutex:
             try:
@@ -694,6 +1264,7 @@ class SecureDesktopBridge:
             ) as error:
                 return _failure(error)
 
+    @_network_boundary
     def manage_report_signer(self, payload: object) -> dict[str, Any]:
         """Fresh administrator approval plus recoverable credential-file updates."""
         with self._mutex:

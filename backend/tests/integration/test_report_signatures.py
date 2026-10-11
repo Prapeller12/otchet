@@ -188,6 +188,8 @@ def test_legacy_migration_preserves_old_attestation(tmp_path: Path) -> None:
             "0015",
             "0016",
             "0017",
+            "0018",
+            "0019",
         )
         assert apply_migrations(conn, ROOT / "backend/migrations") == ()
     finally:

@@ -1,8 +1,10 @@
 import { BlankReportsDialog } from "../features/blank-reports/BlankReportsDialog";
+import { NetworkStatusBar } from "../features/network/NetworkStatusBar";
+import { isRecord } from "../shared/api/runtime-guards";
 import { RecoveryBackups } from "../features/access/RecoveryBackups";
 import { FieldHintsEnabledContext } from "../shared/ui/FieldHint";
 import { ReferenceReport } from "../features/reference-reports/ReferenceReport";
-import type { ReferenceSummary, DraftNavigation } from "../shared/api/application-gateway";
+import type { ReferenceSummary, DraftNavigation, NetworkStatus, SnapshotReload } from "../shared/api/application-gateway";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AccessGate } from "../features/access/AccessGate";
 import { AuthorizationDialog, type PendingAuthorization } from "../features/access/AuthorizationDialog";
@@ -28,11 +30,30 @@ const REPORT_LABELS: Record<ReportType, string> = {
 
 export function App() {
   const gateway = useApplicationGateway();
-  return <AccessGate gateway={gateway}>{startupNotice => <Workspace startupNotice={startupNotice} />}</AccessGate>;
+  const [accessReloadKey, setAccessReloadKey] = useState(0);
+  const reloadAccess = useCallback(() => setAccessReloadKey(value => value + 1), []);
+  return <AccessGate gateway={gateway} reloadKey={accessReloadKey}>{startupNotice => <Workspace startupNotice={startupNotice} onAccessReload={reloadAccess} />}</AccessGate>;
 }
 
-function Workspace({ startupNotice }: { startupNotice: ReactNode }) {
+function Workspace({ startupNotice, onAccessReload }: { startupNotice: ReactNode; onAccessReload(): void }) {
   const gateway = useApplicationGateway();
+  const [networkStatus, setNetworkStatus] = useState<NetworkStatus | null>(null);
+  const [networkError, setNetworkError] = useState("");
+  const [networkNotice, setNetworkNotice] = useState("");
+  const [networkBusy, setNetworkBusy] = useState(false);
+  const [networkRefreshing, setNetworkRefreshing] = useState(false);
+  const networkBusyRef = useRef(false);
+  const snapshotReload = useRef<SnapshotReload | null>(null);
+  const handleSnapshotReloadReady = useCallback((value: SnapshotReload | null) => { snapshotReload.current = value; }, []);
+  useEffect(() => {
+    let active = true;
+    const changed = (event: Event) => { if (active) setNetworkStatus((event as CustomEvent<NetworkStatus>).detail); };
+    const activationWarning = (event: Event) => { if (active) setNetworkNotice(`Сохранено на сервере; обновите локальные данные. ${(event as CustomEvent<string>).detail}`); };
+    window.addEventListener("network-status-changed", changed);
+    window.addEventListener("network-activation-warning", activationWarning);
+    void gateway.getNetworkStatus?.().then(value => { if (active) setNetworkStatus(value); }).catch(reason => { if (active) setNetworkError(reason instanceof Error ? reason.message : "Не удалось проверить общее хранилище."); });
+    return () => { active = false; window.removeEventListener("network-status-changed", changed); window.removeEventListener("network-activation-warning", activationWarning); };
+  }, [gateway]);
   const [fieldHintsEnabled, setFieldHintsEnabled] = useState(true);
   const [hintsLoaded, setHintsLoaded] = useState(false);
   const [hintsSaving, setHintsSaving] = useState(false);
@@ -129,12 +150,75 @@ function Workspace({ startupNotice }: { startupNotice: ReactNode }) {
   const matrixNavigation = useRef<DraftNavigation | null>(null);
   const [initialPeriod, setInitialPeriod] = useState<{ year: number; month: number } | undefined>();
   const handleNavigationReady = useCallback((value: DraftNavigation | null) => { matrixNavigation.current = value; }, []);
-  function navigate(action: () => void) { if (referenceDirty) return; if (matrixNavigation.current) matrixNavigation.current.request(action); else action(); }
+  function navigate(action: () => void) { if (referenceDirty || networkBusyRef.current) return; if (matrixNavigation.current) matrixNavigation.current.request(action); else action(); }
   const navigationBlocked = referenceDirty || matrixBlocked;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [cellStatus, setCellStatus] = useState("Готово");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const networkRefreshBlocked = navigationBlocked || !!pendingAuthorization || settingsOpen || blankSetupOpen || recoveryOpen || (workspaceMode === "admin" && adminSection === "users");
+  const refreshBlockedRef = useRef(networkRefreshBlocked);
+  refreshBlockedRef.current = networkRefreshBlocked;
+
+  async function checkNetwork() {
+    if (!gateway.getNetworkStatus || networkBusyRef.current) return;
+    networkBusyRef.current = true; setNetworkBusy(true); setNetworkError("");
+    try { setNetworkStatus(await gateway.getNetworkStatus()); }
+    catch (reason) { setNetworkError(reason instanceof Error ? reason.message : "Не удалось проверить соединение."); }
+    finally { networkBusyRef.current = false; setNetworkBusy(false); }
+  }
+  async function refreshNetwork() {
+    if (!gateway.refreshNetworkData || networkBusyRef.current) return;
+    if (refreshBlockedRef.current || networkStatus?.state === "outcome_unknown") { setNetworkError("Сначала завершите открытое действие или работу с черновиком. Введённые значения остались в форме."); return; }
+    networkBusyRef.current = true; setNetworkBusy(true); setNetworkRefreshing(true); setNetworkError(""); setNetworkNotice("");
+    try {
+      const status = await gateway.refreshNetworkData({ has_unsaved_changes: false, has_unknown_outcome: false });
+      setNetworkStatus(status);
+      if (status.state === "unavailable" || status.state === "outcome_unknown") throw new Error(status.message ?? "Общие данные не обновлены.");
+      // An accepted snapshot closes backend administrator and personal sessions.
+      if (workspaceMode === "admin") { setWorkspaceMode("entry"); setAdminSection("reports"); }
+      const access = await gateway.getAccessStatus?.();
+      if (access && access.state !== "ready") { onAccessReload(); return; }
+      const [list, nextReferences] = await Promise.all([
+        gateway.listOrganizations(),
+        organizationId && gateway.referenceReport ? gateway.referenceReport({ action: "list", organization_id: organizationId }) : Promise.resolve([]),
+      ]);
+      if (organizationId && !list.organizations.some(item => item.id === organizationId)) throw new Error("Открытая организация отсутствует в новом снимке. Прежняя форма оставлена для просмотра; выберите доступную организацию.");
+      if (referenceId && gateway.referenceReport) await gateway.referenceReport({ action: "get", organization_id: organizationId, id: referenceId });
+      const adopt = await snapshotReload.current?.prepare();
+      if (refreshBlockedRef.current) throw new Error("Контекст изменился. Открытая форма оставлена без замены.");
+      adopt?.();
+      setOrganizations(list.organizations); setReferences(nextReferences as ReferenceSummary[]); setLoadError(null);
+      if (referenceId || !organizationId) { setReloadKey(value => value + 1); if (!organizationId) setOrganizationId(list.organizations[0]?.id ?? ""); }
+      setNetworkNotice("Общие данные обновлены.");
+    } catch (reason) { setNetworkError(`${reason instanceof Error ? reason.message : "Не удалось обновить общие данные."} Открытая таблица сохранена.`); }
+    finally { networkBusyRef.current = false; setNetworkBusy(false); setNetworkRefreshing(false); }
+  }
+  async function recoverNetworkOperation() {
+    const operationId = networkStatus?.pending_operation_id;
+    if (!operationId || !gateway.getNetworkOperationResult || networkBusyRef.current) return;
+    networkBusyRef.current = true; setNetworkBusy(true); setNetworkError(""); setNetworkNotice("");
+    try {
+      const result = await gateway.getNetworkOperationResult(operationId);
+      setNetworkNotice(isRecord(result.result?.data) && result.result.data.export_state === "pending" ? "Отчёт подтверждён на сервере. Файл PDF ещё не получен. После обновления данных явно выполните «Печать / PDF А4» повторно."
+        : result.data_state === "unknown" ? "Результат не найден. Это не подтверждает откат. Открытые значения и блокировка записи сохранены."
+        : result.data_state === "committed" ? "Общая запись подтверждена. Завершите открытый черновик и явно обновите данные."
+        : "Рабочие изменения не проведены. После завершения открытого действия обновите данные.");
+      if (gateway.getNetworkStatus) setNetworkStatus(await gateway.getNetworkStatus());
+    } catch (reason) { setNetworkError(reason instanceof Error ? reason.message : "Результат общей записи не проверен."); }
+    finally { networkBusyRef.current = false; setNetworkBusy(false); }
+  }
+  async function retryNetworkOperation() {
+    const operationId = networkStatus?.pending_operation_id;
+    if (!operationId || !gateway.retryNetworkOperation || networkBusyRef.current || matrixBlocked) return;
+    networkBusyRef.current = true; setNetworkBusy(true); setNetworkError(""); setNetworkNotice("");
+    try {
+      const result = await gateway.retryNetworkOperation(operationId);
+      setNetworkNotice(isRecord(result) && result.export_state === "pending" ? "Отчёт подтверждён на сервере. Файл PDF ещё не получен. После обновления данных явно выполните «Печать / PDF А4» повторно." : "Прежняя общая запись подтверждена. Явно обновите данные после завершения открытого действия.");
+      if (gateway.getNetworkStatus) setNetworkStatus(await gateway.getNetworkStatus());
+    } catch (reason) { setNetworkError(reason instanceof Error ? reason.message : "Результат прежней записи не подтверждён."); }
+    finally { networkBusyRef.current = false; setNetworkBusy(false); }
+  }
 
   const handleStatusChange = useCallback((status: string) => {
     setCellStatus(status);
@@ -197,6 +281,9 @@ function Workspace({ startupNotice }: { startupNotice: ReactNode }) {
     <div className="app-shell" data-field-hints-enabled={hintsLoaded && fieldHintsEnabled}>
       <div className="workspace-context">
       {startupNotice}
+      {gateway.getNetworkStatus && <NetworkStatusBar status={networkStatus} error={networkError} notice={networkNotice} blocked={networkRefreshBlocked} busy={networkBusy}
+        onCheck={() => void checkNetwork()} onRefresh={() => void refreshNetwork()} {...(gateway.getNetworkOperationResult ? { onRecover: () => void recoverNetworkOperation() } : {})}
+        {...(!matrixBlocked && networkStatus?.pending_operation_id && gateway.canRetryNetworkOperation?.(networkStatus.pending_operation_id) ? { onRetry: () => void retryNetworkOperation() } : {})} />}
       <header className="app-header">
         <div className="app-brand">
           <p className="app-eyebrow">{workspaceMode === "admin" ? "Раздел администратора" : workspaceMode === "report-settings" ? "План и сведения" : "Заполнение отчётов"}</p>
@@ -270,11 +357,11 @@ function Workspace({ startupNotice }: { startupNotice: ReactNode }) {
       {hintsError && <p className="workspace-edit-notice" role="alert">{hintsError}</p>}
       {modeError && <p className="workspace-edit-notice" role="alert">{modeError}</p>}
       </div>
-      <main>
+      <main {...(networkRefreshing ? { inert: "" } : {})} aria-busy={networkRefreshing}>
         {workspaceMode === "admin" && adminSection === "users" ? <ResponsibleUsers gateway={gateway} onAdministrationChanged={message => { setWorkspaceMode("entry"); setAdminSection("reports"); setAccessNotice(message); }} /> : loadError !== null ? (
           <section className="load-state load-state-error" role="alert">{loadError}</section>
         ) : referenceId ? (
-          <ReferenceReport gateway={gateway} organizationId={organizationId} identity={referenceId} onBack={() => setReferenceId("")} onDirty={setReferenceDirty} />
+          <ReferenceReport key={`${referenceId}:${reloadKey}`} gateway={gateway} organizationId={organizationId} identity={referenceId} onBack={() => setReferenceId("")} onDirty={setReferenceDirty} />
         ) : organizationId ? (
           <ReportMatrixPage
             workspaceMode={workspaceMode}
@@ -284,6 +371,8 @@ function Workspace({ startupNotice }: { startupNotice: ReactNode }) {
             onStatusChange={handleStatusChange}
             onNavigationBlockedChange={setMatrixBlocked}
             onNavigationReady={handleNavigationReady}
+            onSnapshotReloadReady={handleSnapshotReloadReady}
+            externalBusy={networkRefreshing}
             {...(activeOrganization?.start_period ? { startPeriod: activeOrganization.start_period } : {})}
             {...(initialPeriod ? { initialPeriod } : {})}
           />
@@ -300,7 +389,7 @@ function Workspace({ startupNotice }: { startupNotice: ReactNode }) {
         </span>
         <span className="status-database">
           <i aria-hidden="true" />
-          {gateway.mode === "pywebview" ? "Данные на этом компьютере" : "Демо без записи на диск"}
+          {networkStatus?.mode === "network" ? "Общие данные · локальный снимок" : gateway.mode === "pywebview" ? "Данные на этом компьютере" : "Демо без записи на диск"}
         </span>
       </footer>
 

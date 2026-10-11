@@ -106,6 +106,8 @@ def test_legacy_crypto_identity_survives_role_migration(tmp_path: Path) -> None:
             "0015",
             "0016",
             "0017",
+            "0018",
+            "0019",
         )
         preserved = load_signer(connection, "legacy-reviewer")
         assert preserved == old_profile
