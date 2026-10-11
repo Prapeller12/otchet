@@ -20,6 +20,8 @@ type SourceMatrixTableProps = {
   renderResizeHandle?(columnId: string, label: string, width: number): ReactNode;
   onRemoveSupplier?(workspaceId: string, supplierId: string): void;
   blocked?: boolean;
+  removeBlocked?: boolean;
+  matchingRows?: ReadonlySet<number>;
 };
 
 function groupSpans(rows: MatrixRowContract[]): Map<number, number> {
@@ -46,7 +48,7 @@ function ReadonlyValue({ value, cell, hint }: { value?: ReportCellValue | undefi
   </HintValue>;
 }
 
-export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndices, renderValueCell, leftWidths = {}, onPaste, onSelectStockWeek, renderResizeHandle, onRemoveSupplier, blocked = false }: SourceMatrixTableProps) {
+export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndices, renderValueCell, leftWidths = {}, onPaste, onSelectStockWeek, renderResizeHandle, onRemoveSupplier, blocked = false, removeBlocked = blocked, matchingRows = new Set() }: SourceMatrixTableProps) {
   const head = !!matrix.head_site;
   const spans = groupSpans(matrix.rows);
   const fixed = [
@@ -98,10 +100,10 @@ export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndi
         <tbody>{matrix.rows.map((row, rowIndex) => {
           const span = spans.get(rowIndex);
           const stock = stockIndex >= 0 ? row.cells[stockIndex] : undefined;
-          return <tr key={row.id}>
+          return <tr key={row.id} data-matrix-row={rowIndex} className={matchingRows.has(rowIndex) ? "matrix-search-match" : undefined}>
             {fixed.map((column, index) => column.shared && !span ? null : <th key={column.id} rowSpan={column.shared ? span : undefined} scope={column.shared ? "rowgroup" : "row"} className="sticky-left source-identity-cell" style={{ left: offsets[index] }}>
               <HintValue hint={identityHint(column.id)}>{column.id === "photo" ? row.image ? <img className="source-position-image" src={row.image} alt={`Изображение: ${row.left_values.position ?? row.group_label}`} /> : <span aria-label="Изображение не задано">—</span> : row.left_values[column.id] || "—"}</HintValue>
-              {column.id === "party" && onRemoveSupplier && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button supplier-remove" aria-label="Убрать производителя" title="Убрать производителя" disabled={blocked} onClick={() => onRemoveSupplier(row.workspace_id!, row.supplier_id!)}><UiIcon name="trash" /></button>}
+              {column.id === "party" && onRemoveSupplier && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button supplier-remove" aria-label="Убрать производителя" title="Убрать производителя" disabled={removeBlocked} onClick={() => onRemoveSupplier(row.workspace_id!, row.supplier_id!)}><UiIcon name="trash" /></button>}
             </th>)}
             {span && <td rowSpan={span} className="source-calculated" data-shared="detail"><ReadonlyValue value={!head && stockWeek ? row.stock_by_week?.[stockWeek] : undefined} cell={stock} hint={stock ? reportCellHint({ ...stock, state: { ...stock.state, access: "calculated" } }, matrix, row)! : "Остаток недоступен: проверьте настройки позиции у администратора."} /></td>}
             <td className={head ? "source-calculated" : "source-reference-value"}><HintValue className="source-readonly-value" hint={head ? REPORT_FIELD_HINTS.headTotal : identityHint("contract")}>{head ? row.manufactured_total || "—" : row.left_values.contract || "—"}</HintValue></td>
@@ -119,7 +121,7 @@ export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndi
         <thead><tr><th scope="col">№ п/п</th><th scope="col">Наименование</th><th scope="col">{head ? "Контрагент" : "Производитель"}</th>{head && <th scope="col">Объём поставок по договору</th>}{auxiliary.map(index => <th key={index} scope="col">{matrix.time_columns[index]!.label}</th>)}</tr></thead>
         <tbody>{matrix.rows.map((row, rowIndex) => {
           const span = spans.get(rowIndex);
-          return <tr key={row.id}>
+          return <tr key={row.id} data-matrix-row={rowIndex} className={matchingRows.has(rowIndex) ? "matrix-search-match" : undefined}>
             {span && <><th rowSpan={span} scope="rowgroup"><HintValue hint={identityHint("number")}>{row.left_values.number || "—"}</HintValue></th><th rowSpan={span} scope="rowgroup"><HintValue hint={identityHint("position")}>{row.left_values.position || row.group_label}</HintValue></th></>}
             <th scope="row"><HintValue hint={identityHint("party")}>{row.left_values.party || "—"}</HintValue></th>{head && <td className="source-reference-value"><HintValue hint={identityHint("contract")}>{row.left_values.contract || "—"}</HintValue></td>}
             {span && auxiliary.map(index => renderValueCell(rowIndex, index))}

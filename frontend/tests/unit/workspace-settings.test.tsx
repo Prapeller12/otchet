@@ -28,11 +28,12 @@ describe("workspace settings", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Добавить строку" }));
-    expect(screen.getAllByLabelText("Позиция")).toHaveLength(2);
-    expect(screen.getAllByLabelText("Позиция")[1]).toHaveValue("");
-    await user.type(screen.getAllByLabelText("Позиция")[1]!, "Новая деталь");
-    await user.type(screen.getAllByLabelText("Изготовитель или поставщик")[1]!, "Завод");
-    expect(screen.getAllByLabelText("Позиция")[1]).toHaveValue("Новая деталь");
+    expect(screen.getAllByLabelText("Позиция")).toHaveLength(1);
+    expect(screen.getByRole("navigation", { name: "Позиции рабочего поля" }).querySelectorAll("button")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Позиция")[0]).toHaveValue("");
+    await user.type(screen.getAllByLabelText("Позиция")[0]!, "Новая деталь");
+    await user.type(screen.getAllByLabelText("Изготовитель или поставщик")[0]!, "Завод");
+    expect(screen.getAllByLabelText("Позиция")[0]).toHaveValue("Новая деталь");
 
     await user.click(screen.getByRole("button", { name: "Применить настройки" }));
     await waitFor(() => {

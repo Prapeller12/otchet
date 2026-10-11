@@ -46,6 +46,7 @@ it.each<ReportMatrixContract["report_type"]>(["DAILY_MOVEMENT", "HEAD_SITE", "SU
   expect(cells.length).toBeGreaterThan(0);
   cells.forEach(cell => expect(cell.querySelector("svg")).toBeNull());
   await user.click(print);
+  await user.click(screen.getByRole("button", { name: "Подтвердить и создать PDF" }));
   await waitFor(() => expect(pdf).toHaveBeenCalledTimes(1));
   expect(print).toHaveAccessibleName("Печать / PDF А4");
 });
@@ -69,7 +70,8 @@ it("exposes settings add, edit, copy, move, delete and close icons without repla
   const add = dialog.getByRole("button", { name: "Добавить строку" });
   expectIcon(add, "add");
   await user.click(add);
-  expect(dialog.getAllByLabelText("Позиция")).toHaveLength(2);
+  expect(dialog.getAllByLabelText("Позиция")).toHaveLength(1);
+  expect(dialog.getByRole("navigation", { name: "Позиции рабочего поля" }).querySelectorAll("button")).toHaveLength(2);
   for (const [name, glyph] of [["Копировать позицию", "copy"], ["Переместить выше", "arrow-up"], ["Переместить ниже", "arrow-down"], ["Убрать строку", "trash"]] as const) {
     dialog.getAllByRole("button", { name }).forEach(button => expectIcon(button, glyph));
   }

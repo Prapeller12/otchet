@@ -46,3 +46,19 @@
 Подробный контракт и принятые границы: ADR-0018. Статус результатов конкретного
 выпуска фиксируется прошедшими проверками CI; закрытие производственных периодов
 этим инкрементом не добавляется.
+
+
+## Дополнение dev.34 — поручение от 2026-10-11
+
+| Требование | Реализация | Доказательство |
+|---|---|---|
+| Единый черновик, ревизия и полный откат | report_draft + shared SQLite UoW | test_report_draft_dev34, независимые проверки отказов |
+| Восстановление ответа и защита повтора | idempotency_records, owner-scoped query | reopen / replay / actor conflict tests |
+| Диалог перехода и отдельные статусы | ReportMatrix, DraftTransitionDialog | unified-draft-dev34, gateway guards |
+| Поиск сохраняет обязательные строки | Highlight + nextmatch | canonical-row assertions |
+| PDF и просмотр всего импорта | SavedReportPdfDialog, import review | PDF revision / frontend import tests |
+| КГЭ и четыре дочерние, сентябрь 2027 | blank profiles port + SQLite transaction | test_blank_profiles_dev34, source-dimension review |
+| Пустые значения и пустые слоты | UNSPECIFIED + empty_supplier_slots | все позиции видны, нет вымышленных количеств |
+| Запрет записи до начала нового набора | report_start_period + draft/legacy/import guards | start-period / secure bootstrap tests |
+| Коммит сборки | SHA tag + release-manifest metadata | CI source_commit/run_id, manifest validation |
+| Пользователи и Windows 10/11 | protocol alpha-dev34 | NOT_RUN; производственная приёмка открыта |

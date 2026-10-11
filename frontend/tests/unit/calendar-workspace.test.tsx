@@ -6,6 +6,8 @@ import type { ApplicationGateway, ReportMatrixContract, SaveReportPresentationRe
 import type { ReportCellCoordinate } from "../../src/shared/api/report-cell-contract";
 import { createDemoMatrix, DemoGateway } from "../../src/shared/api/demo-gateway";
 import { ReportMatrix } from "../../src/widgets/report-matrix/ReportMatrix";
+import { draftResult } from "../fixtures/report-draft";
+import type { SaveReportDraftRequest } from "../../src/shared/api/application-gateway";
 import { sourceMatrix } from "../fixtures/source-matrix";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -44,7 +46,9 @@ it("shows only the selected daily month and keeps drafts while switching months"
   await user.type(screen.getByRole("textbox"), "20{Enter}");
   await user.selectOptions(month, "2026-02");
   expect(screen.getAllByRole("cell")).toHaveLength(3);
-  expect(screen.queryByRole("button", { name: "значение 20, доступна для ввода" })).toBeNull();
+  expect(screen.getByRole("dialog", { name: "Сохранить изменения перед переходом?" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Остаться" }));
+  expect(month).toHaveValue("2026-01");
   expect(latest().rows[0]!.cells[0]!.value).toEqual({ kind: "QUANTITY", quantity: "20" });
   await user.selectOptions(month, "2026-01");
   expect(screen.getByRole("button", { name: "значение 20, доступна для ввода" })).toBeVisible();
@@ -59,7 +63,8 @@ it("renames the heading, saves resize gestures and removes the technical banner"
     if (request.title) stored = { ...stored, title: request.title, matrix_revision: "renamed-revision" };
     return request;
   });
-  const gateway = Object.assign(new DemoGateway(), { saveReportPresentation: save, getReportMatrix: vi.fn(async () => stored) });
+  const draftSave = vi.fn(async (request: SaveReportDraftRequest) => { stored = { ...stored, title: request.presentation?.title ?? stored.title }; return draftResult(stored, request); });
+  const gateway = Object.assign(new DemoGateway(), { saveReportPresentation: save, saveReportDraft: draftSave, getReportMatrix: vi.fn(async () => stored) });
   show(gateway);
   const user = userEvent.setup();
   expect(screen.queryByRole("note")).toBeNull();

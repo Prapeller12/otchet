@@ -25,8 +25,16 @@ class SqliteReportWorkspaceRepository:
     def __init__(self, database_path: str) -> None:
         self._database_path = database_path
 
-    def get_presentation(self, organization_id: int, report_type: str) -> dict[str, object]:
-        connection = connect_sqlite(self._database_path)
+    def get_presentation(
+        self,
+        organization_id: int,
+        report_type: str,
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> dict[str, object]:
+        owns_connection = connection is None
+        if connection is None:
+            connection = connect_sqlite(self._database_path)
         try:
             row = connection.execute(
                 "SELECT settings_json FROM report_presentation "
@@ -35,7 +43,8 @@ class SqliteReportWorkspaceRepository:
             ).fetchone()
             return {} if row is None else cast(dict[str, object], json.loads(row[0]))
         finally:
-            connection.close()
+            if owns_connection:
+                connection.close()
 
     def save_presentation(
         self,
@@ -44,10 +53,15 @@ class SqliteReportWorkspaceRepository:
         patch: Mapping[str, object],
         *,
         validate_current_state: Callable[[], None] | None = None,
+        connection: sqlite3.Connection | None = None,
+        actor_ref: str = "local-workspace-settings",
     ) -> dict[str, object]:
-        connection = connect_sqlite(self._database_path)
+        owns_connection = connection is None
+        if connection is None:
+            connection = connect_sqlite(self._database_path)
         try:
-            connection.execute("BEGIN IMMEDIATE")
+            if owns_connection:
+                connection.execute("BEGIN IMMEDIATE")
             if validate_current_state is not None:
                 validate_current_state()
             row = connection.execute(
@@ -70,14 +84,18 @@ class SqliteReportWorkspaceRepository:
                 action="UPDATE",
                 before=before,
                 after=after,
+                actor_ref=actor_ref,
             )
-            connection.commit()
+            if owns_connection:
+                connection.commit()
             return after
         except BaseException:
-            connection.rollback()
+            if owns_connection:
+                connection.rollback()
             raise
         finally:
-            connection.close()
+            if owns_connection:
+                connection.close()
 
     def ensure_default_organization(self) -> WorkspaceOrganization:
         connection = connect_sqlite(self._database_path)
@@ -628,14 +646,16 @@ def _audit(
     action: str,
     after: Mapping[str, object],
     before: Mapping[str, object] | None = None,
+    actor_ref: str = "local-workspace-settings",
 ) -> None:
     connection.execute(
         """
         INSERT INTO audit_events (
             actor_ref, entity_type, entity_id, action, before_json, after_json
-        ) VALUES ('local-workspace-settings', ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
+            actor_ref,
             entity_type,
             entity_id,
             action,

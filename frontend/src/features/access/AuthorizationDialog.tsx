@@ -28,10 +28,14 @@ export function AuthorizationDialog({ gateway, pending, onClose }: { gateway: Ap
   async function submit() {
     const secret = pin; setPin(""); setBusy(true); setError("");
     try { const result = await pending.execute({ signer_id: identity, pin: secret }); pending.resolve(result); onClose(); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    catch (reason) {
+      // A missing bridge response must be reconciled before any new write.
+      if (reason instanceof Error && "outcomeUnknown" in reason && reason.outcomeUnknown === true) { pending.reject(reason); onClose(); }
+      else setError(reason instanceof Error ? reason.message : String(reason));
+    }
     finally { setBusy(false); }
   }
-  function cancel() { setPin(""); pending.reject(new Error("Действие отменено. Введённые изменения остались в форме.")); onClose(); }
+  function cancel() { setPin(""); pending.reject(Object.assign(new Error("Действие отменено. Введённые изменения остались в форме."), { outcomeKnown: true })); onClose(); }
   return <div className="excel-dialog-backdrop authorization-backdrop"><form ref={node => { dialogRef.current = node; }} className="access-card authorization-dialog" role="dialog" aria-modal="true" aria-labelledby="authorization-title" onSubmit={e => { e.preventDefault(); void submit(); }}>
     <h2 id="authorization-title">{pending.title}</h2>
     <p>{pending.adminOnly ? "Введите код администратора для этого действия." : "Проверьте данные и введите свой личный код ответственного лица. Ваш код подтверждает правильность данных."}</p>

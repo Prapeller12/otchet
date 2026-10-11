@@ -1,3 +1,5 @@
+import { SavedReportPdfDialog } from "./SavedReportPdfDialog";
+import { DraftTransitionDialog } from "./DraftTransitionDialog";
 import { ProductionHeader, type ProductionHeaderPatch } from "./ProductionHeader";
 import { DailyMonthlySummary } from "./DailyMonthlySummary";
 import { SourceMatrixTable } from "./SourceMatrixTable";
@@ -8,6 +10,7 @@ import { CanonicalSheetReview } from "../../features/reference-reports/Canonical
 import { ReferenceTransfer } from "../../features/reference-reports/ReferenceTransfer";
 import { MonthlyReportActions } from "./MonthlyReportActions";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -22,6 +25,7 @@ import type {
   ImportMode,
   MatrixCellContract,
   ReportMatrixContract,
+  ReportDraftPresentation, SaveReportDraftRequest, SaveReportDraftResponse, DraftNavigation,
 } from "../../shared/api/application-gateway";
 import type { ReportCellValue, ReportCellCoordinate } from "../../shared/api/report-cell-contract";
 import { CATEGORY_LABELS } from "../../features/workspace-settings/PositionFieldsEditor";
@@ -48,6 +52,8 @@ type ReportMatrixProps = {
   onChange(matrix: ReportMatrixContract): void;
   onStatusChange(status: string): void;
   onNavigationBlockedChange?(blocked: boolean): void;
+  onNavigationReady?(navigation: DraftNavigation | null): void;
+  initialMonth?: number; startPeriod?: string;
 };
 
 type EditingCell = MatrixPosition & { draft: string };
@@ -143,11 +149,24 @@ export function ReportMatrix({
   matrix,
   onChange,
   onStatusChange,
-  onNavigationBlockedChange,
+  onNavigationBlockedChange, onNavigationReady, initialMonth, startPeriod,
 }: ReportMatrixProps) {
   const adminMode = workspaceMode === "admin";
   const reportSettings = workspaceMode !== "entry";
+  const baselineMatrix = useRef(structuredClone(matrix));
+  const headerPatch = useRef<ReportDraftPresentation | null>(null);
+  const controlsPatch = useRef<ReportDraftPresentation | null>(null);
+  const updateHeaderPatch = useCallback((patch: ReportDraftPresentation | null) => { headerPatch.current = patch; }, []);
+  const updateControlsPatch = useCallback((patch: ReportDraftPresentation | null) => { controlsPatch.current = patch; }, []);
+  const [resetDraft, setResetDraft] = useState(0);
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
+  const [unknownSave, setUnknownSave] = useState<SaveReportDraftRequest | null>(null);
+  const [canRetryUnknown, setCanRetryUnknown] = useState(false);
+  const [dataStatus, setDataStatus] = useState("Данные загружены");
+  const [signatureStatus, setSignatureStatus] = useState("Подтверждение: статус выбранного периода ниже");
+  const [backupStatus, setBackupStatus] = useState("Резервная копия: статус последней записи не получен");
   const headerSave = useRef<(() => Promise<void>) | null>(null);
+  const [pdfOptionsOpen, setPdfOptionsOpen] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [verificationRefresh, setVerificationRefresh] = useState(0);
   const [moreOpen, setMoreOpen] = useState(adminMode);
@@ -156,13 +175,18 @@ export function ReportMatrix({
   const [editing, setEditing] = useState<EditingCell | null>(null);
   const [pastePreview, setPastePreview] = useState<PasteCell[] | null>(null);
   const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(() => new Set());
+  const [search, setSearch] = useState("");
+  const [matchIndex, setMatchIndex] = useState(-1);
+  const [errorIndex, setErrorIndex] = useState(-1);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [excelBusy, setExcelBusy] = useState<"import" | "commit" | "export" | null>(null);
   const [excelError, setExcelError] = useState<string | null>(null);
   const [excelMessage, setExcelMessage] = useState<string | null>(null);
   const [importMode, setImportMode] = useState<ImportMode>("update");
+  const [importReviewed, setImportReviewed] = useState(false);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  useEffect(() => { setImportReviewed(false); }, [importPreview]);
   const [widths, setWidths] = useState<Record<string, number>>(matrix.presentation?.widths ?? {});
   const [renaming, setRenaming] = useState(false);
   const [titleDraft, setTitleDraft] = useState(matrix.title);
@@ -174,10 +198,11 @@ export function ReportMatrix({
   const latestMatrix = useRef(matrix);
   latestMatrix.current = matrix;
   const presentationQueue = useRef(Promise.resolve());
-  const monthLabels = [...new Set(matrix.time_columns.map((column) => column.group_label))];
+  const monthLabels = [...new Set(matrix.time_columns.map((column) => column.group_label))].filter(month => !startPeriod || month >= startPeriod.slice(0, 7));
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(() => {
     const current = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
-    return new Set([matrix.time_columns.find((column) => column.group_label === current)?.group_label ?? matrix.time_columns[0]?.group_label ?? ""]);
+    const preferred = initialMonth && matrix.year ? `${matrix.year}-${String(initialMonth).padStart(2, "0")}` : current;
+    return new Set([monthLabels.find(month => month === preferred) ?? monthLabels[0] ?? ""]);
   });
   const [subsidiaryMonth, setSubsidiaryMonth] = useState([...expandedMonths][0] ?? "");
   const [stockWeeks, setStockWeeks] = useState<Record<string, string>>({});
@@ -200,7 +225,9 @@ export function ReportMatrix({
   const groups = headerGroups(visibleMatrix);
   const offsets = stickyOffsets(visibleMatrix);
 
-  const navigationBlocked = headerDirty || controlsDirty || dirtyKeys.size > 0 || editing !== null || saving || excelBusy !== null || presentationBusy || importPreview !== null || pastePreview !== null || renaming || printing;
+  const dirty = headerDirty || controlsDirty || dirtyKeys.size > 0 || editing !== null || renaming;
+  const busy = saving || excelBusy !== null || presentationBusy || importPreview !== null || pastePreview !== null || printing || pdfOptionsOpen;
+  const navigationBlocked = unknownSave !== null || headerDirty || controlsDirty || dirtyKeys.size > 0 || editing !== null || saving || excelBusy !== null || presentationBusy || importPreview !== null || pastePreview !== null || renaming || printing || pdfOptionsOpen;
   useEffect(() => { onNavigationBlockedChange?.(navigationBlocked); }, [navigationBlocked, onNavigationBlockedChange]);
   useEffect(() => () => { onNavigationBlockedChange?.(false); }, [onNavigationBlockedChange]);
   useEffect(() => () => { previewSequence.current += 1; }, []);
@@ -210,12 +237,14 @@ export function ReportMatrix({
   }, [visibleIndices.join(","), active.column]);
 
   async function saveHeader(patch: ProductionHeaderPatch) {
+    if (unknownSave || saving || excelBusy !== null || importPreview || pastePreview || printing || renaming) throw new Error("Сначала завершите текущую операцию с отчётом.");
+    if (dirtyKeys.size || controlsDirty || editing) throw new Error("Сначала сохраните или отмените количественный черновик. Состав кодов применяется отдельно.");
     if (!gateway.saveReportPresentation) throw new Error("Сохранение шапки недоступно");
     const result = await gateway.saveReportPresentation({ report_type: matrix.report_type, organization_id: matrix.organization_id, expected_revision: matrix.matrix_revision, confirmation, ...patch });
     setSaveError(result.verification_error ? `Сохранено, но не подтверждено: ${result.verification_error.message}` : null);
     setVerificationRefresh(value => value + 1);
     onChange({ ...latestMatrix.current, presentation: result });
-    try { onChange(await gateway.getReportMatrix(query)); }
+    try { const refreshed = await gateway.getReportMatrix(query); baselineMatrix.current = structuredClone(refreshed); latestMatrix.current = refreshed; onChange(refreshed); }
     catch { setSaveError(`${result.verification_error ? `Сохранено, но не подтверждено: ${result.verification_error.message}. ` : "Шапка сохранена. "}Не удалось обновить отчёт. Перезагрузите форму перед следующим изменением.`); }
   }
 
@@ -254,9 +283,16 @@ export function ReportMatrix({
 
   function persistWidths(next: Record<string, number>) {
     if (!adminMode || !gateway.saveReportPresentation) return;
+    if (dirty || unknownSave || busy) { setSaveError("Ширина изменена в текущем окне. Сохраните черновик и повторите настройку ширины для записи."); return; }
     presentationQueue.current = presentationQueue.current.then(async () => {
-      try { await gateway.saveReportPresentation!({ report_type: matrix.report_type, organization_id: matrix.organization_id, widths: next }); }
+      setPresentationBusy(true);
+      try {
+        await gateway.saveReportPresentation!({ report_type: matrix.report_type, organization_id: matrix.organization_id, widths: next });
+        const refreshed = await gateway.getReportMatrix(query);
+        baselineMatrix.current = structuredClone(refreshed); latestMatrix.current = refreshed; onChange(refreshed);
+      }
       catch (error) { setSaveError(error instanceof Error ? error.message : "Ширина не сохранена. Повторите изменение."); }
+      finally { setPresentationBusy(false); }
     });
   }
 
@@ -266,20 +302,7 @@ export function ReportMatrix({
       onCommit={(value) => persistWidths({ ...widths, [id]: value })} />;
   }
 
-  async function renameReport() {
-    if (!titleDraft.trim() || !gateway.saveReportPresentation) return;
-    setPresentationBusy(true);
-    try {
-      const result = await gateway.saveReportPresentation({ report_type: matrix.report_type, organization_id: matrix.organization_id, expected_revision: matrix.matrix_revision, confirmation, title: titleDraft.trim() });
-      setSaveError(result.verification_error ? `Сохранено, но не подтверждено: ${result.verification_error.message}` : null);
-      setVerificationRefresh(value => value + 1);
-      onChange({ ...latestMatrix.current, title: result.title ?? titleDraft.trim() });
-      setRenaming(false);
-      try { onChange(await gateway.getReportMatrix(query)); }
-      catch { setSaveError(`${result.verification_error ? `Сохранено, но не подтверждено: ${result.verification_error.message}. ` : "Название сохранено. "}Не удалось обновить отчёт. Перезагрузите форму перед следующим изменением.`); }
-    } catch (error) { setSaveError(error instanceof Error ? error.message : "Название не сохранено"); }
-    finally { setPresentationBusy(false); }
-  }
+  async function renameReport() { await saveChanges(); }
 
   async function previewCalculations(next: ReportMatrixContract) {
     const sequence = ++previewSequence.current;
@@ -311,12 +334,14 @@ export function ReportMatrix({
 
   function entryLocked(cell: MatrixCellContract, column: number): boolean {
     const metric = cell.coordinate.metric_code ?? "";
-    return !reportSettings && (cell.state.admin_only ?? (matrix.time_columns[column]?.kind === "PLAN" || metric.split("_").includes("PLAN")));
+    const month = matrix.time_columns[column]?.group_label;
+    return (!!month && /^\d{4}-\d{2}$/.test(month) && month !== subsidiaryMonth)
+      || (!reportSettings && (cell.state.admin_only ?? (matrix.time_columns[column]?.kind === "PLAN" || metric.split("_").includes("PLAN"))));
   }
 
   function beginEdit(position: MatrixPosition): void {
     const cell = matrix.rows[position.row]?.cells[position.column];
-    if (cell?.state.access !== "editable" || printing || entryLocked(cell, position.column) || renaming || headerDirty || controlsDirty || saving || presentationBusy || excelBusy !== null || pastePreview !== null) return;
+    if (cell?.state.access !== "editable" || printing || entryLocked(cell, position.column) || renaming || unknownSave !== null || saving || presentationBusy || excelBusy !== null || pastePreview !== null) return;
     setActive(position);
     setEditing({ ...position, draft: inputValue(cell.value) });
   }
@@ -344,7 +369,10 @@ export function ReportMatrix({
     });
     const changedCell = nextMatrix.rows[position.row]?.cells[position.column];
     if (changedCell !== undefined) {
-      setDirtyKeys((current) => new Set(current).add(cellKey(changedCell)));
+      const original = baselineMatrix.current.rows[position.row]?.cells[position.column];
+      const unchanged = original && JSON.stringify(original.value) === JSON.stringify(changedCell.value);
+      setDirtyKeys(current => { const next = new Set(current); if (unchanged) next.delete(cellKey(changedCell)); else next.add(cellKey(changedCell)); return next; });
+      if (unchanged) changedCell.state.persistence = "saved";
     }
     onChange(nextMatrix);
     void previewCalculations(nextMatrix);
@@ -385,7 +413,7 @@ export function ReportMatrix({
   function previewPaste(event: ClipboardEvent<HTMLTableElement>): void {
     if (event.target instanceof HTMLInputElement) return;
     event.preventDefault();
-    if (headerDirty || controlsDirty || saving || presentationBusy || excelBusy !== null || editing !== null || pastePreview !== null) return;
+    if (unknownSave || saving || presentationBusy || excelBusy !== null || editing !== null || pastePreview !== null) return;
     const text = event.clipboardData.getData("text/plain").replace(/\r\n?/g, "\n");
     if (!text) return;
     const rows = text.replace(/\n$/, "").split("\n").map(row => row.split("\t"));
@@ -436,80 +464,135 @@ export function ReportMatrix({
       const { issue: _issue, ...rest } = cell;
       return { ...rest, value: values.get(cellKey(cell))!, state: { access: cell.state.access, persistence: "dirty" } };
     });
-    setDirtyKeys(current => new Set([...current, ...keys]));
+    setDirtyKeys(current => {
+      const nextKeys = new Set(current);
+      for (const item of pastePreview) {
+        const cell = next.rows[item.row]!.cells[item.column]!;
+        if (JSON.stringify(cell.value) === JSON.stringify(baselineMatrix.current.rows[item.row]?.cells[item.column]?.value)) { nextKeys.delete(cellKey(cell)); cell.state.persistence = "saved"; }
+        else nextKeys.add(cellKey(cell));
+      }
+      return nextKeys;
+    });
     onChange(next);
     setPastePreview(null);
     void previewCalculations(next);
   }
 
-  async function saveChanges(): Promise<void> {
-    if (dirtyKeys.size === 0 || saving) return;
-    previewSequence.current += 1;
-    setPreviewBusy(false);
-    const keysAtStart = new Set(dirtyKeys);
-    const changes = matrix.rows.flatMap((row) =>
-      row.cells
-        .filter((cell) => keysAtStart.has(cellKey(cell)))
-        .map((cell) => ({ coordinate: cell.coordinate, value: cell.value })),
-    );
-    const savingMatrix = updateCells(matrix, keysAtStart, (cell) => ({
-      ...cell,
-      state: { access: cell.state.access, persistence: "saving" },
-    }));
-    onChange(savingMatrix);
-    setSaving(true);
-    setSaveError(null);
+  function discardDraft() {
+    previewSequence.current++;
+    onChange(structuredClone(baselineMatrix.current));
+    latestMatrix.current = structuredClone(baselineMatrix.current);
+    setDirtyKeys(new Set()); setEditing(null); setRenaming(false);
+    headerPatch.current = null; controlsPatch.current = null;
+    setResetDraft(value => value + 1); setSaveError(null); setDataStatus("Черновик отброшен; показаны сохранённые данные");
+  }
 
-    try {
-      const result = await gateway.saveReportCells({
-        ...query,
-        report_type: matrix.report_type,
-        organization_id: matrix.organization_id,
-        base_revision: matrix.matrix_revision,
-        idempotency_key: newIdempotencyKey(),
-        changes,
-        confirmation,
-      });
-      setSaveError(result.verification_error ? `Сохранено, но не подтверждено: ${result.verification_error.message}` : null);
-      setVerificationRefresh(value => value + 1);
-      const savedCells = new Map(
-        result.cells.map((cell) => [coordinateKey(cell.coordinate), cell]),
-      );
-      const savedMatrix = updateCells(savingMatrix, keysAtStart, (cell) => {
-        const saved = savedCells.get(coordinateKey(cell.coordinate));
-        return saved === undefined
-          ? cell
-          : { ...cell, value: saved.value, state: saved.state };
-      });
-      onChange({ ...savedMatrix, matrix_revision: result.matrix_revision });
-      setDirtyKeys((current) => {
-        const next = new Set(current);
-        keysAtStart.forEach((key) => next.delete(key));
-        return next;
-      });
-      if (matrix.daily_summary || matrix.subsidiary || matrix.rows.some((row) => row.cells.some((cell) => cell.formula))) {
-        try {
-          onChange(await gateway.getReportMatrix(query));
-        } catch {
-          setSaveError(`${result.verification_error ? `Сохранено, но не подтверждено: ${result.verification_error.message}. ` : "Данные сохранены. "}Не удалось обновить расчёты. Перезагрузите отчёт.`);
-        }
-      }
-    } catch (reason: unknown) {
-      const message = reason instanceof Error ? reason.message : "Сохранение не выполнено";
-      onChange(
-        updateCells(savingMatrix, keysAtStart, (cell) => ({
-          ...cell,
-          state: { access: cell.state.access, persistence: "error" },
-          issue: { code: "SAVE_FAILED", message },
-        })),
-      );
-      setSaveError(message);
-    } finally {
-      setSaving(false);
+  function requestNavigation(action: () => void) {
+    if (unknownSave) { setSaveError("Результат записи неизвестен. Сначала проверьте результат сохранения."); return; }
+    if (busy) { setSaveError("Завершите открытое действие перед переходом."); return; }
+    if (dirty) setPendingNavigation(() => action); else action();
+  }
+  useEffect(() => { onNavigationReady?.({ request: requestNavigation }); return () => onNavigationReady?.(null); });
+
+  function acceptSaved(result: SaveReportDraftResponse, source: ReportMatrixContract, keys: Set<string>) {
+    const cells = new Map(result.cells.map(cell => [coordinateKey(cell.coordinate), cell]));
+    const saved = updateCells(source, keys, cell => {
+      const value = cells.get(coordinateKey(cell.coordinate));
+      const { issue: _issue, ...rest } = cell;
+      return { ...rest, ...(value ? { value: value.value, state: value.state } : { state: { ...cell.state, persistence: "saved" as const } }) };
+    });
+    const next = { ...saved, matrix_revision: result.matrix_revision, presentation: result.presentation, title: result.presentation.title ?? saved.title };
+    baselineMatrix.current = structuredClone(next); latestMatrix.current = next; onChange(next);
+    setDirtyKeys(new Set()); setEditing(null); setRenaming(false); setResetDraft(value => value + 1);
+    headerPatch.current = null; controlsPatch.current = null; setHeaderDirty(false); setControlsDirty(false); setUnknownSave(null); setCanRetryUnknown(false);
+    setDataStatus("Данные сохранены");
+    setSignatureStatus(result.verification_state === "verified" ? "Отчёт подтверждён" : result.verification_state === "stale" ? "Подтверждение устарело: отчёт изменён" : "Данные сохранены, отчёт не подтверждён");
+    setBackupStatus(result.backup_state === "complete" ? "Резервная копия создана" : result.backup_state === "post_backup_warning" ? "Данные сохранены; резервная копия не создана" : "Резервная копия: результат не получен");
+    setSaveError(result.verification_error?.message ?? result.backup_warning ?? null);
+    setVerificationRefresh(value => value + 1);
+  }
+
+  async function saveChanges(): Promise<boolean> {
+    if (saving || unknownSave) return false;
+    if (headerDirty && !headerPatch.current) { setSaveError("Примените изменение состава кодов отдельно. Затем сохраняйте количественные данные общим пакетом."); return false; }
+    let source = latestMatrix.current;
+    const keys = new Set(dirtyKeys);
+    if (editing) {
+      const parsed = parseCellDraft(editing.draft);
+      if (!parsed.valid) { setSaveError(parsed.message); return false; }
+      source = updateCell(source, editing, cell => ({ ...cell, value: parsed.value, state: { ...cell.state, persistence: "dirty" } }));
+      const cell = source.rows[editing.row]?.cells[editing.column]; if (cell) keys.add(cellKey(cell));
+      setEditing(null); setDirtyKeys(keys); onChange(source); latestMatrix.current = source;
     }
+    const presentation: ReportDraftPresentation = { ...headerPatch.current, ...controlsPatch.current, ...(renaming ? { title: titleDraft.trim() } : {}) };
+    for (const field of [presentation.plans, presentation.actuals, ...Object.values(presentation.production_code_plans ?? {}), ...Object.values(presentation.production_code_actuals ?? {})]) {
+      for (const value of Object.values(field ?? {})) {
+        const parsed = parseCellDraft(value);
+        if (!parsed.valid) { setSaveError(parsed.message); return false; }
+      }
+    }
+    if (renaming && !titleDraft.trim()) { setSaveError("Введите название отчёта."); return false; }
+    const request: SaveReportDraftRequest = { ...query, base_revision: baselineMatrix.current.matrix_revision, idempotency_key: newIdempotencyKey(),
+      confirmation, changes: source.rows.flatMap(row => row.cells.filter(cell => keys.has(cellKey(cell))).map(cell => ({ coordinate: cell.coordinate, value: cell.value }))),
+      ...(Object.keys(presentation).length ? { presentation } : {}),
+    };
+    if (!request.changes.length && !request.presentation) return true;
+    setSaving(true); setSaveError(null); setDataStatus("Сохранение черновика…");
+    try {
+      let result: SaveReportDraftResponse;
+      if (gateway.saveReportDraft) result = await gateway.saveReportDraft(request);
+      else {
+        if (request.presentation) throw Object.assign(new Error("Сборка не поддерживает пакетное сохранение. Обновите программу."), { outcomeKnown: true });
+        const saved = await gateway.saveReportCells(request);
+        result = { ...saved, data_state: "committed", operation_revision: saved.matrix_revision, current_revision: saved.matrix_revision, idempotent_replay: false, presentation: source.presentation ?? {}, verification_state: saved.verification?.status === "VERIFIED" ? "verified" : saved.verification_error ? "verification_error" : "pending", backup_state: "pending" };
+      }
+      acceptSaved(result, source, keys);
+      try {
+        const refreshed = await gateway.getReportMatrix(query);
+        baselineMatrix.current = structuredClone(refreshed); latestMatrix.current = refreshed; onChange(refreshed);
+      } catch { setSaveError("Данные сохранены. Не удалось обновить расчёты; повторно откройте форму."); }
+      return true;
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "Сохранение не выполнено";
+      if (reason instanceof Error && "outcomeUnknown" in reason && reason.outcomeUnknown === true) {
+        setPendingNavigation(null); setCanRetryUnknown(false); setUnknownSave(request); setDataStatus("Результат сохранения неизвестен");
+        setSaveError("Ответ не получен. Черновик сохранён в открытой форме. Проверьте результат записи перед повтором или переходом.");
+      } else {
+        setDataStatus("Черновик не сохранён"); setSaveError(message);
+        onChange(updateCells(source, keys, cell => ({ ...cell, state: { ...cell.state, persistence: "error" }, issue: { code: "SAVE_FAILED", message } })));
+      }
+      return false;
+    } finally { setSaving(false); }
+  }
+
+  async function reconcileSave() {
+    if (!unknownSave || !gateway.getReportDraftSaveResult || saving) return;
+    setSaving(true); setSaveError(null);
+    try {
+      const { report_type, organization_id, year, confirmation: savedConfirmation, idempotency_key } = unknownSave;
+      const result = await gateway.getReportDraftSaveResult({ report_type, organization_id, idempotency_key, ...(year === undefined ? {} : { year }), ...(savedConfirmation ? { confirmation: savedConfirmation } : {}) });
+      if (result.data_state === "unknown") { setCanRetryUnknown(true); setSaveError("Результат не найден. Можно повторить тот же пакет с тем же идентификатором: программа проверит предыдущую запись и не создаст дубли. Новый пакет и отбрасывание заблокированы."); return; }
+      acceptSaved(result, latestMatrix.current, new Set(dirtyKeys));
+      try { const refreshed = await gateway.getReportMatrix(query); baselineMatrix.current = structuredClone(refreshed); latestMatrix.current = refreshed; onChange(refreshed); }
+      catch { setSaveError("Данные сохранены. Не удалось обновить расчёты; повторно откройте форму."); }
+    } catch (reason) { setSaveError(reason instanceof Error ? reason.message : "Результат записи не проверен"); }
+    finally { setSaving(false); }
+  }
+
+  async function retryUnknownSave() {
+    if (!unknownSave || !canRetryUnknown || !gateway.saveReportDraft || saving) return;
+    setSaving(true); setSaveError(null);
+    try {
+      const result = await gateway.saveReportDraft(unknownSave);
+      acceptSaved(result, latestMatrix.current, new Set(dirtyKeys));
+      try { const refreshed = await gateway.getReportMatrix(query); baselineMatrix.current = structuredClone(refreshed); latestMatrix.current = refreshed; onChange(refreshed); }
+      catch { setSaveError("Данные сохранены. Не удалось обновить расчёты; повторно откройте форму."); }
+    } catch (reason) { setSaveError(`Результат прежней записи ещё не подтверждён. ${reason instanceof Error ? reason.message : "Повтор не завершён"}`); }
+    finally { setSaving(false); }
   }
 
   async function startImport(): Promise<void> {
+    if (navigationBlocked || previewBusy || !matrix.capabilities.import.enabled) return;
     setExcelBusy("import");
     setExcelError(null);
     setExcelMessage(null);
@@ -528,7 +611,7 @@ export function ReportMatrix({
   }
 
   async function confirmImport(): Promise<void> {
-    if (importPreview?.batch_id === undefined) return;
+    if (importPreview?.batch_id === undefined || !importReviewed || unknownSave || dirty || saving || presentationBusy || excelBusy !== null || printing || importPreview.validation_pending || (importPreview.error_count ?? 0) > 0 || importPreview.status === "INVALID" || importPreview.already_imported || (importPreview.reference_workbook && !importPreview.transfer_validated)) return;
     setExcelBusy("commit");
     setExcelError(null);
     try {
@@ -543,7 +626,7 @@ export function ReportMatrix({
         report_type: matrix.report_type,
         organization_id: matrix.organization_id,
       });
-      onChange(refreshed);
+      baselineMatrix.current = structuredClone(refreshed); latestMatrix.current = refreshed; onChange(refreshed);
       setDirtyKeys(new Set());
       setImportPreview(null);
       setExcelMessage(
@@ -557,18 +640,21 @@ export function ReportMatrix({
   }
 
   async function removeSupplier(workspaceId: string, supplierId: string) {
+    if (navigationBlocked || previewBusy || !adminMode) return;
     if (!window.confirm("Убрать производителя из рабочего поля? Сохранённая история останется доступна.")) return;
     setPresentationBusy(true); setSaveError(null);
     try {
       const layout = await gateway.getReportLayout({ report_type: matrix.report_type, organization_id: matrix.organization_id });
       const rows = layout.rows.map(row => row.id === workspaceId && row.configuration?.subsidiary ? { ...row, configuration: { ...row.configuration, subsidiary: { ...row.configuration.subsidiary, suppliers: row.configuration.subsidiary.suppliers.map(s => s.id === supplierId ? { ...s, archived: true } : s) } } } : row);
       await gateway.saveReportLayout({ report_type: matrix.report_type, organization_id: matrix.organization_id, rows });
-      onChange(await gateway.getReportMatrix(query));
+      const refreshed = await gateway.getReportMatrix(query);
+      baselineMatrix.current = structuredClone(refreshed); latestMatrix.current = refreshed; onChange(refreshed);
     } catch (e) { setSaveError(e instanceof Error ? e.message : String(e)); }
     finally { setPresentationBusy(false); }
   }
 
   async function exportExcel(): Promise<void> {
+    if (navigationBlocked || previewBusy || !matrix.capabilities.export.enabled) return;
     setExcelBusy("export");
     setExcelError(null);
     setExcelMessage(null);
@@ -595,7 +681,7 @@ export function ReportMatrix({
   function renderValueCell(rowIndex: number, columnIndex: number) {
     const row = matrix.rows[rowIndex]!;
     const originalCell = row.cells[columnIndex]!;
-    const cell = entryLocked(originalCell, columnIndex) ? { ...originalCell, state: { ...originalCell.state, access: "locked" as const }, lock_reason: "План можно изменить в разделе «План и сведения»" } : originalCell;
+    const cell = entryLocked(originalCell, columnIndex) ? { ...originalCell, state: { ...originalCell.state, access: "locked" as const }, lock_reason: matrix.time_columns[columnIndex]?.group_label !== subsidiaryMonth ? "Для ввода выберите этот месяц в контексте отчёта" : "План можно изменить в разделе «План и сведения»" } : originalCell;
                   const shared = sharedColumn(columnIndex);
                   if (shared && !spans.has(rowIndex)) return null;
                   const position = { row: rowIndex, column: columnIndex };
@@ -633,14 +719,30 @@ export function ReportMatrix({
   }
 
   async function printReport() {
-    if (!gateway.exportPdf || navigationBlocked || previewBusy) return;
+    if (!gateway.exportPdf || dirty || unknownSave || printing || previewBusy) return;
     setPrinting(true); setSaveError(null); setExcelMessage(null);
     try {
       const result = await gateway.exportPdf({ ...query, ...confirmation, expected_revision: matrix.matrix_revision });
       if (!result.cancelled) setExcelMessage(`PDF сохранён: ${result.file_name}`);
       setVerificationRefresh(value => value + 1);
     } catch (reason) { setSaveError(reason instanceof Error ? reason.message : String(reason)); }
-    finally { setPrinting(false); }
+    finally { setPrinting(false); setPdfOptionsOpen(false); }
+  }
+
+  const searchTerm = search.trim().toLocaleLowerCase("ru");
+  const matchingRows = searchTerm ? matrix.rows.flatMap((row, index) => [row.group_label, ...Object.values(row.left_values)].join(" ").toLocaleLowerCase("ru").includes(searchTerm) ? [index] : []) : [];
+  const matchingSet = new Set(matchingRows);
+  function locateRow(row: number, column?: number) {
+    if (column !== undefined) setActive({ row, column });
+    const target = document.querySelector<HTMLElement>(`[data-matrix-row="${row}"]`);
+    target?.scrollIntoView?.({ block: "center", inline: "nearest" });
+    if (column !== undefined) target?.querySelector<HTMLElement>(`[data-row="${row}"][data-column="${column}"]`)?.focus();
+  }
+  function nextMatch() { if (!matchingRows.length) return; const next = (matchIndex + 1) % matchingRows.length; setMatchIndex(next); locateRow(matchingRows[next]!); }
+  function nextError() {
+    const errors = matrix.rows.flatMap((row, rowIndex) => row.cells.flatMap((cell, column) => cell.issue && visibleSet.has(column) ? [{ row: rowIndex, column }] : []));
+    if (!errors.length) { setSaveError("В показанном месяце ошибок ячеек нет."); return; }
+    const next = (errorIndex + 1) % errors.length; setErrorIndex(next); const target = errors[next]!; locateRow(target.row, target.column);
   }
 
   const dailySummaryColumns = matrix.daily_summary ? [
@@ -665,7 +767,7 @@ export function ReportMatrix({
               <button className="button primary" disabled={presentationBusy || !titleDraft.trim()}><UiIcon name="check" />Применить название</button>
               <button className="button secondary" type="button" disabled={presentationBusy} onClick={() => setRenaming(false)}>Отмена</button>
             </form> : <h2 id="matrix-title">{matrix.title}</h2>}
-            {reportSettings && !renaming && gateway.saveReportPresentation && <button type="button" className="mini-button" aria-label="Переименовать отчёт" disabled={navigationBlocked} onClick={() => { setTitleDraft(matrix.title); setRenaming(true); }}><UiIcon name="edit" /> Переименовать отчёт</button>}
+            {reportSettings && !renaming && (gateway.saveReportDraft || gateway.saveReportPresentation) && <button type="button" className="mini-button" aria-label="Переименовать отчёт" disabled={busy || unknownSave !== null} onClick={() => { setTitleDraft(matrix.title); setRenaming(true); }}><UiIcon name="edit" /> Переименовать отчёт</button>}
           </div>
           {previewBusy && <p role="status">Пересчёт…</p>}
         </div>
@@ -673,13 +775,13 @@ export function ReportMatrix({
           <button
             type="button"
             className="button primary"
-            disabled={(!headerDirty && !controlsDirty && dirtyKeys.size === 0) || editing !== null || saving || printing || excelBusy !== null || presentationBusy || !matrix.capabilities.save.enabled}
-            onClick={() => { if (headerDirty) void headerSave.current?.(); else if (controlsDirty) void controlsSave.current?.(); else void saveChanges(); }}
+            disabled={(!dirty) || (editing !== null && !parseCellDraft(editing.draft).valid) || unknownSave !== null || saving || printing || excelBusy !== null || presentationBusy || !matrix.capabilities.save.enabled}
+            onClick={() => void saveChanges()}
           >
             {saving ? "Сохранение…" : `Сохранить${dirtyKeys.size > 0 ? ` (${dirtyKeys.size})` : ""}`}
             <UiIcon name="save" />
           </button>
-          <button type="button" className="button secondary" disabled={!gateway.exportPdf || navigationBlocked || previewBusy} title={headerDirty || controlsDirty || dirtyKeys.size > 0 ? "Сначала сохраните изменения" : undefined} onClick={() => void printReport()}><UiIcon name="print" />{printing ? "Подготовка PDF…" : "Печать / PDF А4"}</button>
+          <button type="button" className="button secondary" disabled={!gateway.exportPdf || navigationBlocked || previewBusy} title={headerDirty || controlsDirty || dirtyKeys.size > 0 ? "Сначала сохраните изменения" : undefined} onClick={() => setPdfOptionsOpen(true)}><UiIcon name="print" />{printing ? "Подготовка PDF…" : "Печать / PDF А4"}</button>
           <button type="button" className="button secondary" aria-expanded={moreOpen} aria-controls="report-more-actions" onClick={() => setMoreOpen(open => !open)}>Ещё<UiIcon name={moreOpen ? "chevron-up" : "chevron-down"} /></button>
         </div>
       </div>
@@ -692,7 +794,7 @@ export function ReportMatrix({
             type="button"
             className="button secondary"
             disabled={
-              !matrix.capabilities.import.enabled || excelBusy !== null || headerDirty || controlsDirty || dirtyKeys.size > 0 || editing !== null || saving || presentationBusy
+              !matrix.capabilities.import.enabled || navigationBlocked || previewBusy
             }
             title={importReason}
             onClick={() => void startImport()}
@@ -704,7 +806,7 @@ export function ReportMatrix({
             type="button"
             className="button secondary"
             disabled={
-              !matrix.capabilities.export.enabled || excelBusy !== null || headerDirty || controlsDirty || dirtyKeys.size > 0 || editing !== null || saving || presentationBusy
+              !matrix.capabilities.export.enabled || navigationBlocked || previewBusy
             }
             title={exportReason}
             onClick={() => void exportExcel()}
@@ -715,17 +817,21 @@ export function ReportMatrix({
         </div>
 
       </div>
+      <div className="matrix-search" aria-label="Поиск в отчёте"><label>Найти позицию или производителя<input type="search" value={search} onChange={event => { setSearch(event.target.value); setMatchIndex(-1); }} /></label><span role="status">{searchTerm ? `Найдено строк: ${matchingRows.length}. Все строки отчёта остаются видимыми.` : ""}</span><button type="button" className="button secondary" disabled={!matchingRows.length} onClick={nextMatch}>Следующее совпадение</button><button type="button" className="button secondary" onClick={nextError}>Следующая ошибка</button></div>
+      <div className="draft-status" role="status" aria-label="Состояние сохранения"><span>{unknownSave ? dataStatus : dirty ? "Есть несохранённые изменения" : dataStatus}</span><span>{signatureStatus}</span><span>{backupStatus}</span></div>
+      {unknownSave && <button type="button" className="button secondary" disabled={saving} onClick={() => void reconcileSave()}>Проверить результат сохранения</button>}
+      {unknownSave && canRetryUnknown && <button type="button" className="button secondary" disabled={saving} onClick={() => void retryUnknownSave()}>Повторить тот же пакет</button>}
       <MonthlyReportActions controlledMonth={subsidiaryMonth} weeks={stockWeeks} gateway={gateway} query={query} revision={matrix.matrix_revision} title={matrix.title} refresh={verificationRefresh} blocked={navigationBlocked || previewBusy} />
 
-      {matrix.subsidiary && <ProductionHeader onSaveReady={save => { headerSave.current = save; }} workspaceMode={workspaceMode} presentation={matrix.presentation ?? {}} year={matrix.year!} headSite={!!matrix.head_site}
-        blocked={printing || renaming || dirtyKeys.size > 0 || controlsDirty || editing !== null || saving || excelBusy !== null}
+      {matrix.subsidiary && <ProductionHeader onSaveReady={save => { headerSave.current = save; }} workspaceMode={workspaceMode} presentation={matrix.presentation ?? {}} year={matrix.year!} headSite={!!matrix.head_site} selectedMonth={subsidiaryMonth} resetDraft={resetDraft} onDraftChange={updateHeaderPatch}
+        blocked={printing || renaming || unknownSave !== null || saving || excelBusy !== null}
         onSave={saveHeader} onDirtyChange={setHeaderDirty} onBusyChange={setPresentationBusy} />}
-      {matrix.subsidiary && <SubsidiaryControls onVerified={() => setVerificationRefresh(value => value + 1)} workspaceMode={workspaceMode} onSaveReady={save => { controlsSave.current = save; }} onDirtyChange={setControlsDirty} matrix={matrix} gateway={gateway} onBusy={setPresentationBusy} blocked={printing || renaming || headerDirty || dirtyKeys.size > 0 || editing !== null || saving || previewBusy || excelBusy !== null} onChange={onChange} month={subsidiaryMonth}
-        onMonth={month => { setSubsidiaryMonth(month); setExpandedMonths(new Set([month])); }} week={stockWeeks[subsidiaryMonth] ?? ""} onWeek={week => setStockWeeks(current => ({ ...current, [subsidiaryMonth]: week }))} />}
+      {matrix.subsidiary && <SubsidiaryControls onVerified={() => setVerificationRefresh(value => value + 1)} workspaceMode={workspaceMode} onSaveReady={save => { controlsSave.current = save; }} onDirtyChange={setControlsDirty} onDraftChange={updateControlsPatch} resetDraft={resetDraft} periodBlocked={busy || unknownSave !== null} matrix={matrix} gateway={gateway} onBusy={setPresentationBusy} blocked={printing || renaming || unknownSave !== null || saving || excelBusy !== null} onChange={onChange} month={subsidiaryMonth} {...(startPeriod ? { startPeriod } : {})}
+        onMonth={month => requestNavigation(() => { setSubsidiaryMonth(month); setExpandedMonths(new Set([month])); })} week={stockWeeks[subsidiaryMonth] ?? ""} onWeek={week => requestNavigation(() => setStockWeeks(current => ({ ...current, [subsidiaryMonth]: week })))} />}
       {!!matrix.legacy_cells?.length && <details className="legacy-facts"><summary>Данные прежней формы — {matrix.legacy_cells.length} ячеек (не включены в расход)</summary><p>Значения сохранены в исходном смысле. Для переноса в новую структуру используйте проверку импорта.</p><table><thead><tr><th>Позиция / ID</th><th>Показатель</th><th>Период</th><th>Значение</th></tr></thead><tbody>{matrix.legacy_cells.map((cell, i) => <tr key={i}><td>{cell.coordinate.component_id ?? cell.coordinate.product_id}</td><td>{cell.coordinate.metric_code}</td><td>{cell.coordinate.period_start}</td><td>{inputValue(cell.value)}</td></tr>)}</tbody></table></details>}
       {matrix.calendar_notice && <p role="note">{matrix.calendar_notice}</p>}
 
-      {!matrix.subsidiary && <label className="entry-month">Месяц отчёта<select value={subsidiaryMonth} disabled={editing !== null || printing} onChange={event => { setSubsidiaryMonth(event.target.value); setExpandedMonths(new Set([event.target.value])); }}>{monthLabels.map(month => <option key={month} value={month}>{monthName(month)} {matrix.year}</option>)}</select></label>}
+      {!matrix.subsidiary && <label className="entry-month">Месяц отчёта<select value={subsidiaryMonth} disabled={editing !== null || printing} onChange={event => { const month = event.target.value; requestNavigation(() => { setSubsidiaryMonth(month); setExpandedMonths(new Set([month])); }); }}>{monthLabels.map(month => <option key={month} value={month}>{monthName(month)} {matrix.year}</option>)}</select></label>}
       {matrix.subsidiary && <details className="report-month-options" open={adminMode || undefined}><summary>Показать несколько месяцев</summary>
       <nav className="month-controls" aria-label="Месяцы отчёта">
         <button type="button" disabled={editing !== null} onClick={() => {
@@ -753,9 +859,9 @@ export function ReportMatrix({
       )}
 
       {matrix.subsidiary ? <SourceMatrixTable matrix={{ ...matrix, time_columns: timeColumns }} summaryMonth={subsidiaryMonth} stockWeek={stockWeeks[subsidiaryMonth] ?? matrix.time_columns.filter(column => column.group_label === subsidiaryMonth && column.kind === "USED").at(-1)?.id ?? ""}
-        visibleIndices={visibleIndices} renderValueCell={renderValueCell} onPaste={previewPaste} leftWidths={widths} renderResizeHandle={resizeHandle}
-        blocked={navigationBlocked || previewBusy} {...(adminMode ? { onRemoveSupplier: (workspaceId: string, supplierId: string) => void removeSupplier(workspaceId, supplierId) } : {})}
-        onSelectStockWeek={week => { if (editing || controlsDirty) return; const month = week.slice(0, 7); setSubsidiaryMonth(month); setStockWeeks(current => ({ ...current, [month]: week })); }} /> : (
+        matchingRows={matchingSet} visibleIndices={visibleIndices} renderValueCell={renderValueCell} onPaste={previewPaste} leftWidths={widths} renderResizeHandle={resizeHandle}
+        blocked={busy || unknownSave !== null} removeBlocked={navigationBlocked || previewBusy} {...(adminMode ? { onRemoveSupplier: (workspaceId: string, supplierId: string) => void removeSupplier(workspaceId, supplierId) } : {})}
+        onSelectStockWeek={week => { const month = week.slice(0, 7); requestNavigation(() => { setSubsidiaryMonth(month); setStockWeeks(current => ({ ...current, [month]: week })); }); }} /> : (
       <div className="matrix-scroll" data-testid="matrix-scroll">
         <table
           onPaste={previewPaste}
@@ -797,13 +903,13 @@ export function ReportMatrix({
             </tr>
             <tr className="matrix-header-leaf-row">
               {visibleMatrix.time_columns.map((column) => (
-                <th key={column.id} scope="col">{matrix.subsidiary && !matrix.head_site && column.kind === "USED" ? <button type="button" className="week-heading" title="Показать остаток на конец этой недели" aria-pressed={(stockWeeks[column.group_label] ?? matrix.time_columns.filter(c => c.group_label === column.group_label && c.kind === "USED").at(-1)?.id) === column.id} onClick={() => { setSubsidiaryMonth(column.group_label); setStockWeeks(current => ({ ...current, [column.group_label]: column.id })); }}>Расход<br />{column.label}</button> : column.label}{resizeHandle(column.id, `${column.group_label} ${column.label}`, column.width)}</th>
+                <th key={column.id} scope="col">{matrix.subsidiary && !matrix.head_site && column.kind === "USED" ? <button type="button" className="week-heading" title="Показать остаток на конец этой недели" disabled={busy || unknownSave !== null} aria-pressed={(stockWeeks[column.group_label] ?? matrix.time_columns.filter(c => c.group_label === column.group_label && c.kind === "USED").at(-1)?.id) === column.id} onClick={() => requestNavigation(() => { setSubsidiaryMonth(column.group_label); setStockWeeks(current => ({ ...current, [column.group_label]: column.id })); })}>Расход<br />{column.label}</button> : column.label}{resizeHandle(column.id, `${column.group_label} ${column.label}`, column.width)}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {matrix.rows.map((row, rowIndex) => (
-              <tr key={row.id}>
+              <tr key={row.id} data-matrix-row={rowIndex} className={matchingSet.has(rowIndex) ? "matrix-search-match" : undefined}>
                 {spans.has(rowIndex) && matrix.left_columns[0] !== undefined && (
                   <th
                     rowSpan={spans.get(rowIndex)}
@@ -826,7 +932,7 @@ export function ReportMatrix({
                     scope="row"
                   >
                     <HintValue hint={identityHint(column.id)}>{row.left_values[column.id]}</HintValue>
-                    {adminMode && matrix.subsidiary && column.id === "party" && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button supplier-remove" title="Убрать производителя" aria-label="Убрать производителя" disabled={dirtyKeys.size > 0 || editing !== null || saving || previewBusy || presentationBusy || excelBusy !== null} onClick={() => void removeSupplier(row.workspace_id!, row.supplier_id!)}><UiIcon name="trash" /></button>}
+                    {adminMode && matrix.subsidiary && column.id === "party" && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button supplier-remove" title="Убрать производителя" aria-label="Убрать производителя" disabled={navigationBlocked || previewBusy} onClick={() => void removeSupplier(row.workspace_id!, row.supplier_id!)}><UiIcon name="trash" /></button>}
                     {(matrix.subsidiary ? column.id === "position" : leftIndex === 0) && row.category && row.category !== "UNSPECIFIED" && (
                       <small className="position-category">{CATEGORY_LABELS[row.category] ?? row.category}</small>
                     )}
@@ -912,6 +1018,7 @@ export function ReportMatrix({
                 ))}
               </ul>
             )}
+            <label className="import-full-review"><input type="checkbox" checked={importReviewed} disabled={excelBusy === "commit" || !!importPreview.validation_pending || (importPreview.error_count ?? 0) > 0} onChange={event => setImportReviewed(event.target.checked)} />Я просмотрел весь пакет: значения «было → стало», структуру, периоды и пропуски.</label>
             <div className="excel-dialog-actions">
               <button
                 className="button secondary"
@@ -925,7 +1032,7 @@ export function ReportMatrix({
                 className="button primary"
                 type="button"
                 disabled={
-                  (!!importPreview.reference_workbook && !importPreview.transfer_validated) || !!importPreview.validation_pending || !importPreview.batch_id || importPreview.status === "INVALID" ||
+                  !importReviewed || (!!importPreview.reference_workbook && !importPreview.transfer_validated) || !!importPreview.validation_pending || !importPreview.batch_id || importPreview.status === "INVALID" ||
                   excelBusy === "commit" ||
                   (importPreview.error_count ?? 0) > 0 ||
                   importPreview.already_imported
@@ -938,6 +1045,11 @@ export function ReportMatrix({
           </section>
         </div>
       )}
+      {pdfOptionsOpen && <SavedReportPdfDialog title={matrix.title} period={`${monthName(subsidiaryMonth)} ${matrix.year ?? ""}`} {...(stockWeeks[subsidiaryMonth] ? { week: stockWeeks[subsidiaryMonth] } : {})} busy={printing} onConfirm={() => void printReport()} onClose={() => setPdfOptionsOpen(false)} />}
+
+      {pendingNavigation && <DraftTransitionDialog count={dirtyKeys.size + Number(headerDirty) + Number(controlsDirty) + Number(renaming) + Number(editing !== null)} busy={saving || unknownSave !== null} error={saveError}
+        onStay={() => setPendingNavigation(null)} onDiscard={() => { const action = pendingNavigation; discardDraft(); setPendingNavigation(null); action(); }}
+        onSave={() => void saveChanges().then(saved => { if (saved) { const action = pendingNavigation; setPendingNavigation(null); action(); } })} />}
     </section>
   );
 }

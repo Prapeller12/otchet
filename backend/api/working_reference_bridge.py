@@ -19,6 +19,11 @@ from uuid import uuid4
 
 from backend.api.bridge import DesktopBridge
 from backend.application.access_policy import is_plan_coordinate
+from backend.application.blank_report_profiles import (
+    create_blank_report_profiles,
+    get_organization_start_period,
+    list_blank_report_profiles,
+)
 from backend.application.daily_summary import summarize_daily_rows
 from backend.application.excel_reports import (
     ExcelReportError,
@@ -35,9 +40,14 @@ from backend.application.report_cells import (
     ReportCellValue,
     RevisionConflictError,
 )
+from backend.application.report_draft import ReportDraft, ReportDraftService, normalize_presentation
 from backend.application.report_header import (
     apply_header_patch,
     effective_production_presentation,
+)
+from backend.application.report_start_period import (
+    require_period_at_or_after,
+    require_presentation_at_or_after,
 )
 from backend.application.subsidiary_report import build_rows, default_detail, quantity
 from backend.application.workspace_fields import (
@@ -47,12 +57,18 @@ from backend.application.workspace_fields import (
 )
 from backend.desktop.database_bootstrap import backup_database
 from backend.infrastructure.database.migrator import connect_sqlite
+from backend.infrastructure.database.report_matrix_revision import matrix_revision
+from backend.infrastructure.database.sqlite_blank_profiles import SqliteBlankProfilesRepository
 from backend.infrastructure.database.sqlite_excel_imports import (
     SqliteExcelImportRepository,
 )
 from backend.infrastructure.database.sqlite_reference_reports import ReferenceReports
 from backend.infrastructure.database.sqlite_report_cells import (
     SqliteReportCellUnitOfWorkFactory,
+)
+from backend.infrastructure.database.sqlite_report_draft import (
+    SqliteReportDraftOutcomes,
+    SqliteReportDraftUnitOfWork,
 )
 from backend.infrastructure.database.sqlite_report_signers import SqliteReportSignersRepository
 from backend.infrastructure.database.sqlite_report_verification import (
@@ -109,7 +125,10 @@ class WorkingReferenceApplicationBridge:
             migrate=initialize_workspace,
         )
         self._service = ReportCellService(SqliteReportCellUnitOfWorkFactory(self._database_path))
+        self._drafts = ReportDraftService(lambda: SqliteReportDraftUnitOfWork(self._database_path))
+        self._draft_outcomes = SqliteReportDraftOutcomes(self._database_path)
         self._workspace = SqliteReportWorkspaceRepository(str(self._database_path))
+        self._blank_profiles = SqliteBlankProfilesRepository(str(self._database_path))
         if initialize_workspace:
             self._default_organization = self._workspace.ensure_default_organization()
             # Only authorized setup/migration initializes structural defaults.
@@ -333,7 +352,54 @@ class WorkingReferenceApplicationBridge:
         return self._transport.health()
 
     def bootstrap(self) -> dict[str, object]:
-        return self._transport.bootstrap()
+        result = self._transport.bootstrap()
+        if result.get("ok"):
+            for organization in self._workspace.list_organizations():
+                start = self._start_period(organization.id)
+                if start is not None:
+                    cast(dict[str, object], result["data"])["default_period"] = {
+                        "year": int(start[:4]),
+                        "month": int(start[5:7]),
+                    }
+                    break
+        return result
+
+    def list_blank_report_profiles(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            _reject_unknown(_mapping(payload, "payload"), set())
+            return {
+                "ok": True,
+                "data": list_blank_report_profiles(self._definitions_directory),
+                "request_id": request_id,
+            }
+        except (OSError, ValueError, KeyError, sqlite3.Error) as error:
+            return _failure("BLANK_PROFILE_ERROR", str(error), request_id)
+
+    def create_blank_report_profiles(self, payload: object) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(request, {"profile_set_id"})
+            result = create_blank_report_profiles(
+                self._blank_profiles,
+                self._definitions_directory,
+                _required_string(request, "profile_set_id"),
+            )
+            return {"ok": True, "data": result, "request_id": request_id}
+        except (OSError, ValueError, KeyError, sqlite3.Error) as error:
+            return _failure("BLANK_PROFILE_ERROR", str(error), request_id)
+
+    def _start_period(self, organization_id: int) -> str | None:
+        return get_organization_start_period(self._blank_profiles, organization_id)
+
+    def _require_reporting_period(self, organization_id: int, period: str) -> None:
+        require_period_at_or_after(period, self._start_period(organization_id))
+
+    def _require_presentation_periods(
+        self, organization_id: int, presentation: Mapping[str, object]
+    ) -> None:
+        require_presentation_at_or_after(presentation, self._start_period(organization_id))
 
     def get_report_matrix(self, payload: object) -> dict[str, object]:
         request_id = uuid4().hex
@@ -348,6 +414,136 @@ class WorkingReferenceApplicationBridge:
             return {"ok": True, "data": matrix, "request_id": request_id}
         except (OSError, ValueError, KeyError, json.JSONDecodeError, ReportCellError) as error:
             return _failure("WORKING_REFERENCE_ERROR", str(error), request_id)
+
+    def _draft_context(self, request: Mapping[str, object]) -> dict[str, object]:
+        report_type = _required_string(request, "report_type")
+        self._definition(report_type)
+        organization_id = self._organization_id(request.get("organization_id"))
+        year = _year(request)
+        if year is None:
+            raise ReportCellValidationError("Укажите год черновика")
+        confirmation = _mapping(request.get("confirmation"), "confirmation")
+        _reject_unknown(confirmation, {"year", "month", "week_start"})
+        if confirmation.get("year", year) != year:
+            raise ReportCellValidationError("Год подтверждения не совпадает с годом черновика")
+        month = confirmation.get("month")
+        if type(month) is not int or not 1 <= month <= 12:
+            raise ReportCellValidationError("Выберите месяц от 1 до 12")
+        week = confirmation.get("week_start")
+        if week is not None:
+            if not isinstance(week, str):
+                raise ReportCellValidationError("Неверная дата недели")
+            selected = date.fromisoformat(week)
+            if selected.isoformat() != week or (selected.year, selected.month) != (year, month):
+                raise ReportCellValidationError("Неделя не принадлежит выбранному месяцу")
+        return {
+            "report_type": report_type,
+            "organization_id": str(organization_id),
+            "year": year,
+            "month": month,
+            "week_start": week,
+        }
+
+    def save_report_draft(
+        self, payload: object, *, actor_ref: str = "local-working-reference"
+    ) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(
+                request,
+                {
+                    "report_type",
+                    "organization_id",
+                    "year",
+                    "confirmation",
+                    "base_revision",
+                    "idempotency_key",
+                    "changes",
+                    "presentation",
+                },
+            )
+            context = self._draft_context(request)
+            report_type = str(context["report_type"])
+            organization_id = int(str(context["organization_id"]))
+            year, month = int(str(context["year"])), int(str(context["month"]))
+            self._require_reporting_period(organization_id, f"{year:04d}-{month:02d}")
+            allowed = self._editable_coordinate_keys(report_type, organization_id, year)
+            changes: list[ReportCellChange] = []
+            raw_changes = _sequence(request.get("changes", []), "changes")
+            if len(raw_changes) > 10000:
+                raise ReportCellValidationError("Слишком много изменений в пакете")
+            for raw in raw_changes:
+                change = _mapping(raw, "change")
+                _reject_unknown(change, {"coordinate", "value"})
+                coordinate = ReportCellCoordinate.from_mapping(
+                    _mapping(change.get("coordinate"), "coordinate")
+                )
+                selected = date.fromisoformat(
+                    str(coordinate.operation_date or coordinate.period_start)
+                )
+                if (selected.year, selected.month) != (year, month):
+                    raise ReportCellValidationError("Пакет содержит ячейку другого месяца")
+                changes.append(
+                    ReportCellChange(
+                        coordinate=coordinate,
+                        value=ReportCellValue.from_mapping(_mapping(change.get("value"), "value")),
+                        expected_revision=None,
+                    )
+                )
+            draft = ReportDraft(
+                report_type=report_type,
+                organization_id=organization_id,
+                year=year,
+                month=month,
+                week_start=cast(str | None, context["week_start"]),
+                base_revision=_required_string(request, "base_revision"),
+                idempotency_key=_required_string(request, "idempotency_key"),
+                actor_ref=actor_ref,
+                changes=changes,
+                presentation=normalize_presentation(
+                    _mapping(request.get("presentation", {}), "presentation"),
+                    f"{year:04d}-{month:02d}",
+                ),
+                allowed_coordinates=frozenset(allowed),
+            )
+            return {"ok": True, "data": self._drafts.save(draft), "request_id": request_id}
+        except ReportCellError as error:
+            return _failure(error.code, str(error), request_id)
+        except sqlite3.IntegrityError:
+            return _failure(
+                "DATA_INTEGRITY_ERROR", "Пакет не записан: ошибка целостности", request_id
+            )
+        except sqlite3.Error:
+            return _failure("DATABASE_ERROR", "База не завершила сохранение пакета", request_id)
+        except (OSError, ValueError, KeyError) as error:
+            return _failure("VALIDATION_ERROR", str(error), request_id)
+
+    def get_report_draft_save_result(
+        self, payload: object, *, actor_ref: str = "local-working-reference"
+    ) -> dict[str, object]:
+        request_id = uuid4().hex
+        try:
+            request = _mapping(payload, "payload")
+            _reject_unknown(
+                request,
+                {
+                    "report_type",
+                    "organization_id",
+                    "year",
+                    "confirmation",
+                    "idempotency_key",
+                },
+            )
+            context = self._draft_context(request)
+            result = self._draft_outcomes.read(
+                _required_string(request, "idempotency_key"), actor_ref, context
+            )
+            if result is None:
+                result = {"data_state": "unknown", "reason": "result_not_found"}
+            return {"ok": True, "data": result, "request_id": request_id}
+        except (OSError, ValueError, KeyError, sqlite3.Error, ReportCellError) as error:
+            return _failure("RECOVERY_ERROR", str(error), request_id)
 
     def save_report_cells(self, payload: object) -> dict[str, object]:
         request_id = uuid4().hex
@@ -389,12 +585,16 @@ class WorkingReferenceApplicationBridge:
                 )
             }
             changes: list[ReportCellChange] = []
+            start_period = self._start_period(organization_id)
             for raw_change in raw_changes:
                 change = _mapping(raw_change, "change")
                 _reject_unknown(change, {"coordinate", "value"})
                 coordinate_raw = _mapping(change.get("coordinate"), "coordinate")
                 value_raw = _mapping(change.get("value"), "value")
                 coordinate = ReportCellCoordinate.from_mapping(coordinate_raw)
+                require_period_at_or_after(
+                    str(coordinate.operation_date or coordinate.period_start), start_period
+                )
                 coordinate_key = _coordinate_key(coordinate)
                 if coordinate_key not in allowed:
                     raise ReportCellValidationError(
@@ -816,6 +1016,7 @@ class WorkingReferenceApplicationBridge:
             self._definition(report_type)
             organization_id = self._organization_id(request.get("organization_id"))
             current_presentation = self._workspace.get_presentation(organization_id, report_type)
+            self._require_presentation_periods(organization_id, request)
             patch: dict[str, object] = apply_header_patch(
                 current_presentation, request, report_type
             )
@@ -1280,48 +1481,8 @@ class WorkingReferenceApplicationBridge:
         ]
 
     def _matrix_revision(self, report_type: str, organization_id: int) -> str:
-        connection = connect_sqlite(self._database_path)
-        try:
-            row = connection.execute(
-                """
-                SELECT coalesce(max(id), 0)
-                FROM report_fact_revisions
-                WHERE report_type = ? AND organization_id = ?
-                """,
-                (report_type, organization_id),
-            ).fetchone()
-            layout_revision = connection.execute(
-                "SELECT coalesce(max(id), 0) FROM audit_events "
-                "WHERE entity_type = 'report_workspace' AND entity_id = ?",
-                (f"{organization_id}:{report_type}",),
-            ).fetchone()[0]
-            layout_revision = max(
-                layout_revision,
-                connection.execute(
-                    "SELECT coalesce(max(id), 0) FROM audit_events "
-                    "WHERE entity_type = 'report_presentation' AND entity_id = ? "
-                    "AND (json_extract(before_json, '$.plans') IS NOT "
-                    "json_extract(after_json, '$.plans') OR "
-                    "json_extract(before_json, '$.actuals') IS NOT "
-                    "json_extract(after_json, '$.actuals') OR "
-                    "json_extract(before_json, '$.header') IS NOT "
-                    "json_extract(after_json, '$.header') OR "
-                    "json_extract(before_json, '$.production_codes') IS NOT "
-                    "json_extract(after_json, '$.production_codes'))",
-                    (f"{organization_id}:{report_type}",),
-                ).fetchone()[0],
-            )
-            if report_type == "HEAD_SITE":
-                layout_revision = max(
-                    layout_revision,
-                    connection.execute("SELECT coalesce(max(id), 0) FROM audit_events").fetchone()[
-                        0
-                    ],
-                )
-        finally:
-            connection.close()
-        revision = f"db-{int(row[0]) if row is not None else 0}"
-        return revision if not layout_revision else f"{revision}-layout-{layout_revision}"
+        with closing(connect_sqlite(self._database_path)) as connection:
+            return matrix_revision(connection, report_type, organization_id)
 
     def _field_configuration(self, report_type: str, group: WorkspaceGroup) -> dict[str, Any]:
         config: dict[str, Any] = json.loads(group.configuration_json)
@@ -1403,7 +1564,12 @@ class WorkingReferenceApplicationBridge:
 
     def _organizations_contract(self) -> list[dict[str, str]]:
         return [
-            {"id": str(item.id), "name": item.name, "kind": item.kind}
+            {
+                "id": str(item.id),
+                "name": item.name,
+                "kind": item.kind,
+                **({"start_period": start} if (start := self._start_period(item.id)) else {}),
+            }
             for item in self._workspace.list_organizations()
         ]
 

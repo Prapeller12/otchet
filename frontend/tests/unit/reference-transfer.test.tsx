@@ -39,6 +39,7 @@ it("sends only explicit overrides and clears the stale issue before rechecking t
 });
 it("automatically checks known mappings and revalidates when the import mode changes", async () => {
   const { user, referenceReport } = setup({ cancelled: false, batch_id: "auto", status: "STAGED", error_count: 0, sources: { "0:DE99": source } });
+  await user.click(screen.getByLabelText("Только ошибки и неоднозначности"));
   await screen.findByLabelText("Показатель 0:DE99");
   expect(screen.queryByLabelText("Значение и период верны")).toBeNull();
   await user.selectOptions(screen.getByLabelText("Режим переноса"), "update");
@@ -75,6 +76,7 @@ it("shows new projected positions as resolved and reuses saved period and sheet 
   const decisions = { "2": { include: true, reason: "Отчётный лист" } };
   const { user, referenceReport } = setup({ cancelled: false, sources: { "0:DE99": { ...source, coordinate, metric: "SUPPLIED" } }, target_matrix: target, profile_reused: true,
     applied_period_rules: rules, applied_sheet_decisions: decisions });
+  await user.click(screen.getByLabelText("Только ошибки и неоднозначности"));
   expect(await screen.findByLabelText("Показатель 0:DE99")).toHaveValue("new-projected-position");
   expect(screen.getByText(/Использован сохранённый профиль/)).toBeVisible();
   expect(screen.getByText("Поставка изготовителя")).toBeVisible();

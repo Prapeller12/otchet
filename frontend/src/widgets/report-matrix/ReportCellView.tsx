@@ -70,10 +70,12 @@ export function ReportCellView({
     <><button
       ref={buttonRef}
       type="button"
+      data-row={position.row}
+      data-column={position.column}
       className={classNames}
       tabIndex={active ? 0 : -1}
       aria-readonly={cell.state.access !== "editable"}
-      aria-invalid={cell.state.persistence === "error"}
+      aria-invalid={cell.state.persistence === "error" || Boolean(cell.issue)}
       aria-label={`${valueText(cell)}, ${accessText(cell)}${issueText}`}
       {...help.hintProps}
       onClick={() => onActivate(position)}

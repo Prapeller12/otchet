@@ -79,6 +79,8 @@ describe("Excel actions", () => {
     expect(screen.getByText("daily.xlsx")).toBeVisible();
     expect(within(dialog).getByText("2")).toBeVisible();
 
+    expect(screen.getByRole("button", { name: "Подтвердить импорт" })).toBeDisabled();
+    await user.click(screen.getByLabelText(/Я просмотрел весь пакет/));
     await user.click(screen.getByRole("button", { name: "Подтвердить импорт" }));
     await waitFor(() => expect(gateway.imported).toBe(true));
     expect(await screen.findByText(/Импорт завершён: записано 3/)).toBeVisible();

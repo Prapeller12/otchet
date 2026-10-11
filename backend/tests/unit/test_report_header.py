@@ -160,6 +160,26 @@ def test_reviewer_code_actuals_preserve_identifiers_labels_plans_and_other_month
     assert current["production_codes"][0]["actuals"] == {"2026-01": "2"}
 
 
+def test_existing_code_plan_and_actual_patch_preserves_structure_and_other_months() -> None:
+    current = {"production_codes": [code("A", "19", "2"), code("B", "12", "1")]}
+    patch = apply_header_patch(
+        current,
+        {
+            "production_code_plans": {"A": {"2026-02": "0"}, "B": {"2026-02": ""}},
+            "production_code_actuals": {"A": {"2026-02": "3"}, "B": {"2026-02": "4"}},
+        },
+        "HEAD_SITE",
+    )
+    codes = patch["production_codes"]
+    assert [c["id"] for c in codes] == ["A", "B"]
+    assert [c["label"] for c in codes] == ["Код A", "Код B"]
+    assert codes[0]["plans"] == {"2026-01": "19", "2026-02": "0"}
+    assert codes[1]["plans"] == {"2026-01": "12", "2026-02": ""}
+    assert effective_production_presentation(patch)["plans"]["2026-02"] == ""
+    assert effective_production_presentation(patch)["actuals"]["2026-02"] == "7"
+    assert current["production_codes"][0]["plans"] == {"2026-01": "19"}
+
+
 @pytest.mark.parametrize(
     "actuals",
     [
