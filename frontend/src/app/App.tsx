@@ -1,7 +1,8 @@
+import { BlankReportsDialog } from "../features/blank-reports/BlankReportsDialog";
 import { RecoveryBackups } from "../features/access/RecoveryBackups";
 import { FieldHintsEnabledContext } from "../shared/ui/FieldHint";
 import { ReferenceReport } from "../features/reference-reports/ReferenceReport";
-import type { ReferenceSummary } from "../shared/api/application-gateway";
+import type { ReferenceSummary, DraftNavigation } from "../shared/api/application-gateway";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessGate } from "../features/access/AccessGate";
 import { AuthorizationDialog, type PendingAuthorization } from "../features/access/AuthorizationDialog";
@@ -37,6 +38,7 @@ function Workspace() {
   const [hintsSaving, setHintsSaving] = useState(false);
   const [hintsError, setHintsError] = useState("");
   const [backupWarning, setBackupWarning] = useState("");
+  const [blankSetupOpen, setBlankSetupOpen] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [accessNotice, setAccessNotice] = useState("");
   useEffect(() => {
@@ -124,6 +126,10 @@ function Workspace() {
   const [references, setReferences] = useState<ReferenceSummary[]>([]);
   const [referenceDirty, setReferenceDirty] = useState(false);
   const [matrixBlocked, setMatrixBlocked] = useState(false);
+  const matrixNavigation = useRef<DraftNavigation | null>(null);
+  const [initialPeriod, setInitialPeriod] = useState<{ year: number; month: number } | undefined>();
+  const handleNavigationReady = useCallback((value: DraftNavigation | null) => { matrixNavigation.current = value; }, []);
+  function navigate(action: () => void) { if (referenceDirty) return; if (matrixNavigation.current) matrixNavigation.current.request(action); else action(); }
   const navigationBlocked = referenceDirty || matrixBlocked;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -141,7 +147,9 @@ function Workspace() {
       .then((result) => {
         if (!active) return;
         setOrganizations(result.organizations);
-        setOrganizationId((current) => current || result.organizations[0]?.id || "");
+        const initialHead = result.organizations.find(item => item.kind === "HEAD" && item.start_period);
+        setOrganizationId((current) => current || initialHead?.id || result.organizations[0]?.id || "");
+        if (initialHead) setReportType("HEAD_SITE");
       })
       .catch((reason: unknown) => {
         if (active) {
@@ -194,19 +202,20 @@ function Workspace() {
         </div>
         <div className="workspace-mode-actions">
           <label className="field-hints-toggle"><input type="checkbox" aria-label="Подсказки при наведении" checked={fieldHintsEnabled} disabled={!hintsLoaded || hintsSaving} onChange={event => void changeFieldHints(event.target.checked)} />Подсказки при наведении</label>
-          <button type="button" disabled={navigationBlocked} onClick={() => setOnboardingOpen(true)}><UiIcon name="help" />Как заполнить</button>
+          <button type="button" disabled={referenceDirty} onClick={() => setOnboardingOpen(true)}><UiIcon name="help" />Как заполнить</button>
           {workspaceMode === "entry" ? <>
-            <button type="button" disabled={navigationBlocked || !!referenceId} onClick={() => setWorkspaceMode("report-settings")}><UiIcon name="edit" />План и сведения</button>
-            <button type="button" disabled={navigationBlocked} onClick={() => void openAdministration()}><UiIcon name="key" />Администратор</button>
-          </> : <button type="button" disabled={navigationBlocked || leavingAdministration} onClick={() => void leaveEditing()}><UiIcon name="arrow-left" />К заполнению отчётов</button>}
+            <button type="button" disabled={referenceDirty || !!referenceId} onClick={() => navigate(() => setWorkspaceMode("report-settings"))}><UiIcon name="edit" />План и сведения</button>
+            <button type="button" disabled={referenceDirty} onClick={() => navigate(() => void openAdministration())}><UiIcon name="key" />Администратор</button>
+          </> : <button type="button" disabled={referenceDirty || leavingAdministration} onClick={() => navigate(() => void leaveEditing())}><UiIcon name="arrow-left" />К заполнению отчётов</button>}
         </div>
       </header>
       {workspaceMode === "admin" && <div className="admin-navigation" aria-label="Разделы администратора">
         <p>Настройте формы и выдайте личные ключи.</p>
-        {gateway.listRecoveryBackups && <button className="button secondary" disabled={navigationBlocked} onClick={() => setRecoveryOpen(true)}>Резервные копии</button>}
-        <button className="button secondary" disabled={navigationBlocked} aria-pressed={adminSection === "reports"} onClick={() => setAdminSection("reports")}><UiIcon name="edit" />План и сведения</button>
-        <button className="button secondary" disabled={navigationBlocked || !!referenceId} onClick={() => setSettingsOpen(true)}><UiIcon name="settings" />Настроить рабочее поле</button>
-        <button className="button secondary" disabled={navigationBlocked} aria-pressed={adminSection === "users"} onClick={() => setAdminSection("users")}><UiIcon name="users" />Ответственные лица</button>
+        {gateway.listBlankReportProfiles && gateway.createBlankReportProfiles && <button className="button secondary" disabled={referenceDirty} onClick={() => navigate(() => setBlankSetupOpen(true))}>Создать заготовки с сентября 2027</button>}
+        {gateway.listRecoveryBackups && <button className="button secondary" disabled={referenceDirty} onClick={() => navigate(() => setRecoveryOpen(true))}>Резервные копии</button>}
+        <button className="button secondary" disabled={referenceDirty} aria-pressed={adminSection === "reports"} onClick={() => navigate(() => setAdminSection("reports"))}><UiIcon name="edit" />План и сведения</button>
+        <button className="button secondary" disabled={referenceDirty || !!referenceId} onClick={() => navigate(() => setSettingsOpen(true))}><UiIcon name="settings" />Настроить рабочее поле</button>
+        <button className="button secondary" disabled={referenceDirty} aria-pressed={adminSection === "users"} onClick={() => navigate(() => setAdminSection("users"))}><UiIcon name="users" />Ответственные лица</button>
       </div>}
 
       <div className="workspace-navigation">
@@ -217,8 +226,17 @@ function Workspace() {
               key={type}
               type="button"
               aria-current={type === reportType ? "page" : undefined}
-              disabled={navigationBlocked}
-              onClick={() => { setReferenceId(""); setReportType(type); }}
+              disabled={referenceDirty}
+              onClick={() => navigate(() => {
+                setReferenceId(""); setReportType(type);
+                if (activeOrganization?.start_period && type !== "DAILY_MOVEMENT") {
+                  const kind = type === "HEAD_SITE" ? "HEAD" : "SUBSIDIARY";
+                  if (activeOrganization.kind !== kind) {
+                    const matching = organizations.find(item => item.start_period && item.kind === kind);
+                    if (matching) { setOrganizationId(matching.id); setInitialPeriod(undefined); }
+                  }
+                }
+              })}
             >
               <UiIcon name={type === "DAILY_MOVEMENT" ? "calendar" : type === "HEAD_SITE" ? "factory" : "buildings"} />
               {REPORT_LABELS[type]}
@@ -227,7 +245,7 @@ function Workspace() {
         </nav>
         <label className="organization-switcher">
           <span>Организация</span>
-          <select disabled={navigationBlocked} value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}>
+          <select disabled={referenceDirty} value={organizationId} onChange={(event) => { const id = event.target.value; navigate(() => { setOrganizationId(id); setInitialPeriod(undefined); const selected = organizations.find(item => item.id === id); if (selected?.start_period) setReportType(selected.kind === "HEAD" ? "HEAD_SITE" : "SUBSIDIARY"); }); }}>
             {organizations.map((organization) => (
               <option key={organization.id} value={organization.id}>
                 {organization.name}
@@ -239,12 +257,12 @@ function Workspace() {
       </div>
 
       {activeReferences.length > 0 && <label className="reference-selector">Сохранённые отчёты Excel
-        <select aria-label="Сохранённые отчёты Excel" disabled={navigationBlocked} value={referenceId} onChange={e => setReferenceId(e.target.value)}>
+        <select aria-label="Сохранённые отчёты Excel" disabled={referenceDirty} value={referenceId} onChange={e => { const id = e.target.value; navigate(() => setReferenceId(id)); }}>
           <option value="">Рабочая форма</option>
           {activeReferences.map(r => <option key={r.id} value={r.id}>{r.file_name}</option>)}
         </select>
       </label>}
-      {matrixBlocked && <p className="workspace-edit-notice" role="status">Завершите ввод и сохраните изменения перед переходом в другую форму, организацию или настройки.</p>}
+      {matrixBlocked && <p className="workspace-edit-notice" role="status">При переходе программа предложит сохранить весь черновик, отбросить изменения или остаться.</p>}
       {accessNotice && <p className="workspace-edit-notice" role="status">{accessNotice}</p>}
       {backupWarning && <p className="workspace-edit-notice" role="alert">{backupWarning}</p>}
       {hintsError && <p className="workspace-edit-notice" role="alert">{hintsError}</p>}
@@ -262,6 +280,9 @@ function Workspace() {
             reloadKey={reloadKey}
             onStatusChange={handleStatusChange}
             onNavigationBlockedChange={setMatrixBlocked}
+            onNavigationReady={handleNavigationReady}
+            {...(activeOrganization?.start_period ? { startPeriod: activeOrganization.start_period } : {})}
+            {...(initialPeriod ? { initialPeriod } : {})}
           />
         ) : (
           <section className="load-state">Загрузка организаций…</section>
@@ -269,7 +290,7 @@ function Workspace() {
       </main>
 
       <footer className="application-status-bar" aria-label="Состояние рабочего поля">
-        <span className="status-ready">Готово</span>
+        <span className="status-ready">{matrixBlocked ? "Открытое действие / черновик" : "Рабочая форма"}</span>
         <span className="status-cell">{cellStatus}</span>
         <span className="status-context">
           {activeOrganization?.name ?? "Организация не выбрана"} · {REPORT_LABELS[reportType]}
@@ -280,6 +301,11 @@ function Workspace() {
         </span>
       </footer>
 
+      {blankSetupOpen && <BlankReportsDialog onClose={() => setBlankSetupOpen(false)} onCompleted={async result => {
+            await gateway.endAdministration?.();
+            const list = await gateway.listOrganizations();
+            setOrganizations(list.organizations); setOrganizationId(result.organization_id); setReportType(result.report_type); setInitialPeriod({ year: result.year, month: result.month }); setReferenceId(""); setReloadKey(value => value + 1); setBlankSetupOpen(false); setWorkspaceMode("entry"); setAdminSection("reports");
+        }} />}
       {recoveryOpen && <RecoveryBackups gateway={gateway} onClose={() => setRecoveryOpen(false)} />}
       {onboardingOpen && <Onboarding onClose={closeOnboarding} />}
       {pendingAuthorization && <AuthorizationDialog gateway={gateway} pending={pendingAuthorization} onClose={closeAuthorization} />}

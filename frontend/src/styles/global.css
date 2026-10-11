@@ -474,3 +474,7 @@ main {
     min-width: 190px;
   }
 }
+.position-settings-list { display: flex; flex-wrap: wrap; gap: .4rem; max-height: 12rem; overflow: auto; margin: .5rem 0 1rem; }
+.position-settings-list button { text-align: left; border: 1px solid #c8d0d8; border-radius: 5px; padding: .5rem; background: #fff; }
+.position-settings-list button[aria-pressed="true"] { border: 2px solid #334f7b; background: #edf3ff; }
+.position-settings-search { display: grid; gap: .25rem; }

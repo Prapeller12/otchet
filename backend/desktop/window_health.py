@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ctypes
 import importlib
 import json
+import sys
 import time
 from typing import Any
 
@@ -164,8 +166,21 @@ def _check_hint_client_bounds(window: Any) -> None:
         raise RuntimeError("Подсказка обрезана полосой прокрутки или краем рабочей области")
 
 
+def _park_test_pointer() -> None:
+    """Keep native hover separate from the self-test's synthetic pointer events."""
+    if sys.platform != "win32":
+        return
+    # The runner leaves its pointer in the middle of the screen. Removing a popup
+    # there exposes another hinted field and generates a real mouseover, which
+    # can open a different tooltip immediately after the synthetic Escape.
+    # The desktop origin is outside the client area of our normal framed window.
+    if not ctypes.windll.user32.SetCursorPos(0, 0):
+        raise RuntimeError("Не удалось отвести указатель мыши перед проверкой подсказок")
+
+
 def _exercise_readonly_hints(window: Any, paths: PortablePaths, tab: int) -> None:
     """Exercise actual React hover/focus help inside the narrow native WebView."""
+    _park_test_pointer()
     if not window.evaluate_js("""(() => {
       const cells = [...document.querySelectorAll(
         '.report-matrix button[aria-readonly=true]')];
@@ -510,6 +525,13 @@ def _exercise_print(window: Any, paths: PortablePaths) -> None:
         raise RuntimeError("Осталась отдельная кнопка подтверждения данных")
     _resize_test_window(window, compact=True)
     _click_button(window, "Печать / PDF А4")
+    _wait_for_script(
+        window,
+        "!!document.querySelector('#pdf-options-title') && "
+        "document.body.textContent.includes('сохранённые данные выбранного периода')",
+        "Не показан выбранный сохранённый период перед печатью",
+    )
+    _click_button(window, "Подтвердить и создать PDF")
     _confirm_write(
         window, action="Подтвердить и печатать", reject_wrong_code=True, capture_paths=paths
     )
@@ -557,7 +579,7 @@ def _exercise_project_header(window: Any) -> None:
     _fill_form_input(window, ".production-header", "Наименование изделия", "Изделие проверки окна")
     _fill_form_input(window, ".production-header", "Шифр изделия", "ПРОВЕРКА-27")
     _click_button(window, "Сохранить")
-    _confirm_write(window, action="Сохранить и подтвердить", project_manager=True)
+    _confirm_write(window, action="Сохранить весь черновик", project_manager=True)
     _wait_for_script(
         window,
         "document.querySelector('.monthly-report-actions [role=status]')?.textContent"
@@ -609,12 +631,27 @@ def _exercise_matrix_paste(window: Any) -> None:
     _click_button(window, "Вставить проверенный диапазон")
     _wait_for_script(
         window,
-        "[...document.querySelectorAll('.report-tab')].every(button => button.disabled)",
-        "Несохранённый диапазон не защищён от переключения вкладки",
+        "document.querySelector('.draft-status')?.textContent"
+        ".includes('Есть несохранённые изменения')",
+        "Вставленный диапазон не показан как несохранённый черновик",
+    )
+    window.evaluate_js("document.querySelectorAll('.report-tab')[1].click()")
+    _wait_for_script(
+        window,
+        "!!document.querySelector('#draft-transition-title') && "
+        "document.querySelector('.report-tab[aria-current=page]') === "
+        "document.querySelectorAll('.report-tab')[0]",
+        "Переход с черновиком не вызвал диалог или уже сменил форму",
+    )
+    _click_button(window, "Остаться")
+    _wait_for_script(
+        window,
+        "!document.querySelector('#draft-transition-title')",
+        "Диалог перехода не закрылся после выбора остаться",
     )
     _click_button(window, "Сохранить (2)")
     _confirm_write(
-        window, action="Сохранить и подтвердить", reject_wrong_code=True, project_manager=True
+        window, action="Сохранить весь черновик", reject_wrong_code=True, project_manager=True
     )
     _wait_for_script(
         window,
@@ -623,6 +660,55 @@ def _exercise_matrix_paste(window: Any) -> None:
         "?.textContent.includes('Подтверждено: Руководитель проверки окна')",
         "Сохранение диапазона не подписало новые данные кодом руководителя",
     )
+
+
+def _exercise_blank_report_set(window: Any, paths: PortablePaths) -> None:
+    """Create the five real, empty workspaces through the packaged UI and bridge."""
+    _click_button(window, "Администратор")
+    _confirm_write(window)
+    _click_button(window, "Создать заготовки с сентября 2027")
+    _wait_for_script(
+        window,
+        "!!document.querySelector('.blank-reports-setup table') && "
+        "document.querySelectorAll('.blank-reports-setup tbody tr').length === 5",
+        "Не показан полный набор пяти заготовок",
+    )
+    _click_button(window, "Создать или открыть пять заготовок")
+    _confirm_write(window)
+    for name, count in [
+        ("КГЭ", 9),
+        ("Молот", 202),
+        ("Кулакова", 69),
+        ("СРЗ", 188),
+        ("Равенство", 194),
+    ]:
+        if name != "КГЭ":
+            window.evaluate_js(
+                """(() => {
+              const select = document.querySelector('.organization-switcher select');
+              const option = [...select.options].find(node => node.textContent.trim() === """
+                + json.dumps(name, ensure_ascii=False)
+                + """);
+              if (!option) throw new Error('Blank organization missing');
+              select.value = option.value;
+              select.dispatchEvent(new Event('change', {bubbles:true}));
+            })()"""
+            )
+        _wait_for_script(
+            window,
+            _READY + " && document.querySelector('.organization-switcher select')"
+            ".selectedOptions[0]?.textContent.trim() === "
+            + json.dumps(name, ensure_ascii=False)
+            + f" && document.querySelectorAll('.source-matrix tbody tr[data-matrix-row]')"
+            f".length === {count} && document.querySelector('.month-controls select')"
+            ".value === '2027' && document.querySelector('.subsidiary-controls select')"
+            ".value === '2027-09' && !document.querySelector('.admin-navigation')",
+            f"Заготовка {name}: неверные строки, период или выход из администрирования",
+        )
+        if name == "КГЭ":
+            _capture_window(window, paths, "window-blank-kge.png")
+        if name == "Молот":
+            _capture_window(window, paths, "window-blank-molot.png")
 
 
 def monitor_window(
@@ -643,6 +729,22 @@ def monitor_window(
         if ui_reopen_test:
             # Keep the entire 1440x900 native window above the CI taskbar.
             window.move(100, 80)
+            _wait_for_script(
+                window,
+                "document.querySelector('.organization-switcher select')"
+                ".selectedOptions[0]?.textContent.trim() === 'КГЭ' && "
+                "document.querySelectorAll('.source-matrix tbody tr[data-matrix-row]')"
+                ".length === 9 && "
+                "document.querySelector('.month-controls select').value === '2027' "
+                "&& document.querySelector('.subsidiary-controls select').value === '2027-09'",
+                "После перезапуска не восстановились заготовки с сентября 2027",
+            )
+            window.evaluate_js("""(() => {
+              const select = document.querySelector('.organization-switcher select');
+              select.value = '1';
+              select.dispatchEvent(new Event('change', {bubbles:true}));
+              document.querySelectorAll('.report-tab')[0].click();
+            })()""")
             _wait_for_script(
                 window,
                 """(() => {
@@ -804,6 +906,23 @@ def monitor_window(
                 raise RuntimeError("Не отображается результат формулы импортированного отчёта")
             _check_icon_accessibility(window)
             _capture_window(window, paths, "window-4.png")
+            _exercise_blank_report_set(window, paths)
+            # The five supplied structures define HEAD_SITE/SUBSIDIARY only.
+            # DAILY_MOVEMENT has no group there; verify the three-form hints
+            # against the original fixture, whose saved values must remain intact.
+            window.evaluate_js("""(() => {
+              const select = document.querySelector('.organization-switcher select');
+              select.value = '1';
+              select.dispatchEvent(new Event('change', {bubbles:true}));
+              document.querySelectorAll('.report-tab')[0].click();
+            })()""")
+            _wait_for_script(
+                window,
+                _READY + " && document.querySelector('.organization-switcher select').value === '1'"
+                " && [...document.querySelectorAll('.report-matrix tbody "
+                "button[aria-readonly=false]')][0]?.textContent.trim() === '17'",
+                "После создания заготовок не восстановилась прежняя рабочая форма",
+            )
             # Leave hints off for the separate --ui-reopen-test EXE invocation.
             _set_field_hints(window, paths, False)
             _check_all_disabled_hints(window)

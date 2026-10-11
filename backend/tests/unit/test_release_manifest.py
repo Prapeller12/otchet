@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import struct
 from pathlib import Path
 
@@ -12,6 +13,21 @@ from scripts.verify_release import (
     verify_frontend_network_policy,
     verify_sqlcipher_runtime,
 )
+
+
+def test_ci_manifest_records_actual_build_commit_and_rejects_bad_metadata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GITHUB_SHA", "a" * 40)
+    monkeypatch.setenv("GITHUB_RUN_ID", "12345")
+    path = write_manifest(tmp_path, "0.1.0-dev.34")
+    payload = json.loads(path.read_text())
+    assert payload["source_commit"] == "a" * 40
+    assert payload["build_run_id"] == "12345"
+    verify_manifest(tmp_path)
+    monkeypatch.setenv("GITHUB_SHA", "test-v0.1.0-dev.34")
+    with pytest.raises(ManifestError, match="40-character"):
+        write_manifest(tmp_path, "0.1.0-dev.34")
 
 
 def test_release_manifest_ignores_mutable_runtime_data(tmp_path: Path) -> None:

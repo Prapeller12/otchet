@@ -33,7 +33,7 @@ export function ReferenceTransfer({ book, matrix, gateway, preview, onReady }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
-  const [onlyIssues, setOnlyIssues] = useState(false);
+  const [onlyIssues, setOnlyIssues] = useState(true);
   const mounted = useRef(true);
   const sequence = useRef(0);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; sequence.current++; }; }, []);
@@ -90,7 +90,7 @@ export function ReferenceTransfer({ book, matrix, gateway, preview, onReady }: {
   useEffect(() => { void check(); }, [book.id]);
   const visible = sources.filter(([key, source]) => {
     const context = [source.sheet, source.address, source.position?.name, source.position?.code, source.position?.manufacturer, source.metric].filter(Boolean).join(" ");
-    return context.toLocaleLowerCase("ru").includes(filter.toLocaleLowerCase("ru")) && (!onlyIssues || issueMap.has(key) || Boolean(source.errors?.length));
+    return context.toLocaleLowerCase("ru").includes(filter.toLocaleLowerCase("ru")) && (!onlyIssues || issueMap.has(key) || Boolean(source.errors?.length) || Boolean(choices[key]));
   });
   const maxPage = Math.max(0, Math.ceil(visible.length / 30) - 1);
   const currentPage = Math.min(page, maxPage);
@@ -143,6 +143,7 @@ export function ReferenceTransfer({ book, matrix, gateway, preview, onReady }: {
       })}</details>}
     <div className="reference-toolbar"><label>Найти позицию или поле <input value={filter} onChange={event => { setFilter(event.target.value); setPage(0); }} /></label>
       <label><input type="checkbox" checked={onlyIssues} onChange={event => { setOnlyIssues(event.target.checked); setPage(0); }} />Только ошибки и неоднозначности</label></div>
+    {onlyIssues && !visible.length && <p role="status">Ошибок и неоднозначностей среди полей не найдено. Отключите «Только ошибки», чтобы просмотреть весь пакет перед импортом.</p>}
     <div className="reference-scroll" tabIndex={0} role="region" aria-label="Соответствия Excel и рабочего отчёта"><table className="transfer-table"><thead><tr><th>Источник и назначение</th><th>Исходное → новое</th><th>Рабочая позиция и показатель</th><th>Период</th><th>Результат проверки</th></tr></thead><tbody>
       {visible.slice(currentPage * 30, (currentPage + 1) * 30).map(([key, source]) => {
         const c = choice(key, source); const issue = result.validation_pending && choices[key] ? undefined : issueMap.get(key) ?? source.errors?.map(error => error.message).join("; ");

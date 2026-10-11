@@ -75,7 +75,7 @@ it("keeps an unsaved cell and its edit guard when changing hint visibility", asy
   expect(editedCell).toHaveTextContent("123");
   expect(editedCell.isConnected).toBe(true);
   expect(screen.getByRole("button", { name: "Сохранить (1)" })).toBeEnabled();
-  expect(screen.getByRole("button", { name: "Головная площадка" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Головная площадка" })).toBeEnabled();
   expect(write).not.toHaveBeenCalled();
 });
 

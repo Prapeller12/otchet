@@ -3,6 +3,7 @@ import type {
   MatrixCellContract,
   ReportMatrixContract,
   SaveReportCellsResponse,
+  SaveReportDraftResponse,
 } from "./application-gateway";
 import type { ReportCellContract } from "./report-cell-contract";
 
@@ -85,4 +86,14 @@ export function parseSaveResponse(value: unknown): SaveReportCellsResponse {
   }
   value.cells.forEach(assertReportCell);
   return value as SaveReportCellsResponse;
+}
+
+export function parseDraftSaveResponse(value: unknown): SaveReportDraftResponse {
+  if (!isRecord(value) || value.data_state !== "committed" || !hasString(value, "operation_revision") || !hasString(value, "current_revision") || typeof value.idempotent_replay !== "boolean" || !isRecord(value.presentation)
+    || !["verified", "verification_error", "pending", "stale"].includes(String(value.verification_state))
+    || !["complete", "post_backup_warning", "pending"].includes(String(value.backup_state))) {
+    throw new Error("Программа вернула неполный результат сохранения черновика");
+  }
+  parseSaveResponse(value);
+  return value as SaveReportDraftResponse;
 }

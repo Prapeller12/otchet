@@ -22,14 +22,20 @@ import type {
   SaveReportCellsResponse,
   SaveReportPresentationRequest,
   ReportPresentation,
+  SaveReportDraftRequest, SaveReportDraftResponse, ReportDraftResultQuery, ReportDraftResult,
+  BlankReportProfiles, BlankReportProfilesResult,
 } from "./application-gateway";
-import { parseReportMatrix, parseSaveResponse } from "./runtime-guards";
+import { isRecord, parseDraftSaveResponse, parseReportMatrix, parseSaveResponse } from "./runtime-guards";
 
 type BridgeEnvelope =
   | { ok: true; data: unknown }
   | { ok: false; error: { code: string; message: string } };
 
 type PyWebViewApi = {
+  list_blank_report_profiles(request: Record<string, never>): Promise<BridgeEnvelope>;
+  create_blank_report_profiles(request: { profile_set_id: string }): Promise<BridgeEnvelope>;
+  save_report_draft(request: SaveReportDraftRequest): Promise<BridgeEnvelope>;
+  get_report_draft_save_result(request: ReportDraftResultQuery): Promise<BridgeEnvelope>;
   list_recovery_backups(request: Record<string, never>): Promise<BridgeEnvelope>;
   verify_recovery_backup(request: { backup_id: string }): Promise<BridgeEnvelope>;
   restore_recovery_backup(request: { backup_id: string }): Promise<BridgeEnvelope>;
@@ -75,7 +81,7 @@ declare global {
 
 function unwrap(envelope: BridgeEnvelope): unknown {
   if (!envelope.ok) {
-    throw new Error(`${envelope.error.code}: ${envelope.error.message}`);
+    throw Object.assign(new Error(`${envelope.error.code}: ${envelope.error.message}`), { code: envelope.error.code, ...(envelope.error.code === "SAVE_OUTCOME_UNKNOWN" ? { outcomeUnknown: true } : { outcomeKnown: true }) });
   }
   if (envelope.data && typeof envelope.data === "object") {
     const result = envelope.data as { backup_warning?: unknown; backup_complete?: unknown };
@@ -95,6 +101,8 @@ export class PyWebViewGateway implements ApplicationGateway {
   #authorizationHandler: AuthorizationHandler | null = null;
 
   setAuthorizationHandler(handler: AuthorizationHandler | null): void { this.#authorizationHandler = handler; }
+  async listBlankReportProfiles(): Promise<BlankReportProfiles> { return unwrap(await this.#api.list_blank_report_profiles({})) as BlankReportProfiles; }
+  async createBlankReportProfiles(request: { profile_set_id: string }): Promise<BlankReportProfilesResult> { return await this.#write("Создать пустые отчёты с сентября 2027 года", true, request, value => this.#api.create_blank_report_profiles(value)) as BlankReportProfilesResult; }
   async listRecoveryBackups(): Promise<{ backups: RecoveryBackup[] }> { return unwrap(await this.#api.list_recovery_backups({})) as { backups: RecoveryBackup[] }; }
   async verifyRecoveryBackup(backupId: string): Promise<{ valid: boolean; created_at: string }> { return unwrap(await this.#api.verify_recovery_backup({ backup_id: backupId })) as { valid: boolean; created_at: string }; }
   async restoreRecoveryBackup(backupId: string): Promise<RecoveryResult> { return unwrap(await this.#api.restore_recovery_backup({ backup_id: backupId })) as RecoveryResult; }
@@ -175,6 +183,28 @@ export class PyWebViewGateway implements ApplicationGateway {
     request: SaveReportCellsRequest,
   ): Promise<SaveReportCellsResponse> {
     return parseSaveResponse(await this.#write("Проверить и сохранить изменения отчёта", false, request, value => this.#api.save_report_cells(value), "Сохранить и подтвердить"));
+  }
+
+  async saveReportDraft(request: SaveReportDraftRequest): Promise<SaveReportDraftResponse> {
+    if (!this.#api.save_report_draft) throw Object.assign(new Error("Эта сборка не поддерживает единый черновик."), { outcomeKnown: true });
+    const result = await this.#write("Сохранить и подтвердить весь черновик отчёта", false, request, async value => {
+      try {
+        const envelope = await this.#api.save_report_draft(value);
+        if (!isRecord(envelope) || typeof envelope.ok !== "boolean" || (envelope.ok && !("data" in envelope))
+          || (!envelope.ok && (!isRecord(envelope.error) || typeof envelope.error.code !== "string" || typeof envelope.error.message !== "string"))) {
+          throw new Error("Программа вернула неполный ответ на сохранение");
+        }
+        return envelope as BridgeEnvelope;
+      }
+      catch (reason) { throw Object.assign(new Error(reason instanceof Error ? reason.message : "Ответ программы не получен"), { outcomeUnknown: true }); }
+    }, "Сохранить весь черновик");
+    try { return parseDraftSaveResponse(result); }
+    catch (reason) { throw Object.assign(new Error(reason instanceof Error ? reason.message : "Ответ не распознан"), { outcomeUnknown: true }); }
+  }
+
+  async getReportDraftSaveResult(request: ReportDraftResultQuery): Promise<ReportDraftResult> {
+    const result = await this.#write("Проверить результат предыдущего сохранения", false, request, value => this.#api.get_report_draft_save_result(value), "Проверить результат");
+    return isRecord(result) && result.data_state === "unknown" ? { data_state: "unknown" } : parseDraftSaveResponse(result);
   }
 
   async validateImport(request: ImportRequest): Promise<ImportPreview> {

@@ -25,6 +25,10 @@ from backend.application.import_workspace import (
 )
 from backend.application.reference_transfer import validate_transfer
 from backend.application.report_cells import ReportCellChange, ReportCellCoordinate, ReportCellValue
+from backend.application.report_start_period import (
+    require_period_at_or_after,
+    require_presentation_at_or_after,
+)
 from backend.repositories.report_facts import ReportCellUnitOfWork
 
 
@@ -228,6 +232,22 @@ def prepare_transfer(app: Any, request: dict[str, Any], organization: int) -> di
         decisions,
         recognition,
     )
+    start_period = app._start_period(organization)
+    for change in checked["changes"]:
+        try:
+            require_period_at_or_after(
+                change["coordinate"].get("operation_date")
+                or change["coordinate"].get("period_start"),
+                start_period,
+            )
+        except ValueError as error:
+            checked["issues"].append(
+                {
+                    "source_cell": "",
+                    "code": "BEFORE_REPORT_START",
+                    "message": str(error),
+                }
+            )
     issues = [*structural_issues, *checked["issues"]]
     # Every counter represents the same reviewed result, never raw non-empty Excel cells.
     result = {
@@ -325,10 +345,23 @@ def commit_package(app: Any, identity: str, year: int | None) -> dict[str, Any]:
         raise ValueError("Пакет импорта не найден")
     if batch.status == "INVALID" or batch.error_count:
         raise ExcelWorkbookValidationError("Импорт содержит ошибки и не может быть проведён")
+    start_period = app._start_period(batch.organization_id)
+    for row in batch.rows:
+        if row.classification in {"NEW", "CHANGED"}:
+            coordinate = json.loads(row.coordinate_json)
+            require_period_at_or_after(
+                coordinate.get("operation_date") or coordinate.get("period_start"),
+                start_period,
+            )
     try:
         package = get_package(app._database_path, identity, batch.organization_id)
     except ValueError:
         package = None
+    if package is not None:
+        for delta in package["plan"]["delta"]:
+            if delta["table"] == "report_presentation":
+                settings = json.loads(delta["after"]["settings_json"])
+                require_presentation_at_or_after(settings, start_period)
     if package is None:
         if (
             batch.metadata.get("structural_changes")
@@ -469,6 +502,26 @@ def prepare_canonical(
     ).to_dict()
     result["mode"] = mode.lower()
     result["value_changes"] = value_review(app, str(result["batch_id"]), matrix)
+    start_period = app._start_period(organization)
+    batch = app._excel._imports.get_batch(str(result["batch_id"]))
+    for fact in batch.rows:
+        if fact.classification not in {"NEW", "CHANGED"}:
+            continue
+        coordinate = json.loads(fact.coordinate_json)
+        try:
+            require_period_at_or_after(
+                coordinate.get("operation_date") or coordinate.get("period_start"), start_period
+            )
+        except ValueError as error:
+            result.setdefault("issues", []).append(
+                {
+                    "source_cell": fact.source_cell,
+                    "code": "BEFORE_REPORT_START",
+                    "message": str(error),
+                }
+            )
+            result["error_count"] += 1
+            result["status"] = "INVALID"
     if projected is not None:
         result["structural_actions"] = projected["structural_actions"]
         result["position_count"] = sum(

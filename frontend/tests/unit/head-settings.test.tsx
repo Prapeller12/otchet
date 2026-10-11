@@ -16,7 +16,8 @@ it("adds a daily component consumption group with the source worksheet row order
   const button = await screen.findByRole("button", { name: "Расход составной части" });
   const before = screen.getAllByLabelText("Категория позиции").length;
   await user.click(button);
-  expect(screen.getAllByLabelText("Категория позиции")).toHaveLength(before + 1);
+  expect(screen.getAllByLabelText("Категория позиции")).toHaveLength(before);
+  expect(screen.getByRole("navigation", { name: "Позиции рабочего поля" }).querySelectorAll("button")).toHaveLength(2);
   expect(screen.getAllByLabelText("Категория позиции").at(-1)).toHaveValue("PART");
 });
 

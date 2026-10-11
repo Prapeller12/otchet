@@ -74,7 +74,8 @@ describe("configurable position fields", () => {
     expect(confirm).toHaveBeenCalled();
     expect(close).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Копировать позицию" }));
-    expect(screen.getAllByLabelText("Категория позиции")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Категория позиции")).toHaveLength(1);
+    expect(screen.getByRole("navigation", { name: "Позиции рабочего поля" }).querySelectorAll("button")).toHaveLength(2);
     await user.click(screen.getByRole("button", { name: "Применить настройки" }));
     await waitFor(() => expect(close).toHaveBeenCalledTimes(1));
     const saved = await gateway.getReportLayout(query);

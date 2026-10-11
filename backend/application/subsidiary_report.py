@@ -41,6 +41,7 @@ def validate_detail(raw: object) -> dict[str, Any]:
         "designation",
         "suppliers",
         "weekly_supply",
+        "empty_supplier_slots",
     }:
         raise ValueError("Неверная структура детали")
     result: dict[str, Any] = {}
@@ -85,6 +86,11 @@ def validate_detail(raw: object) -> dict[str, Any]:
             }
         )
     result["suppliers"] = normalized
+    if "empty_supplier_slots" in raw:
+        slots = raw["empty_supplier_slots"]
+        if type(slots) is not int or not 0 <= slots <= 500:
+            raise ValueError("Количество пустых строк: целое число от 0 до 500")
+        result["empty_supplier_slots"] = slots
     if "weekly_supply" in raw:
         if not isinstance(raw["weekly_supply"], bool):
             raise ValueError("Неверный режим недельных поставок")
@@ -98,6 +104,27 @@ def default_detail(name: str) -> dict[str, Any]:
         "designation": "",
         "suppliers": [{"id": "PRIMARY", "name": name, "contract": "", "archived": False}],
     }
+
+
+def display_suppliers(detail: dict[str, Any]) -> list[dict[str, Any]]:
+    """Keep unnamed source rows visible without inventing supplier identities or facts."""
+    suppliers = sorted(detail["suppliers"], key=lambda item: item["archived"])
+    identities = {item["id"] for item in suppliers}
+    for index in range(detail.get("empty_supplier_slots", 0)):
+        identity = f"BLANKROW{index + 1}"
+        while identity in identities:
+            identity += "X"
+        identities.add(identity)
+        suppliers.append(
+            {
+                "id": identity,
+                "name": "Не задан",
+                "contract": "",
+                "archived": False,
+                "unassigned": True,
+            }
+        )
+    return suppliers
 
 
 def number(cell: dict[str, Any]) -> Decimal | None:
@@ -166,7 +193,7 @@ def build_rows(
     for group, config in groups:
         detail = config.get("subsidiary", default_detail(group.party_name))
         weekly_supply = detail.get("weekly_supply", False)
-        suppliers = sorted(detail["suppliers"], key=lambda item: item["archived"])
+        suppliers = display_suppliers(detail)
         if not suppliers:
             continue
         supplier_rows = []
@@ -206,7 +233,7 @@ def build_rows(
                     "SUB_RECEIVED_" + s["id"],
                     day,
                     period + "-RECEIVED",
-                    not s["archived"] and not weekly_supply,
+                    not s["archived"] and not s.get("unassigned", False) and not weekly_supply,
                 )
                 for s in suppliers
             ]
@@ -217,7 +244,7 @@ def build_rows(
                         "SUB_USED_" + s["id"],
                         w.start.isoformat(),
                         w.start.isoformat(),
-                        not s["archived"],
+                        not s["archived"] and not s.get("unassigned", False),
                     )
                     for w in weeks
                 ]
@@ -231,7 +258,7 @@ def build_rows(
                             "SUB_SUPPLIED_" + s["id"],
                             w.start.isoformat(),
                             w.start.isoformat() + "-SUPPLIED",
-                            weekly_supply and not s["archived"],
+                            weekly_supply and not s["archived"] and not s.get("unassigned", False),
                         )
                         for w in weeks
                     ]

@@ -458,3 +458,9 @@
 
 .subsidiary-controls .entry-code-confirmation { display: flex; align-items: center; margin-top: 10px; }
 .subsidiary-controls .entry-code-confirmation input { width: auto; min-height: 0; padding: 0; flex: none; }
+.matrix-search { display: flex; flex-wrap: wrap; align-items: end; gap: .5rem; margin: .5rem 0; }
+.matrix-search label { display: grid; gap: .25rem; min-width: 240px; }
+.matrix-search span { max-width: 340px; font-size: .875rem; }
+.report-matrix .matrix-search-match > th, .report-matrix .matrix-search-match > td { box-shadow: inset 0 2px #a66200, inset 0 -2px #a66200; background-color: #fff4d1; }
+.draft-status { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; border: 1px solid #cad2db; border-radius: 6px; padding: .5rem .75rem; margin: .5rem 0; font-size: .875rem; }
+.draft-transition { max-width: 700px; }

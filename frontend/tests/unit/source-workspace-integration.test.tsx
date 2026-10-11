@@ -34,26 +34,23 @@ it("source projection edits supplier receipts at the original coordinate, withou
   await user.type(editor, "321{Enter}");
   expect(latest().rows[0]!.cells[1]!.value).toEqual({ kind: "QUANTITY", quantity: "321" });
   expect(latest().rows[0]!.cells[0]!.value).toEqual({ kind: "QUANTITY", quantity: "120" });
-  expect(screen.getByRole("button", { name: "Переименовать отчёт" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Переименовать отчёт" })).toBeEnabled();
   await user.click(screen.getByRole("button", { name: "Сохранить (1)" }));
   expect(save).toHaveBeenCalledWith(expect.objectContaining({ changes: [{ coordinate: initial.rows[0]!.cells[1]!.coordinate, value: { kind: "QUANTITY", quantity: "321" } }] }));
 });
 
-it("header drafts block source editing and paste until explicitly cancelled", async () => {
+it("allows header and source cells in the same unsaved draft", async () => {
   const { initial, latest, save } = show();
   const user = userEvent.setup();
   await user.type(screen.getByLabelText("Шифр изделия"), "NEW");
   const cell = within(screen.getByRole("table", { name: initial.title })).getAllByRole("button", { name: /доступна для ввода/ })[0]!;
   await user.dblClick(cell);
-  expect(screen.queryByLabelText("Редактирование: ячейка")).toBeNull();
-  fireEvent.paste(cell, { clipboardData: { getData: () => "222" } });
-  expect(screen.queryByRole("dialog", { name: "Проверка вставки из Excel" })).toBeNull();
-  expect(screen.getByRole("button", { name: "Переименовать отчёт" })).toBeDisabled();
-  expect(latest().rows[0]!.cells[1]!.value).toEqual(initial.rows[0]!.cells[1]!.value);
-  expect(save).not.toHaveBeenCalled();
-  await user.click(screen.getByRole("button", { name: "Отменить изменения шапки" }));
-  await user.dblClick(cell);
   expect(screen.getByLabelText("Редактирование: ячейка")).toBeVisible();
+  await user.clear(screen.getByLabelText("Редактирование: ячейка"));
+  await user.type(screen.getByLabelText("Редактирование: ячейка"), "222{Enter}");
+  expect(latest().rows[0]!.cells[1]!.value).toEqual({ kind: "QUANTITY", quantity: "222" });
+  expect(screen.getByLabelText("Шифр изделия")).toHaveValue("NEW");
+  expect(save).not.toHaveBeenCalled();
 });
 
 

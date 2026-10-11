@@ -133,21 +133,33 @@ def apply_header_patch(
         if not isinstance(raw, dict):
             raise ValueError("Неверные поля шапки отчёта")
         patch["header"] = validate_header({**current.get("header", {}), **raw})
-    if "production_code_actuals" in request:
+    if "production_code_actuals" in request or "production_code_plans" in request:
         if "production_codes" in request:
             raise ValueError("Сохраните настройку кодов и фактический выпуск отдельными действиями")
-        actuals = request["production_code_actuals"]
         existing = validate_production_codes(current.get("production_codes", []))
         known = {code["id"] for code in existing}
-        if not isinstance(actuals, dict) or not actuals or actuals.keys() - known:
-            raise ValueError("Выберите существующие коды выпуска; новые коды задаёт администратор")
-        for code in existing:
-            if code["id"] not in actuals:
+        for source, target in (
+            ("production_code_actuals", "actuals"),
+            ("production_code_plans", "plans"),
+        ):
+            if source not in request:
                 continue
-            values = actuals[code["id"]]
-            if not isinstance(values, dict):
-                raise ValueError("Неверные месяцы фактического выпуска по кодам")
-            code["actuals"] = {**code["actuals"], **values}
+            values_by_code = request[source]
+            if (
+                not isinstance(values_by_code, dict)
+                or not values_by_code
+                or values_by_code.keys() - known
+            ):
+                raise ValueError(
+                    "Выберите существующие коды выпуска; новые коды задаёт администратор"
+                )
+            for code in existing:
+                if code["id"] not in values_by_code:
+                    continue
+                values = values_by_code[code["id"]]
+                if not isinstance(values, dict):
+                    raise ValueError("Неверные месяцы выпуска по кодам")
+                code[target] = {**code[target], **values}
         # Reuse all numeric/month/legacy-total checks without accepting plan,
         # label or identifier changes through this reviewer-only command.
         request = {**request, "production_codes": existing}
