@@ -6,7 +6,7 @@ import "./access.css";
 
 export const ROLE_LABELS = { admin: "Администратор", reviewer: "Проверяющий", project_manager: "Руководитель проекта" };
 
-export function AccessGate({ gateway, children }: { gateway: ApplicationGateway; children: ReactNode }) {
+export function AccessGate({ gateway, children }: { gateway: ApplicationGateway; children: ReactNode | ((startupNotice: ReactNode) => ReactNode) }) {
   const [status, setStatus] = useState<AccessStatus | null>(null);
   const [name, setName] = useState("");
   const [identity, setIdentity] = useState("");
@@ -24,7 +24,10 @@ export function AccessGate({ gateway, children }: { gateway: ApplicationGateway;
     }).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : String(reason)); });
     return () => { active = false; };
   }, [gateway]);
-  if (status?.state === "ready") return <>{status.automatic_open_error && <p className="access-startup-notice" role="status">{status.automatic_open_error} Отчёты открыты. При следующем запуске может снова понадобиться код.</p>}{children}</>;
+  if (status?.state === "ready") {
+    const notice = status.automatic_open_error ? <p className="access-startup-notice" role="status">{status.automatic_open_error} Отчёты открыты. При следующем запуске может снова понадобиться код.</p> : null;
+    return <>{typeof children === "function" ? children(notice) : <>{notice}{children}</>}</>;
+  }
   const first = status?.state === "setup" || (status?.state === "legacy" && !status.users.length);
   const legacy = status?.state === "legacy";
   const users = legacy ? status.users.filter(user => user.role === "admin") : status?.users ?? [];

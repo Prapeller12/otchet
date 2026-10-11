@@ -54,8 +54,8 @@ def _capture_window(window: Any, paths: PortablePaths, filename: str) -> None:
     importlib.import_module("PIL.ImageGrab").grab().save(paths.temp / filename)
 
 
-def _resize_test_window(window: Any, *, compact: bool) -> None:
-    window.resize(1024 if compact else 1440, 768 if compact else 900)
+def _resize_test_window(window: Any, *, compact: bool, height: int | None = None) -> None:
+    window.resize(1024 if compact else 1440, height or (768 if compact else 900))
     width_range = "innerWidth >= 980 && innerWidth <= 1024" if compact else "innerWidth > 1200"
     _wait_for_script(window, width_range, "Не изменился размер проверочного окна")
     _settle_window_paint(window)
@@ -314,12 +314,154 @@ def _check_all_disabled_hints(window: Any) -> None:
         _check_disabled_hints(window)
 
 
+def _check_work_area_bounds(window: Any) -> None:
+    """Check actual painted containers, excluding native scrollbar space."""
+    violations = window.evaluate_js("""(() => {
+      const width = document.documentElement.clientWidth;
+      const height = document.documentElement.clientHeight;
+      const failures = [];
+      if (document.documentElement.scrollWidth > width + 1)
+        failures.push('страница шире рабочей области');
+      if (document.documentElement.scrollHeight > height + 1)
+        failures.push('страница выше рабочей области');
+      for (const selector of ['.report-workspace', '.report-table-region',
+        '.report-workspace .matrix-scroll', '.application-status-bar']) {
+        const node = document.querySelector(selector);
+        if (!node) { failures.push('нет ' + selector); continue; }
+        const box = node.getBoundingClientRect();
+        if (box.width < 1 || box.height < 1 || box.left < -1 || box.top < -1 ||
+          box.right > width + 1 || box.bottom > height + 1)
+          failures.push(selector + ' выходит за рабочую область');
+      }
+      const table = document.querySelector('.report-workspace .matrix-scroll');
+      const footer = document.querySelector('.application-status-bar');
+      if (table && footer && table.getBoundingClientRect().bottom >
+        footer.getBoundingClientRect().top + 1)
+        failures.push('таблица перекрыта строкой состояния');
+      if (table && table.clientHeight < 96)
+        failures.push('для таблицы не осталось рабочей высоты');
+      return failures;
+    })()""")
+    if violations:
+        raise RuntimeError("Границы рабочего поля: " + "; ".join(violations))
+
+
+def _check_dialog_bounds(window: Any) -> None:
+    """Every dialog fits; its bottom actions can be reached by local scrolling."""
+    _park_test_pointer()
+    violations = window.evaluate_js("""(() => {
+      const width = document.documentElement.clientWidth;
+      const height = document.documentElement.clientHeight;
+      const failures = [];
+      const dialogs = [...document.querySelectorAll('[role=dialog]')]
+        .filter(node => node.getClientRects().length);
+      if (!dialogs.length) return ['нет открытого диалога'];
+      for (const dialog of dialogs) {
+        const box = dialog.getBoundingClientRect();
+        if (box.left < -1 || box.top < -1 || box.right > width + 1 ||
+          box.bottom > height + 1 || box.width < 1 || box.height < 1)
+          failures.push('диалог выходит за рабочую область');
+        const scrollNodes = [dialog, ...dialog.querySelectorAll(
+          '.settings-body, .layout-settings, .organization-settings, .blank-reports-setup')];
+        const positions = scrollNodes.map(node => ({node, top: node.scrollTop}));
+        for (const node of scrollNodes) node.scrollTop = node.scrollHeight;
+        for (const action of dialog.querySelectorAll(
+          '.settings-footer, .excel-dialog-actions, .access-actions, '
+          + '.settings-footer button, .excel-dialog-actions button, '
+          + '.access-actions button, .blank-reports-setup > button')) {
+          const actionsBox = action.getBoundingClientRect();
+          if (actionsBox.left < box.left - 1 || actionsBox.right > box.right + 1 ||
+            actionsBox.top < box.top - 1 || actionsBox.bottom > box.bottom + 1)
+            failures.push('действия диалога обрезаны');
+          if (action.matches('button') && !action.disabled &&
+            dialog === dialogs[dialogs.length - 1]) {
+            const hit = document.elementFromPoint(
+              (actionsBox.left + actionsBox.right) / 2,
+              (actionsBox.top + actionsBox.bottom) / 2);
+            if (!hit || !action.contains(hit))
+              failures.push('действие диалога перекрыто');
+          }
+        }
+        for (const {node, top} of positions) node.scrollTop = top;
+      }
+      return failures;
+    })()""")
+    if violations:
+        raise RuntimeError("Границы диалога: " + "; ".join(violations))
+
+
+def _check_last_report_cells(window: Any) -> None:
+    """Exercise both grids without editing data, then restore the selected cell."""
+    original = window.evaluate_js("""(() => {
+      const active = document.querySelector('.matrix-cell-button[tabindex="0"]');
+      return active ? {row: active.dataset.row, column: active.dataset.column} : null;
+    })()""")
+    try:
+        for selector in (
+            ".report-matrix:not(.source-auxiliary-matrix)",
+            ".source-auxiliary-matrix",
+        ):
+            target = json.dumps(selector)
+            exists = window.evaluate_js(f"""(() => {{
+              const cells = document.querySelector({target})
+                ?.querySelectorAll('tbody .matrix-cell-button');
+              if (!cells?.length) return false;
+              cells[cells.length - 1].click();
+              return true;
+            }})()""")
+            if not exists:
+                continue
+            _settle_window_paint(window)
+            window.evaluate_js(
+                "document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'}))"
+            )
+            _settle_window_paint(window)
+            visible = window.evaluate_js(f"""(() => {{
+              const grid = document.querySelector({target});
+              const button = grid?.querySelector('.matrix-cell-button[tabindex="0"]');
+              const viewport = button?.closest('.matrix-scroll');
+              if (!button || !viewport) return false;
+              const box = button.getBoundingClientRect();
+              const area = viewport.getBoundingClientRect();
+              const headers = [...grid.querySelectorAll('thead th')];
+              const frozenRight = Math.max(area.left, ...headers.filter(node => {{
+                const style = getComputedStyle(node);
+                return style.position === 'sticky' && style.left !== 'auto';
+              }}).map(node => node.getBoundingClientRect().right));
+              const headerBottom = Math.max(area.top, ...headers
+                .filter(node => getComputedStyle(node).position === 'sticky')
+                .map(node => node.getBoundingClientRect().bottom));
+              const left = Math.max(box.left, frozenRight);
+              const right = Math.min(box.right, area.left + viewport.clientWidth);
+              const top = Math.max(box.top, headerBottom);
+              const bottom = Math.min(box.bottom, area.top + viewport.clientHeight);
+              if (right - left < Math.min(20, box.width) ||
+                  bottom - top < Math.min(16, box.height)) return false;
+              const hit = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
+              return !!hit && button.contains(hit);
+            }})()""")
+            if not visible:
+                raise RuntimeError("Последняя числовая ячейка недоступна: " + selector)
+    finally:
+        if original is not None:
+            window.evaluate_js(f"""(() => {{
+              const position = {json.dumps(original)};
+              const button = [...document.querySelectorAll('.matrix-cell-button')]
+                .find(node => node.dataset.row === position.row &&
+                  node.dataset.column === position.column);
+              button?.click();
+            }})()""")
+            _settle_window_paint(window)
+
+
 def _capture_report_viewports(window: Any, paths: PortablePaths, tab: int) -> None:
     _check_reference_theme(window)
     _check_action_icons(window)
+    _check_work_area_bounds(window)
     _capture_window(window, paths, f"window-{tab + 1}.png")
     _resize_test_window(window, compact=True)
     _check_reference_theme(window)
+    _check_work_area_bounds(window)
     if not window.evaluate_js("""document.documentElement.scrollWidth <= innerWidth + 1 &&
         [...document.querySelectorAll('.matrix-toolbar button')].every(button => {
           const box = button.getBoundingClientRect();
@@ -336,6 +478,18 @@ def _capture_report_viewports(window: Any, paths: PortablePaths, tab: int) -> No
         raise RuntimeError("Шапка головной площадки не помещается в одну строку при ширине 1024")
     _capture_window(window, paths, f"window-{tab + 1}-compact.png")
     _exercise_readonly_hints(window, paths, tab)
+    for width, height in ((1366, 768), (1280, 720), (1024, 640)):
+        window.resize(width, height)
+        _wait_for_script(
+            window,
+            f"innerWidth >= {width - 40} && innerWidth <= {width} && "
+            f"innerHeight >= {height - 100} && innerHeight <= {height}",
+            "Не изменился размер рабочего поля",
+        )
+        _settle_window_paint(window)
+        _check_work_area_bounds(window)
+        _check_last_report_cells(window)
+        _capture_window(window, paths, f"window-{tab + 1}-{width}x{height}.png")
     _resize_test_window(window, compact=False)
 
 
@@ -411,6 +565,7 @@ def _exercise_onboarding(window: Any) -> None:
     _wait_for_script(
         window, "!!document.querySelector('.onboarding-dialog')", "Нет подсказок заполнения"
     )
+    _check_dialog_bounds(window)
     _click_button(window, "Далее")
     _wait_for_script(
         window,
@@ -441,6 +596,7 @@ def _confirm_write(
     _wait_for_script(
         window, "!!document.querySelector('.authorization-dialog')", "Нет запроса кода записи"
     )
+    _check_dialog_bounds(window)
     if capture_paths is not None:
         _wait_for_script(
             window,
@@ -523,7 +679,7 @@ def _exercise_print(window: Any, paths: PortablePaths) -> None:
     if window.evaluate_js("""[...document.querySelectorAll('button')]
         .some(button => button.textContent.trim() === 'Подтвердить данные')"""):
         raise RuntimeError("Осталась отдельная кнопка подтверждения данных")
-    _resize_test_window(window, compact=True)
+    _resize_test_window(window, compact=True, height=640)
     _click_button(window, "Печать / PDF А4")
     _wait_for_script(
         window,
@@ -531,6 +687,8 @@ def _exercise_print(window: Any, paths: PortablePaths) -> None:
         "document.body.textContent.includes('сохранённые данные выбранного периода')",
         "Не показан выбранный сохранённый период перед печатью",
     )
+    _check_dialog_bounds(window)
+    _capture_window(window, paths, "window-pdf-options-compact.png")
     _click_button(window, "Подтвердить и создать PDF")
     _confirm_write(
         window, action="Подтвердить и печатать", reject_wrong_code=True, capture_paths=paths
@@ -597,6 +755,8 @@ def _exercise_project_header(window: Any) -> None:
 
 def _exercise_matrix_paste(window: Any) -> None:
     """Check navigation, paste preview, guarded unsaved data and native save."""
+    _resize_test_window(window, compact=True, height=640)
+    _check_work_area_bounds(window)
     window.evaluate_js("""(() => {
       const cell = document.querySelector('.report-matrix tbody button[aria-readonly=false]');
       if (!cell) throw new Error('Editable report cell missing');
@@ -628,6 +788,10 @@ def _exercise_matrix_paste(window: Any) -> None:
       document.activeElement.dispatchEvent(new ClipboardEvent('paste',
         {clipboardData:data, bubbles:true, cancelable:true}));
     })()""")
+    _wait_for_script(
+        window, "!!document.querySelector('#paste-preview-title')", "Нет проверки вставки"
+    )
+    _check_dialog_bounds(window)
     _click_button(window, "Вставить проверенный диапазон")
     _wait_for_script(
         window,
@@ -643,6 +807,7 @@ def _exercise_matrix_paste(window: Any) -> None:
         "document.querySelectorAll('.report-tab')[0]",
         "Переход с черновиком не вызвал диалог или уже сменил форму",
     )
+    _check_dialog_bounds(window)
     _click_button(window, "Остаться")
     _wait_for_script(
         window,
@@ -660,6 +825,7 @@ def _exercise_matrix_paste(window: Any) -> None:
         "?.textContent.includes('Подтверждено: Руководитель проверки окна')",
         "Сохранение диапазона не подписало новые данные кодом руководителя",
     )
+    _resize_test_window(window, compact=False)
 
 
 def _exercise_blank_report_set(window: Any, paths: PortablePaths) -> None:
@@ -673,8 +839,12 @@ def _exercise_blank_report_set(window: Any, paths: PortablePaths) -> None:
         "document.querySelectorAll('.blank-reports-setup tbody tr').length === 5",
         "Не показан полный набор пяти заготовок",
     )
+    _resize_test_window(window, compact=True, height=640)
+    _check_dialog_bounds(window)
+    _capture_window(window, paths, "window-blank-setup-compact.png")
     _click_button(window, "Создать или открыть пять заготовок")
     _confirm_write(window)
+    _resize_test_window(window, compact=False)
     for name, count in [
         ("КГЭ", 9),
         ("Молот", 202),
@@ -705,6 +875,7 @@ def _exercise_blank_report_set(window: Any, paths: PortablePaths) -> None:
             ".value === '2027-09' && !document.querySelector('.admin-navigation')",
             f"Заготовка {name}: неверные строки, период или выход из администрирования",
         )
+        _check_work_area_bounds(window)
         if name == "КГЭ":
             _capture_window(window, paths, "window-blank-kge.png")
         if name == "Молот":
@@ -875,7 +1046,8 @@ def monitor_window(
                     raise RuntimeError("Производители в настройках не выровнены")
                 _check_icon_accessibility(window)
                 _capture_window(window, paths, "window-settings.png")
-                _resize_test_window(window, compact=True)
+                _resize_test_window(window, compact=True, height=640)
+                _check_dialog_bounds(window)
                 _capture_window(window, paths, "window-settings-compact.png")
                 _resize_test_window(window, compact=False)
                 window.evaluate_js("document.querySelector('.settings-header button').click()")

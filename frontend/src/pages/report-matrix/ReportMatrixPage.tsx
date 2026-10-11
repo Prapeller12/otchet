@@ -60,7 +60,7 @@ export function ReportMatrixPage({
     };
   }, [gateway, organizationId, reloadKey, reportType, year]);
 
-  return <>
+  return <section className="report-page" aria-label="Рабочая форма отчёта">
     <div className="month-controls" aria-label="Период отчёта">
       <label>Год отчёта <select value={year} disabled={matrix === null && error === null} onChange={event => { const nextYear = Number(event.target.value); const action = () => setYear(nextYear); if (navigation.current) navigation.current.request(action); else action(); }}>
         {Array.from({ length: 201 }, (_, index) => 1900 + index).filter(value => !startPeriod || value >= Number(startPeriod.slice(0, 4))).map(value => <option key={value} value={value}>{value}</option>)}
@@ -87,5 +87,5 @@ export function ReportMatrixPage({
         {...(initialPeriod?.year === year ? { initialMonth: initialPeriod.month } : startPeriod && Number(startPeriod.slice(0, 4)) === year ? { initialMonth: Number(startPeriod.slice(5, 7)) } : {})}
       />
     )}
-  </>;
+  </section>;
 }

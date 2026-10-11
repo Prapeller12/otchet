@@ -91,6 +91,7 @@ export function ReferenceReport({ gateway, organizationId, identity, onBack, onD
     } catch (e) { setError(String(e)); } finally { setBusy(false); }
   }
   return <section className="reference-report">
+    <div className="reference-context" tabIndex={0} role="region" aria-label="Параметры исходного отчёта">
     <div className="reference-toolbar"><h2>{book?.file_name ?? "Загрузка отчёта…"}</h2>
       <button disabled={busy || changed || editing} onClick={onBack}><UiIcon name="arrow-left" />К рабочей форме</button>
       <button disabled={busy || changed || editing || !book} onClick={() => void exportBook()}><UiIcon name="export" />Экспорт Excel</button>
@@ -100,8 +101,9 @@ export function ReferenceReport({ gateway, organizationId, identity, onBack, onD
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     {book?.warnings.map(w => <p key={w} className="reference-warning">{w}</p>)}
     <p>Отчёт по исходному Excel. Двойной щелчок по ячейке — ввод. Серые ячейки рассчитываются автоматически.{changed ? " Есть несохранённые изменения." : ""}</p>
-    {book && <><label>Лист <select value={sheet} disabled={changed || busy || editing} onChange={e => setSheet(Number(e.target.value))}>
-      {book.sheets.map((s,i) => <option key={i} value={i}>{s.name}</option>)}</select></label>
-      <ReferenceGrid key={`${identity}:${sheet}`} sheet={book.sheets[sheet]!} drafts={drafts} onEditingChange={setEditing} onEdit={busy ? undefined : (a,v) => setDrafts(d => ({ ...d, [a]:v }))} /></>}
+    {book && <label>Лист <select value={sheet} disabled={changed || busy || editing} onChange={e => setSheet(Number(e.target.value))}>
+      {book.sheets.map((s,i) => <option key={i} value={i}>{s.name}</option>)}</select></label>}
+    </div>
+    {book && <ReferenceGrid key={`${identity}:${sheet}`} sheet={book.sheets[sheet]!} drafts={drafts} onEditingChange={setEditing} onEdit={busy ? undefined : (a,v) => setDrafts(d => ({ ...d, [a]:v }))} />}
   </section>;
 }

@@ -3,7 +3,7 @@ import { RecoveryBackups } from "../features/access/RecoveryBackups";
 import { FieldHintsEnabledContext } from "../shared/ui/FieldHint";
 import { ReferenceReport } from "../features/reference-reports/ReferenceReport";
 import type { ReferenceSummary, DraftNavigation } from "../shared/api/application-gateway";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AccessGate } from "../features/access/AccessGate";
 import { AuthorizationDialog, type PendingAuthorization } from "../features/access/AuthorizationDialog";
 import { Onboarding } from "../features/access/Onboarding";
@@ -28,10 +28,10 @@ const REPORT_LABELS: Record<ReportType, string> = {
 
 export function App() {
   const gateway = useApplicationGateway();
-  return <AccessGate gateway={gateway}><Workspace /></AccessGate>;
+  return <AccessGate gateway={gateway}>{startupNotice => <Workspace startupNotice={startupNotice} />}</AccessGate>;
 }
 
-function Workspace() {
+function Workspace({ startupNotice }: { startupNotice: ReactNode }) {
   const gateway = useApplicationGateway();
   const [fieldHintsEnabled, setFieldHintsEnabled] = useState(true);
   const [hintsLoaded, setHintsLoaded] = useState(false);
@@ -195,6 +195,8 @@ function Workspace() {
   return (
     <FieldHintsEnabledContext.Provider value={hintsLoaded && fieldHintsEnabled}>
     <div className="app-shell" data-field-hints-enabled={hintsLoaded && fieldHintsEnabled}>
+      <div className="workspace-context">
+      {startupNotice}
       <header className="app-header">
         <div className="app-brand">
           <p className="app-eyebrow">{workspaceMode === "admin" ? "Раздел администратора" : workspaceMode === "report-settings" ? "План и сведения" : "Заполнение отчётов"}</p>
@@ -267,6 +269,7 @@ function Workspace() {
       {backupWarning && <p className="workspace-edit-notice" role="alert">{backupWarning}</p>}
       {hintsError && <p className="workspace-edit-notice" role="alert">{hintsError}</p>}
       {modeError && <p className="workspace-edit-notice" role="alert">{modeError}</p>}
+      </div>
       <main>
         {workspaceMode === "admin" && adminSection === "users" ? <ResponsibleUsers gateway={gateway} onAdministrationChanged={message => { setWorkspaceMode("entry"); setAdminSection("reports"); setAccessNotice(message); }} /> : loadError !== null ? (
           <section className="load-state load-state-error" role="alert">{loadError}</section>

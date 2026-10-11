@@ -202,3 +202,15 @@ it("explains the one-time setup and shows an automatic-open warning without hidi
   expect(await screen.findByText("Рабочая форма")).toBeVisible();
   expect(screen.getByRole("status")).toHaveTextContent("Не удалось сохранить настройку Windows.");
 });
+
+it("keeps the ready warning inside the same bounded context as the workspace header", async () => {
+  const gateway = Object.assign(new DemoGateway(), {
+    getAccessStatus: async (): Promise<AccessStatus> => ({ state: "ready", users: [admin], automatic_open_error: "Не удалось сохранить настройку Windows." }),
+  });
+  render(<ApplicationGatewayProvider gateway={gateway}><App /></ApplicationGatewayProvider>);
+  await screen.findByText("Ежедневное движение и остатки");
+  const notice = screen.getByText(/Не удалось сохранить настройку Windows/);
+  expect(notice).toHaveAttribute("role", "status");
+  expect(notice.closest(".workspace-context")).toContainElement(screen.getByRole("heading", { name: "Производственная отчётность" }));
+  expect(screen.getByRole("region", { name: "Таблица отчёта" })).toBeInTheDocument();
+});

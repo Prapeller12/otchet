@@ -45,14 +45,37 @@ export function ReportCellView({
     button.focus({ preventScroll: true });
     const viewport = button.closest<HTMLElement>(".matrix-scroll");
     if (!viewport) return;
-    const bounds = viewport.getBoundingClientRect();
-    const cell = button.getBoundingClientRect();
-    const frozenRight = Math.max(bounds.left, ...Array.from(viewport.querySelectorAll("thead .sticky-left")).map(header => header.getBoundingClientRect().right));
-    const headerBottom = viewport.querySelector("thead")?.getBoundingClientRect().bottom ?? bounds.top;
-    if (cell.right > bounds.right) viewport.scrollLeft += cell.right - bounds.right;
-    else if (cell.left < frozenRight) viewport.scrollLeft -= frozenRight - cell.left;
-    if (cell.bottom > bounds.bottom) viewport.scrollTop += cell.bottom - bounds.bottom;
-    else if (cell.top < headerBottom) viewport.scrollTop -= headerBottom - cell.top;
+    const table = button.closest("table");
+    const reveal = () => {
+      const bounds = viewport.getBoundingClientRect();
+      const cell = button.getBoundingClientRect();
+      const headers = Array.from(table?.querySelectorAll("thead th") ?? []);
+      const frozenRight = Math.max(bounds.left, ...headers.filter(header => {
+        const style = getComputedStyle(header);
+        return style.position === "sticky" && style.left !== "auto";
+      }).map(header => header.getBoundingClientRect().right));
+      const headerBottom = Math.max(bounds.top, ...headers.filter(header => getComputedStyle(header).position === "sticky").map(header => header.getBoundingClientRect().bottom));
+      if (cell.right > bounds.right) viewport.scrollLeft += cell.right - bounds.right;
+      else if (cell.left < frozenRight) viewport.scrollLeft -= frozenRight - cell.left;
+      if (cell.bottom > bounds.bottom) viewport.scrollTop += cell.bottom - bounds.bottom;
+      else if (cell.top < headerBottom) viewport.scrollTop -= headerBottom - cell.top;
+    };
+    reveal();
+    // Opening context panels, changing a saved width or resizing the window can
+    // move the same active cell. Keep it visible without stealing toolbar focus.
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", reveal);
+      return () => window.removeEventListener("resize", reveal);
+    }
+    let resizeFrame: number | undefined;
+    const observer = new ResizeObserver(() => {
+      if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame);
+      // SourceMatrixTable also updates its frozen prefix after a resize.
+      resizeFrame = requestAnimationFrame(() => { resizeFrame = undefined; reveal(); });
+    });
+    observer.observe(viewport);
+    if (table) observer.observe(table);
+    return () => { observer.disconnect(); if (resizeFrame !== undefined) cancelAnimationFrame(resizeFrame); };
   }, [active]);
 
   const classNames = [

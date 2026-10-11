@@ -14,6 +14,8 @@ import sqlite3
 import sys
 import tempfile
 from collections.abc import Sequence
+from ctypes import wintypes
+from math import floor
 from pathlib import Path
 from typing import Any
 
@@ -68,6 +70,47 @@ def _self_test(paths: PortablePaths) -> None:
         )
 
 
+def _fit_window_geometry(
+    work_area: tuple[int, int, int, int], scale_factor: float
+) -> dict[str, Any]:
+    """Convert the Windows work area to pywebview's logical window coordinates."""
+    left, top, right, bottom = work_area
+    available_width = floor((right - left) / scale_factor)
+    available_height = floor((bottom - top) / scale_factor)
+    if available_width <= 0 or available_height <= 0:
+        raise ValueError("Пустая рабочая область экрана")
+    width = min(1440, max(1, available_width - 16))
+    height = min(900, max(1, available_height - 16))
+    return {
+        "width": width,
+        "height": height,
+        "min_size": (min(640, width), min(480, height)),
+        "x": floor(left / scale_factor + (available_width - width) / 2),
+        "y": floor(top / scale_factor + (available_height - height) / 2),
+    }
+
+
+def _initial_window_geometry() -> dict[str, Any]:
+    if os.name != "nt":
+        return {"width": 1440, "height": 900, "min_size": (640, 480)}
+    try:
+        # pywebview's WinForms backend also enables system DPI awareness. Do it
+        # before measuring, so work-area pixels and its scale factor agree.
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        user32.SetProcessDPIAware()
+        area = wintypes.RECT()
+        if not user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(area), 0):
+            raise OSError("Не получена рабочая область экрана")
+        scale = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100  # type: ignore[attr-defined]
+        if not 1 <= scale <= 5:
+            raise ValueError("Не определён масштаб экрана")
+        return _fit_window_geometry((area.left, area.top, area.right, area.bottom), scale)
+    except (AttributeError, OSError, ValueError):
+        # Windows positions a maximized window in its work area, including the
+        # taskbar. A conservative minimum avoids forcing it beyond that area.
+        return {"width": 960, "height": 600, "min_size": (480, 320), "maximized": True}
+
+
 def _run_window(
     paths: PortablePaths, *, ui_self_test: bool = False, ui_reopen_test: bool = False
 ) -> None:
@@ -115,9 +158,7 @@ def _run_window(
         "Система производственной отчётности",
         url=str((paths.frontend / "index.html").resolve()),
         js_api=bridge,
-        width=1440,
-        height=900,
-        min_size=(1024, 700),
+        **_initial_window_geometry(),
         text_select=True,
     )
 

@@ -14,6 +14,7 @@ on:
       - codex/dev32-hints-toggle
       - codex/dev33-recovery-excel-integration
       - codex/ui-drafts-blank-2027-dev34
+      - codex/dev35-viewport-layout
   workflow_dispatch:
 
 permissions:
@@ -162,5 +163,5 @@ jobs:
               --target $env:GITHUB_SHA `
               --prerelease `
               --title "Reporting System $version test build" `
-              --notes-file docs/release/notes-dev34.md
+              --notes-file docs/release/notes-dev35.md
           }

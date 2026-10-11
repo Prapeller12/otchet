@@ -38,3 +38,25 @@ node frontend/tests/contracts/report-cell-contract.test.mjs
 
 Все эти проверки выполняются Vitest/Testing Library в jsdom. Они не заменяют
 проверку окна, PDF и печати на целевых Windows 10/11.
+
+## Dev.35: геометрия рабочего окна
+
+`layout/viewport-check.mjs` дополнительно открывает настоящий Chromium через Playwright
+и проверяет размеры таблиц и диалогов, внутреннюю прокрутку, последние основные и
+расчётные ячейки, исходные столбцы, сохранённые ширины 600 px, режим администратора,
+первый запуск и уведомление открытия. Размеры области — от
+1920×1080 до 667×310 CSS-пикселей. Фикстура использует синтетические 80 строк и 30 дней
+сентября 2027; она не меняет базу и не входит в production build.
+
+Playwright и браузер устанавливаются отдельно только для этой проверки; это не
+production dependency. Команда запускается из корня репозитория:
+
+```sh
+REPORT_LAYOUT_BROWSER_EXECUTABLE=/absolute/path/to/chromium \
+REPORT_LAYOUT_ARTIFACT_DIR=/absolute/path/to/evidence \
+node frontend/tests/layout/viewport-check.mjs
+```
+
+Первая переменная необязательна при установленном браузере Playwright. Вторая задаёт
+каталог скриншотов и `geometry.json`; по умолчанию используется `../viewport-review`.
+Проверка CSS-размеров не заменяет native WebView2/DPI/печать на Windows 10/11.

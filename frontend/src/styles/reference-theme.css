@@ -3,7 +3,9 @@
    calculations and the independent PDF templates are deliberately untouched. */
 @media screen {
   :root { font-family: var(--font-ui); color: var(--pk-text); background: var(--pk-bg); }
-  body { min-width: 720px; font-family: var(--font-ui); font-size: 14px; line-height: 20px; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
+  html, body, #root { width: 100%; height: 100%; min-width: 0; min-height: 0; }
+  #root { display: flex; flex-direction: column; overflow: hidden; }
+  body { height: 100dvh; overflow: hidden; font-family: var(--font-ui); font-size: 14px; line-height: 20px; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
   button, input, select, textarea, summary { font-family: inherit; transition: background-color var(--duration) var(--ease), border-color var(--duration) var(--ease), color var(--duration) var(--ease); }
   :focus-visible, button:focus-visible { outline: 2px solid var(--color-status-info); outline-offset: 2px; }
   a { color: var(--color-text-link); }
@@ -11,9 +13,9 @@
   ::selection { background: var(--color-muted-alt-info); }
   .ui-icon { width: 16px; height: 16px; flex: 0 0 16px; vertical-align: middle; }
 
-  /* The reporting sheets retain their own scroll areas and sticky identities.
-     A page scroll is intentional: settings and auxiliary fields remain reachable. */
-  .app-shell { max-width: calc(var(--report-content-max) + 2 * var(--report-page-inset)); margin: 0 auto; padding-bottom: 36px; }
+  /* Flex height follows the actual header, context and footer geometry. */
+  .app-shell { display: flex; flex-direction: column; flex: 1; width: 100%; min-height: 0; max-width: calc(var(--report-content-max) + 2 * var(--report-page-inset)); margin: 0 auto; padding-bottom: 0; overflow: hidden; }
+  .workspace-context { flex: 0 1 auto; min-width: 0; min-height: 0; max-height: 35%; overflow: auto; overscroll-behavior: contain; }
   .app-header { min-height: 100px; padding: 24px var(--report-page-inset) 20px; gap: 20px; color: var(--pk-text); background: var(--pk-bg); border: 0; }
   .app-brand { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
   .app-header h1 { margin: 0; order: -1; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: .1px; }
@@ -28,7 +30,9 @@
   .report-tab:disabled { cursor: not-allowed; opacity: .55; }
   .organization-switcher { margin-left: auto; gap: 10px; font-size: 13px; font-weight: 400; }
   .organization-switcher select { width: 245px; min-width: 0; }
-  main { min-width: 0; padding: 16px var(--report-page-inset) 28px; }
+  main { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; padding: 12px var(--report-page-inset) 16px; overflow: hidden; }
+  .report-page { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+  .report-page > .month-controls { flex: none; padding: 0 0 10px; border: 0; }
   .admin-navigation { flex-wrap: wrap; gap: 8px; margin: 0 var(--report-page-inset) 8px; padding: 12px 16px; border: 0; border-radius: var(--radius-16); color: var(--pk-text); background: var(--color-bg-tertiary); }
   .admin-navigation p { flex: 1 1 240px; }
   .workspace-edit-notice { margin: 12px var(--report-page-inset); padding: 12px 16px; border-radius: var(--radius-10); background: var(--color-muted-attention); }
@@ -79,11 +83,14 @@
   .formula-editor input, .formula-card > input { font-family: var(--font-ui); }
 
   /* White sheet cards, quiet toolbars and unchanged horizontal matrix order. */
-  .report-workspace { display: flex; flex-direction: column; gap: 0; border: 0; border-radius: var(--radius-24); box-shadow: var(--shadow-xs); }
-  .matrix-toolbar { min-height: 72px; flex-wrap: wrap; gap: 12px; padding: 16px 20px; border-bottom-color: var(--color-border-secondary); }
+  .report-workspace { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; gap: 0; border: 0; border-radius: var(--radius-24); box-shadow: var(--shadow-xs); }
+  .report-context { flex: 0 1 auto; min-width: 0; min-height: 0; max-height: 45%; overflow: auto; overscroll-behavior: contain; border-bottom: 1px solid var(--color-border-secondary); }
+  .report-table-region { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+  .matrix-toolbar { flex: none; min-width: 0; min-height: 72px; flex-wrap: wrap; gap: 12px; padding: 16px 20px; border-bottom-color: var(--color-border-secondary); }
   .matrix-toolbar h2 { font-size: 22px; line-height: 26px; font-weight: 700; letter-spacing: 0; }
+  .matrix-toolbar > div:first-child { flex: 1 1 0; min-width: 0; }
   .title-line { flex-wrap: wrap; gap: 8px; min-width: 0; }
-  .toolbar-actions { margin-left: auto; flex-wrap: wrap; gap: 8px; }
+  .toolbar-actions { min-width: 0; max-width: 100%; flex-shrink: 1; margin-left: auto; flex-wrap: wrap; gap: 8px; }
   .month-controls { gap: 8px; padding: 8px 16px; color: var(--pk-text); background: transparent; border-bottom-color: var(--color-border-secondary); }
   main > .month-controls { padding: 0 0 12px; border: 0; }
   .month-controls > strong { padding-right: 8px; font-size: 13px; }
@@ -99,7 +106,7 @@
   .report-month-options { padding: 4px 20px; }
   .report-month-options > summary, .entry-code-actuals summary { padding: 10px 0; color: var(--pk-text); }
   .readonly-production-header { min-height: 40px; padding: 10px 20px; border-bottom-color: var(--color-border-secondary); }
-  .matrix-scroll { max-height: calc(100vh - 290px); min-height: 240px; }
+  .report-table-region > .matrix-scroll { flex: 1; min-width: 0; min-height: 0; max-height: none; overflow: auto; }
   .report-matrix, .subsidiary-matrix th, .subsidiary-matrix td { font-family: var(--font-ui); font-size: 13px; line-height: 18px; font-variant-numeric: tabular-nums; }
   .report-matrix th, .report-matrix td { border-color: var(--color-border-primary); }
   .report-matrix thead th, .report-matrix thead .sticky-left { color: var(--pk-text); background: var(--color-bg-secondary); text-transform: none; letter-spacing: 0; font-size: 12px; line-height: 17px; font-weight: 500; }
@@ -131,7 +138,7 @@
   .week-heading { border: 0; background: transparent; color: inherit; font: inherit; padding: 4px 0; width: 100%; cursor: pointer; border-radius: var(--radius-4); }
   .week-heading[aria-pressed="true"] { background: var(--color-muted-info); box-shadow: inset 0 -2px var(--color-status-info); }
   .source-matrix .source-header-months th { background: var(--color-bg-tertiary); }
-  .source-auxiliary-scroll { min-height: 0; max-height: 45vh; }
+  .source-auxiliary-scroll { min-width: 0; min-height: 0; max-height: none; overflow: visible; }
   .daily-summary-value { background: var(--color-neutral-200); }
   .daily-monthly-summary th { background: var(--color-bg-secondary); }
   .daily-monthly-summary th, .daily-monthly-summary td { border-color: var(--color-border-primary); }
@@ -159,8 +166,8 @@
   .subsidiary-detail-editor > p { color: var(--pk-secondary); margin: 12px 0 0; font-size: 13px; }
 
   /* Dialogs and settings stay above sticky navigation and scroll internally. */
-  .settings-backdrop, .excel-dialog-backdrop { background: var(--color-overlay); }
-  .settings-dialog { display: flex; flex-direction: column; width: min(1440px, 96vw); height: min(800px, 92vh); border: 0; border-radius: var(--radius-24); box-shadow: var(--shadow-l); }
+  .settings-backdrop, .excel-dialog-backdrop { display: flex; align-items: center; justify-content: center; padding: clamp(8px, 2vw, 24px); overflow: hidden; background: var(--color-overlay); }
+  .settings-dialog { display: flex; flex-direction: column; width: min(1440px, 100%); min-width: 0; height: min(800px, 100%); min-height: 0; max-height: 100%; border: 0; border-radius: var(--radius-24); box-shadow: var(--shadow-l); }
   .settings-header, .settings-footer { flex-shrink: 0; flex-wrap: wrap; gap: 12px; padding: 20px 24px; }
   .settings-header { color: var(--pk-text); background: var(--pk-surface); border-bottom: 1px solid var(--color-border-secondary); }
   .settings-header p { color: var(--pk-secondary); font-size: 12px; font-weight: 400; letter-spacing: 0; text-transform: none; }
@@ -187,24 +194,38 @@
   .settings-error { flex-shrink: 0; }
   .settings-footer { font-size: 12px; background: var(--color-bg-secondary); border-color: var(--color-border-secondary); }
   .settings-footer > div { flex-shrink: 0; flex-wrap: wrap; }
-  .excel-dialog, .access-card { padding: 28px; border: 0; border-radius: var(--radius-24); box-shadow: var(--shadow-l); }
+  .excel-dialog, .access-card { min-width: 0; max-width: 100%; min-height: 0; max-height: 100%; overflow: auto; padding: 28px; border: 0; border-radius: var(--radius-24); box-shadow: var(--shadow-l); }
+  .excel-dialog.excel-transfer-dialog { max-height: 100%; }
   .excel-dialog h3, .access-card h1, .access-card h2 { font-size: 22px; line-height: 26px; font-weight: 700; }
   .excel-preview-counts span { border: 0; border-radius: var(--radius-12); background: var(--color-bg-secondary); }
   .excel-preview-counts strong { font-weight: 700; }
-  .excel-dialog-actions { flex-wrap: wrap; border-top: 1px solid var(--color-border-secondary); padding-top: 16px; }
+  .excel-dialog-actions, .access-card .access-actions { position: sticky; bottom: 0; z-index: 10; flex-wrap: wrap; border-top: 1px solid var(--color-border-secondary); padding: 12px 0; background: var(--pk-surface); }
+  .blank-reports-dialog { width: min(960px, 100%); }
+  .blank-reports-dialog > button { flex: none; align-self: flex-end; margin: 12px 16px 0; }
+  .blank-reports-setup { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 12px 20px 20px; }
+  .blank-reports-setup table { width: 100%; border-collapse: collapse; }
+  .blank-reports-setup th, .blank-reports-setup td { padding: 8px; overflow-wrap: anywhere; border: 1px solid var(--color-border-primary); }
+  .blank-reports-setup > button { position: sticky; bottom: 0; }
   .verification-form label { display: block; margin: 12px 0; }
   .verification-form input[type="text"], .verification-form input[type="password"], .verification-form select { width: 100%; }
   .verification-form select { margin-left: 0; }
   .access-card [role="alert"] { color: var(--pk-error-text); }
   .access-actions { gap: 8px; }
-  .admin-users { width: min(920px, 95%); }
+  .access-page { display: flex; flex-direction: column; flex: 1; align-items: center; justify-content: center; min-height: 0; gap: 12px; padding: clamp(8px, 2vw, 24px); }
+  .access-page > .access-card { flex: 0 1 auto; }
+  .access-page > .button { flex: none; max-width: 100%; }
+  .access-startup-notice { flex: none; min-width: 0; max-height: 25%; margin: 0; padding: 8px 16px; overflow: auto; }
+  .workspace-context .access-startup-notice { max-height: none; overflow: visible; }
+  .admin-users { min-width: 0; min-height: 0; overflow: auto; width: min(920px, 100%); margin: 0 auto; }
   .admin-users h2 { font-size: 22px; line-height: 26px; }
   .admin-users table { background: var(--pk-surface); border-radius: var(--radius-16); overflow: hidden; }
   .admin-users th { color: var(--pk-secondary); background: var(--color-bg-tertiary); font-weight: 500; }
   .admin-users th, .admin-users td { padding: 12px; border-color: var(--color-border-secondary); }
   .admin-users .access-card { box-shadow: var(--shadow-xs); }
   .load-state { border: 0; border-radius: var(--radius-24); box-shadow: var(--shadow-xs); }
-  .reference-report { border: 0; border-radius: var(--radius-24); padding: 20px; background: var(--pk-surface); box-shadow: var(--shadow-xs); }
+  .reference-report { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; overflow: hidden; margin: 0; border: 0; border-radius: var(--radius-24); padding: 20px; background: var(--pk-surface); box-shadow: var(--shadow-xs); }
+  .reference-context { flex: 0 1 auto; min-width: 0; min-height: 0; max-height: 45%; overflow: auto; }
+  .reference-report > .reference-scroll { flex: 1; min-width: 0; min-height: 0; max-height: none; }
   .reference-toolbar h2 { font-size: 22px; line-height: 26px; }
   .reference-header { background: var(--color-bg-tertiary); }
   .reference-formula { background: var(--color-neutral-200); }
@@ -213,7 +234,7 @@
   .reference-selector { padding: 12px var(--report-page-inset); }
   .reference-warning, .transfer-invalid { background: var(--color-muted-attention); }
   .transfer-table small { color: var(--pk-error-text); }
-  .application-status-bar { background: var(--pk-surface); border-color: var(--color-border-secondary); box-shadow: none; font-size: 11px; line-height: 16px; }
+  .application-status-bar { position: static; flex: none; min-width: 0; grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto) minmax(0, auto); background: var(--pk-surface); border-color: var(--color-border-secondary); box-shadow: none; font-size: 11px; line-height: 16px; }
   .status-ready { color: var(--pk-success-text); background: var(--pk-success-soft); }
   .status-database i { background: var(--pk-success); }
 }
@@ -248,6 +269,32 @@
   .toolbar-actions { margin-left: 0; }
   .status-context { max-width: 140px; }
 }
+@media screen and (max-height: 800px) {
+  .report-context, .reference-context { max-height: 30%; }
+  .app-header { min-height: 0; padding-top: 12px; padding-bottom: 12px; }
+  .matrix-toolbar { min-height: 56px; padding-top: 8px; padding-bottom: 8px; }
+}
+@media screen and (max-height: 600px) {
+  .workspace-context { max-height: 25%; }
+  .report-context, .reference-context { max-height: 15%; }
+  main { padding-top: 4px; padding-bottom: 8px; }
+  .report-page > .month-controls { padding-bottom: 4px; }
+  .matrix-toolbar { padding: 6px 12px; gap: 8px; }
+  .matrix-toolbar h2 { font-size: 16px; line-height: 20px; }
+  .matrix-toolbar > div:first-child { max-height: 40px; overflow: auto; overscroll-behavior: contain; }
+  .matrix-toolbar h2 { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+  .toolbar-actions .button { padding-right: 10px; padding-left: 10px; }
+  .source-matrix thead th { font-size: 11px; line-height: 14px; padding: 4px; }
+  .source-matrix .source-header-months th { height: 28px; }
+  .source-matrix .source-header-dates th { top: 28px; height: 32px; }
+  .source-matrix thead th[rowspan] { height: 60px; }
+}
+@media screen and (max-height: 420px) {
+  .workspace-context { max-height: 15%; }
+  .report-context, .reference-context { max-height: 12%; }
+  .matrix-toolbar { padding-top: 4px; padding-bottom: 4px; }
+}
+
 @media screen and (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
 }

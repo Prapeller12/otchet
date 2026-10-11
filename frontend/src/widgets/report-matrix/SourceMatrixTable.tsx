@@ -1,5 +1,5 @@
 import { UiIcon } from "../../shared/ui/UiIcon";
-import type { ClipboardEventHandler, ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ClipboardEventHandler, type ReactNode } from "react";
 import type { MatrixCellContract, MatrixRowContract, ReportMatrixContract } from "../../shared/api/application-gateway";
 import type { ReportCellValue } from "../../shared/api/report-cell-contract";
 import { displayValue } from "./cell-value";
@@ -49,6 +49,21 @@ function ReadonlyValue({ value, cell, hint }: { value?: ReportCellValue | undefi
 }
 
 export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndices, renderValueCell, leftWidths = {}, onPaste, onSelectStockWeek, renderResizeHandle, onRemoveSupplier, blocked = false, removeBlocked = blocked, matchingRows = new Set() }: SourceMatrixTableProps) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const measure = () => setViewportWidth(viewport.clientWidth);
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
   const head = !!matrix.head_site;
   const spans = groupSpans(matrix.rows);
   const fixed = [
@@ -60,6 +75,15 @@ export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndi
     { id: "party", label: head ? "Контрагент" : "Производитель", width: 150, shared: false },
   ].map(column => ({ ...column, width: Math.max(48, leftWidths[column.id] ?? column.width) }));
   const offsets = fixed.map((_, index) => fixed.slice(0, index).reduce((sum, item) => sum + item.width, 0));
+  // A saved wide identity column must not cover the numeric working area.
+  // Freeze a prefix only while at least 220px remains for quantities; small
+  // containers retain at most the photo and number, with every column scrollable.
+  const frozenBudget = viewportWidth <= 900 ? viewportWidth * .4 : Math.min(viewportWidth * .7, viewportWidth - 220);
+  let frozenCount = 0;
+  for (let index = 0; index < fixed.length; index++) {
+    if ((viewportWidth <= 900 && index >= 2) || offsets[index]! + fixed[index]!.width > frozenBudget) break;
+    frozenCount++;
+  }
   const selected = (kind: string) => matrix.time_columns.findIndex(column => column.group_label === summaryMonth && column.kind === kind);
   const stockIndex = selected("STOCK");
   const receivedIndex = selected("RECEIVED");
@@ -80,9 +104,8 @@ export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndi
   const selectedWeek = matrix.time_columns.find(column => column.id === stockWeek);
   const width = fixed.reduce((sum, item) => sum + item.width, 0) + mainHeaders.length * 115 + dates.reduce((sum, index) => sum + Math.max(64, matrix.time_columns[index]!.width), 0);
 
-  return <>
+  return <div ref={viewportRef} className="matrix-scroll source-matrix-scroll" data-testid="matrix-scroll" tabIndex={0} role="region" aria-label="Таблица отчёта">
     <p className="source-matrix-period">Сводные колонки: {monthLabel(summaryMonth)}{!head && stockWeek ? `; остаток на конец недели ${selectedWeek?.label ?? stockWeek}` : ""}.</p>
-    <div className="matrix-scroll source-matrix-scroll" data-testid="matrix-scroll">
       <table className="report-matrix subsidiary-matrix source-matrix" aria-label={matrix.title} style={{ width, minWidth: width }} onPaste={onPaste}>
         <colgroup>
           {fixed.map(column => <col key={column.id} style={{ width: column.width }} />)}
@@ -91,7 +114,7 @@ export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndi
         </colgroup>
         <thead>
           <tr className="source-header-months">
-            {fixed.map((column, index) => <th key={column.id} rowSpan={2} className="sticky-left" style={{ left: offsets[index] }} scope="col">{column.label}{renderResizeHandle?.(column.id, column.label, column.width)}</th>)}
+            {fixed.map((column, index) => <th key={column.id} rowSpan={2} data-identity-column={column.id} className={index < frozenCount ? "sticky-left" : undefined} style={{ left: index < frozenCount ? offsets[index] : "auto" }} scope="col">{column.label}{renderResizeHandle?.(column.id, column.label, column.width)}</th>)}
             {mainHeaders.map(label => <th key={label} rowSpan={2} scope="col">{label}</th>)}
             {months.map(month => <th key={month.key} colSpan={month.span} scope="colgroup">{monthLabel(month.key)}</th>)}
           </tr>
@@ -101,7 +124,7 @@ export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndi
           const span = spans.get(rowIndex);
           const stock = stockIndex >= 0 ? row.cells[stockIndex] : undefined;
           return <tr key={row.id} data-matrix-row={rowIndex} className={matchingRows.has(rowIndex) ? "matrix-search-match" : undefined}>
-            {fixed.map((column, index) => column.shared && !span ? null : <th key={column.id} rowSpan={column.shared ? span : undefined} scope={column.shared ? "rowgroup" : "row"} className="sticky-left source-identity-cell" style={{ left: offsets[index] }}>
+            {fixed.map((column, index) => column.shared && !span ? null : <th key={column.id} rowSpan={column.shared ? span : undefined} data-identity-column={column.id} scope={column.shared ? "rowgroup" : "row"} className={`${index < frozenCount ? "sticky-left " : ""}source-identity-cell`} style={{ left: index < frozenCount ? offsets[index] : "auto" }}>
               <HintValue hint={identityHint(column.id)}>{column.id === "photo" ? row.image ? <img className="source-position-image" src={row.image} alt={`Изображение: ${row.left_values.position ?? row.group_label}`} /> : <span aria-label="Изображение не задано">—</span> : row.left_values[column.id] || "—"}</HintValue>
               {column.id === "party" && onRemoveSupplier && !row.archived && row.workspace_id && row.supplier_id && <button type="button" className="mini-button supplier-remove" aria-label="Убрать производителя" title="Убрать производителя" disabled={removeBlocked} onClick={() => onRemoveSupplier(row.workspace_id!, row.supplier_id!)}><UiIcon name="trash" /></button>}
             </th>)}
@@ -113,11 +136,10 @@ export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndi
           </tr>;
         })}</tbody>
       </table>
-    </div>
     <section className="source-calculation-fields" aria-labelledby="source-calculation-title">
       <h3 id="source-calculation-title">Данные для расчёта — {monthLabel(summaryMonth)}</h3>
       <p>Начальный остаток вводится один раз для каждой позиции. {head ? "Использовано = выпуск готовых изделий × входимость; остаток на складе = начальный остаток + факт изготовленного − использовано." : "Остаток на складе = начальный остаток + поступления − расход до конца выбранной недели. Договорной объём задаётся в настройках позиции."}</p>
-      <div className="matrix-scroll source-auxiliary-scroll"><table className="report-matrix source-auxiliary-matrix" aria-label="Данные для расчёта" onPaste={onPaste}>
+      <div className="source-auxiliary-scroll"><table className="report-matrix source-auxiliary-matrix" aria-label="Данные для расчёта" onPaste={onPaste}>
         <thead><tr><th scope="col">№ п/п</th><th scope="col">Наименование</th><th scope="col">{head ? "Контрагент" : "Производитель"}</th>{head && <th scope="col">Объём поставок по договору</th>}{auxiliary.map(index => <th key={index} scope="col">{matrix.time_columns[index]!.label}</th>)}</tr></thead>
         <tbody>{matrix.rows.map((row, rowIndex) => {
           const span = spans.get(rowIndex);
@@ -129,5 +151,5 @@ export function SourceMatrixTable({ matrix, summaryMonth, stockWeek, visibleIndi
         })}</tbody>
       </table></div>
     </section>
-  </>;
+  </div>;
 }
