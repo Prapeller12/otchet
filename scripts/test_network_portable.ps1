@@ -45,6 +45,41 @@ function Run-Bootstrap([string]$root, [string]$name, [switch]$Smoke) {
     return $result
 }
 try {
+    Write-Host "$( [DateTime]::UtcNow.ToString('O') ) preparing native window observer"
+    # Compile before redirected profile variables or the bounded UI deadline.
+    Add-Type @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class OtchetNativeError {
+ private delegate bool EnumProc(IntPtr hwnd, IntPtr parameter);
+ [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left,Top,Right,Bottom; }
+ [DllImport("user32.dll")] private static extern bool EnumWindows(EnumProc callback,IntPtr parameter);
+ [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd,out uint process);
+ [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern int GetWindowText(IntPtr hwnd,StringBuilder text,int length);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern int GetClassName(IntPtr hwnd,StringBuilder text,int length);
+ [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd,out Rect rect);
+ [DllImport("user32.dll",SetLastError=true)] public static extern bool PostMessage(IntPtr hwnd,uint msg,IntPtr w,IntPtr l);
+ private static string Text(IntPtr hwnd,bool caption) { var text=new StringBuilder(1024); if(caption) GetWindowText(hwnd,text,text.Capacity); else GetClassName(hwnd,text,text.Capacity); return text.ToString(); }
+ public static IntPtr FindDialog(int process,string caption) {
+  IntPtr result=IntPtr.Zero;
+  EnumWindows((hwnd,parameter)=> { uint owner; GetWindowThreadProcessId(hwnd,out owner);
+   if(owner==(uint)process && IsWindowVisible(hwnd) && Text(hwnd,false)=="#32770" && Text(hwnd,true)==caption) { result=hwnd; return false; }
+   return true; },IntPtr.Zero);
+  return result;
+ }
+ public static string[] Describe(int process) {
+  var result=new List<string>();
+  EnumWindows((hwnd,parameter)=> { uint owner; GetWindowThreadProcessId(hwnd,out owner);
+   if(owner==(uint)process) { Rect rect; GetWindowRect(hwnd,out rect); result.Add(String.Format("handle={0}; class={1}; title={2}; visible={3}; rect={4},{5},{6},{7}",hwnd,Text(hwnd,false),Text(hwnd,true),IsWindowVisible(hwnd),rect.Left,rect.Top,rect.Right,rect.Bottom)); }
+   return true; },IntPtr.Zero);
+  return result.ToArray();
+ }
+}
+'@
+    Write-Host "$( [DateTime]::UtcNow.ToString('O') ) native window observer compiled"
     $compiler = Join-Path $env:WINDIR "Microsoft.NET/Framework64/v4.0.30319/csc.exe"
     $probe = Join-Path $evidence "ReadyMarkerProbe.exe"
     & $compiler /nologo /target:exe /platform:x64 "/out:$probe" (Join-Path $PSScriptRoot "network/ReadyMarkerProbe.cs")
@@ -93,24 +128,25 @@ try {
     if (-not (Test-Path $errorReport)) { Stop-Process -InputObject $errorProcess -Force; throw "Missing visible startup failure report." }
     $failure = Get-Content $errorReport -Raw | ConvertFrom-Json
     if ($failure.result -ne "error" -or $failure.message -notlike "*Общая папка*") { throw "Network failure silently used a local store." }
-    Add-Type @'
-using System;
-using System.Runtime.InteropServices;
-public static class OtchetNativeError {
- [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string cls,string title);
- [DllImport("user32.dll",SetLastError=true)] public static extern bool PostMessage(IntPtr hwnd,uint msg,IntPtr w,IntPtr l);
-}
-'@
+    Write-Host "$( [DateTime]::UtcNow.ToString('O') ) native error report observed"
     $modal = [IntPtr]::Zero
-    while ($modal -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline) { $modal = [OtchetNativeError]::FindWindow($null,"Не удалось запустить отчётность"); Start-Sleep -Milliseconds 100 }
-    if ($modal -eq [IntPtr]::Zero) { throw "Startup error had no visible native dialog." }
+    $caption = "Не удалось запустить отчётность"
+    while ($modal -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline) { $modal = [OtchetNativeError]::FindDialog($errorProcess.Id,$caption); Start-Sleep -Milliseconds 100 }
+    $observedWindows = [OtchetNativeError]::Describe($errorProcess.Id)
+    $observer = @{ ok=($modal -ne [IntPtr]::Zero); process_id=$errorProcess.Id; caption=$caption; dialog_class="#32770"; visible_modal=($modal -ne [IntPtr]::Zero); deadline_utc=$deadline.ToString('O'); observed_utc=[DateTime]::UtcNow.ToString('O'); owned_windows=$observedWindows }
+    $observer | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $evidence "native-error-observer.json") -Encoding utf8
     $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
     $bitmap = [System.Drawing.Bitmap]::new($bounds.Width,$bounds.Height)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     $graphics.CopyFromScreen($bounds.Location,[System.Drawing.Point]::Empty,$bounds.Size)
-    $bitmap.Save((Join-Path $evidence "unavailable-native-error.png")); $graphics.Dispose(); $bitmap.Dispose()
+    $captureName = if ($modal -eq [IntPtr]::Zero) { "unavailable-native-error-notfound.png" } else { "unavailable-native-error.png" }
+    $bitmap.Save((Join-Path $evidence $captureName)); $graphics.Dispose(); $bitmap.Dispose()
+    if ($modal -eq [IntPtr]::Zero) { throw "Startup error had no visible native dialog; owned-window diagnostics captured." }
+    Write-Host "$( [DateTime]::UtcNow.ToString('O') ) visible native error dialog observed for child $($errorProcess.Id)"
     if (-not [OtchetNativeError]::PostMessage($modal,0x0010,[IntPtr]::Zero,[IntPtr]::Zero)) { throw "Native error close could not be posted." }
     if (-not $errorProcess.WaitForExit(10000) -or $errorProcess.ExitCode -ne 1) { throw "Native error did not close cleanly." }
+    $observer.close_exit_code = $errorProcess.ExitCode
+    $observer | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $evidence "native-error-observer.json") -Encoding utf8
     Remove-Item $override
     $summary = @{ ok=$true; os=[Environment]::OSVersion.VersionString; checks=@("encrypted SMB roundtrip", "UNC native window", "verified warm cache", "mapped identity", "redirected-profile local fallback", "corrupt cache rejection", "visible native connection error"); unc=$unc; physical_remote_clients="NOT_RUN"; windows_10_11="NOT_RUN"; distinct_windows_accounts_dpapi="NOT_RUN"; ten_user_load="NOT_RUN" }
     $summary | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $evidence "network-windows-result.json") -Encoding utf8
