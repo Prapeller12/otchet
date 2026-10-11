@@ -123,10 +123,14 @@ internal static class NetworkBootstrap
         var volume = new StringBuilder(32768);
         if (!GetVolumePathName(actual, volume, (uint)volume.Capacity) || (GetDriveType(volume.ToString()) != 3 && GetDriveType(volume.ToString()) != 2)) throw new IOException("Клиент должен находиться на локальном диске.");
     }
-    private static string LocalBase()
+    private static string LocalBase(List<Dictionary<string, object>> entries)
     {
+        string repairedPrefix = Path.Combine(new string('0', 32), "v", new string('0', 16) + "-" + new string('0', 32));
+        int fileSuffix = repairedPrefix.Length + 2 + entries.Max(e => Convert.ToString(e["path"]).Length);
+        int directorySuffix = repairedPrefix.Length + 2 + entries.Max(e => (Path.GetDirectoryName(Convert.ToString(e["path"]).Replace('/', '\\')) ?? "").Length);
+        string profile = Environment.GetEnvironmentVariable("USERPROFILE");
         foreach (var candidate in new[] { Environment.GetEnvironmentVariable("LOCALAPPDATA"),
-            Path.Combine(Environment.GetEnvironmentVariable("USERPROFILE") ?? "", "AppData", "Local"), Path.GetTempPath() }) {
+            String.IsNullOrWhiteSpace(profile) ? null : Path.Combine(profile, "AppData", "Local"), Path.GetTempPath() }) {
             if (String.IsNullOrWhiteSpace(candidate)) continue;
             try {
                 Directory.CreateDirectory(candidate);
@@ -136,7 +140,10 @@ internal static class NetworkBootstrap
                 if (!GetVolumePathName(actual, volume, (uint)volume.Capacity)) continue;
                 uint kind = GetDriveType(volume.ToString());
                 if (kind != 3 && kind != 2) continue;
-                string directory = Path.Combine(actual, "ReportingSystemNetwork");
+                string directory = Path.Combine(actual, "RSN");
+                // Include repaired and staging caches before selecting a local base.
+                // This works without changing Windows long-path registry policy.
+                if (directory.Length + fileSuffix >= 260 || directory.Length + directorySuffix >= 248) continue;
                 Directory.CreateDirectory(directory);
                 string probe = Path.Combine(directory, ".probe-" + Guid.NewGuid().ToString("N"));
                 File.WriteAllBytes(probe, new byte[0]); File.Delete(probe);
@@ -237,20 +244,34 @@ internal static class NetworkBootstrap
         string manifestHash = HashBytes(manifest);
         var entries = ManifestEntries(manifest);
         string identity = HashBytes(Encoding.UTF8.GetBytes(source.ToUpperInvariant() + "\n" + share.ToUpperInvariant()));
-        string home = Path.Combine(LocalBase(), identity);
+        string home = Path.Combine(LocalBase(entries), identity.Substring(0, 32));
         Directory.CreateDirectory(home);
         RequireLocal(home);
-        string versions = Path.Combine(home, "versions");
+        string versions = Path.Combine(home, "v");
         Directory.CreateDirectory(versions);
         RequireLocal(versions);
-        string client = Path.Combine(versions, manifestHash);
+        string cacheName = manifestHash.Substring(0, 16);
+        string client = Path.Combine(versions, cacheName);
         using (var cacheLock = Acquire(Path.Combine(home, "prepare.lock"))) {
+            // Short directory keys never replace the complete source identity or
+            // complete manifest digest used to verify an executable generation.
+            string identityPath = Path.Combine(home, "identity.sha256");
+            if (File.Exists(identityPath)) {
+                if (File.ReadAllText(identityPath, Encoding.ASCII) != identity) throw new IOException("Не совпадает полный идентификатор локального клиента.");
+            } else {
+                if (Directory.Exists(Path.Combine(home, "state")) || Directory.GetFileSystemEntries(versions).Length != 0) throw new IOException("Локальная папка клиента не имеет проверенного идентификатора.");
+                using (var identityFile = new FileStream(identityPath, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
+                    byte[] bytes = Encoding.ASCII.GetBytes(identity);
+                    identityFile.Write(bytes, 0, bytes.Length);
+                    identityFile.Flush(true);
+                }
+            }
             bool verified = Verified(client, entries, manifestHash);
             if (!verified) {
                 // A previously repaired immutable cache is reusable. Partial
                 // staging directories never enter this exact UUID inventory.
-                foreach (string alternative in Directory.GetDirectories(versions, manifestHash + "-*", SearchOption.TopDirectoryOnly).OrderBy(p => p, StringComparer.OrdinalIgnoreCase)) {
-                    string suffix = Path.GetFileName(alternative).Substring(manifestHash.Length + 1);
+                foreach (string alternative in Directory.GetDirectories(versions, cacheName + "-*", SearchOption.TopDirectoryOnly).OrderBy(p => p, StringComparer.OrdinalIgnoreCase)) {
+                    string suffix = Path.GetFileName(alternative).Substring(cacheName.Length + 1);
                     Guid cacheId;
                     if (!Guid.TryParseExact(suffix, "N", out cacheId)) continue;
                     if (Verified(alternative, entries, manifestHash)) { client = alternative; verified = true; break; }
@@ -259,7 +280,7 @@ internal static class NetworkBootstrap
             if (!verified) {
                 // A damaged/in-use directory is never replaced: activate a separate immutable copy.
                 if (Directory.Exists(client)) client = client + "-" + Guid.NewGuid().ToString("N");
-                string staging = client + ".staging-" + Guid.NewGuid().ToString("N");
+                string staging = Path.Combine(versions, ".s-" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(staging);
                 foreach (var entry in entries) {
                     CheckTime();
