@@ -907,6 +907,22 @@ def monitor_window(
             _check_icon_accessibility(window)
             _capture_window(window, paths, "window-4.png")
             _exercise_blank_report_set(window, paths)
+            # The five supplied structures define HEAD_SITE/SUBSIDIARY only.
+            # DAILY_MOVEMENT has no group there; verify the three-form hints
+            # against the original fixture, whose saved values must remain intact.
+            window.evaluate_js("""(() => {
+              const select = document.querySelector('.organization-switcher select');
+              select.value = '1';
+              select.dispatchEvent(new Event('change', {bubbles:true}));
+              document.querySelectorAll('.report-tab')[0].click();
+            })()""")
+            _wait_for_script(
+                window,
+                _READY + " && document.querySelector('.organization-switcher select').value === '1'"
+                " && [...document.querySelectorAll('.report-matrix tbody "
+                "button[aria-readonly=false]')][0]?.textContent.trim() === '17'",
+                "После создания заготовок не восстановилась прежняя рабочая форма",
+            )
             # Leave hints off for the separate --ui-reopen-test EXE invocation.
             _set_field_hints(window, paths, False)
             _check_all_disabled_hints(window)
